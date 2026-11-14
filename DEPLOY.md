@@ -84,34 +84,38 @@ npx supabase functions deploy media-cleanup --no-verify-jwt
 
 ---
 
-## 三、导入首批作品与手记草稿
+## 三、将本地内容或初始数据迁入云端
 
-在 `paper-home/` 目录准备好了首批内容元数据（`seed/initial-content.json`）以及已压缩到限制内的素材缓存（`.qa/seed/` 中的 WebP 截图与 `cottage-demo.mp4` 12.14 MiB / 35 秒演示视频）。
-
-首次导入为 **草稿状态（`is_published = false`）**，由你在小屋内预览确认后再手动发布：
+如果你已经在**本地工作室模式**（`npm run dev`）里编辑好了自己的作品、手记、个人介绍与图片/视频（保存在 `local-data/` 目录），只需一条命令即可全部同步到你自己的 Supabase 项目：
 
 ```bash
 cd paper-home
-# 可放入 .env.local，或临时通过环境变量传入（勿提交真实 SERVICE_ROLE_KEY）
 $env:SUPABASE_URL="https://<YOUR_PROJECT_REF>.supabase.co"
 $env:SUPABASE_SERVICE_ROLE_KEY="<YOUR_SERVICE_ROLE_KEY>"
 $env:ADMIN_EMAIL="<YOUR_ADMIN_EMAIL>"
 
-node scripts/seed-initial.mjs
+# 将 local-data/ 中的作品、手记、个人资料及媒体同步至 Supabase（保留本地发布状态；追加 --as-drafts 可先全部存为草稿）
+npm run sync:supabase
 ```
 
-执行完成后，在网站中打开 **「小屋地图 -> 主人登录」** 登录账号：
-1. 进入 **作品室**，点击「作品管理」，预览「我的小屋 · 交互式个人网站」并发布。
-2. 进入 **创作手记**，逐篇预览「空间与浏览路线」「门窗和室内光照精修」「卡顿定位与性能调整」并发布（已与第一件作品互链）。
-3. 进入 **关于我**，按实际需要填写并发布个人资料（未填写时访客将看到简洁的待完善状态）。
+如果你只想在本地快速生成一套中性示例后再同步：
+
+```bash
+npm run init:sample
+npm run sync:supabase
+```
+
+> 补充：仓库中也保留了 `scripts/seed-initial.mjs`，供作者本人从本地 `.qa/seed/` 缓存导入原始示例元数据（`seed/initial-content.json`）。普通开源使用者请优先使用 **本地编辑 + `npm run sync:supabase`**。
+
+执行完成后，在网站中打开 **「小屋地图 -> 主人登录」** 登录你的管理员账号，即可继续在线编辑、预览、发布或撤回内容。
 
 ---
 
 ## 四、部署前端到 Cloudflare Pages
 
-参考 [Cloudflare Pages React 部署指南](https://developers.cloudflare.com/pages/framework-guides/deploy-a-react-site/)，仅部署网站源码与运行素材（`paper-home/` 目录），**不要上传**上层视频目录或 `.qa/` 本地缓存：
+参考 [Cloudflare Pages React 部署指南](https://developers.cloudflare.com/pages/framework-guides/deploy-a-react-site/)，仅部署网站源码与运行素材（`paper-home/` 目录），**不要上传**本地媒体工作区（`local-data/`）或测试缓存（`.qa/`）：
 
-1. 连接你的 GitHub 仓库（如 `lyu24944-cmyk/paper-home`）。
+1. 基于本仓库点击 **Use this template** 创建你自己的 GitHub 仓库（如 `<your-github-username>/paper-home`），在 Cloudflare Pages 连接该仓库。
 2. 在 Cloudflare Pages 构建配置中设置：
    - **Root directory**（若仓库根即 `paper-home` 则留空，否则填 `paper-home`）
    - **Build command**：`npm run build`

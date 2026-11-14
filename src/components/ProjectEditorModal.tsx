@@ -7,6 +7,7 @@ import {
   unpublishProjectApi,
 } from '../lib/api'
 import { buildStatusLabel, safeExternalUrl } from '../lib/text'
+import { isCloudConfigured } from '../lib/supabase'
 import {
   ConflictError,
   type AdminProject,
@@ -176,7 +177,11 @@ export function ProjectEditorModal({
     try {
       const saved = await saveDraftInternal()
       if (saved) {
-        setSaveStatus('草稿已保存到云端（访客仍只看到已发布版本）。')
+        setSaveStatus(
+          isCloudConfigured
+            ? '草稿已保存到云端（访客仍只看到已发布版本）。'
+            : '草稿已保存到本机（访客仍只看到已发布版本）。',
+        )
       }
     } catch (err) {
       if (err instanceof ConflictError) {

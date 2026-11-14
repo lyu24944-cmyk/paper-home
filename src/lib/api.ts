@@ -1,5 +1,11 @@
 import { getSupabaseClient, isCloudConfigured, supabaseAnonKey, supabaseUrl } from './supabase'
 import {
+  getBackendMode,
+  getLocalHeaders,
+  resolveBackendHealth,
+  setLocalOwnerActive,
+} from './backend'
+import {
   ApiError,
   ConflictError,
   type AdminCottageData,
@@ -13,6 +19,7 @@ import {
   type ProjectPayload,
   type PublicCottageData,
   type SignedMediaEntry,
+  type SiteSettingsPayload,
 } from '../types/content'
 
 function cleanLinks(raw: unknown): ContactLink[] {
@@ -139,34 +146,103 @@ async function getAccessToken(): Promise<string> {
   return data.session.access_token
 }
 
+let snapshotPromise: Promise<PublicCottageData> | null = null
+
+async function fetchStaticSnapshot(): Promise<PublicCottageData> {
+  if (!snapshotPromise) {
+    snapshotPromise = (async () => {
+      const res = await fetch('./local-snapshot/cottage.json', { cache: 'no-store' })
+      if (!res.ok) {
+        throw new ApiError(res.status, '静态小屋快照文件读取失败。', 'SNAPSHOT_ERROR')
+      }
+      return (await res.json()) as PublicCottageData
+    })()
+  }
+  return await snapshotPromise
+}
+
 async function callFunction<T>(
   name: string,
   options: { method?: 'GET' | 'POST'; body?: unknown; requireAuth?: boolean } = {},
 ): Promise<T> {
-  if (!isCloudConfigured) {
-    throw new ApiError(503, '尚未配置云端服务（VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY）。', 'UNCONFIGURED')
+  const mode = await getBackendMode()
+
+  if (mode === 'unconfigured-readonly') {
+    if (name === 'public-content') {
+      return { projects: [], notes: [], profile: null, signedUrls: {} } as T
+    }
+    if (name === 'media-sign') {
+      const ids = Array.isArray((options.body as { assetIds?: unknown })?.assetIds)
+        ? ((options.body as { assetIds: string[] }).assetIds)
+        : []
+      return { signedUrls: {}, deniedIds: ids } as T
+    }
+    throw new ApiError(503, '尚未配置云端服务或本地工作室，当前为只读展示状态。', 'UNCONFIGURED')
   }
 
-  const token = options.requireAuth ? await getAccessToken() : supabaseAnonKey
+  if (mode === 'static-snapshot') {
+    if (name === 'public-content') {
+      return (await fetchStaticSnapshot()) as T
+    }
+    if (name === 'media-sign') {
+      const snap = await fetchStaticSnapshot()
+      const ids = Array.isArray((options.body as { assetIds?: unknown })?.assetIds)
+        ? ((options.body as { assetIds: string[] }).assetIds)
+        : []
+      const signedUrls: Record<string, SignedMediaEntry> = {}
+      const deniedIds: string[] = []
+      for (const id of ids) {
+        if (snap.signedUrls?.[id]) signedUrls[id] = snap.signedUrls[id]
+        else deniedIds.push(id)
+      }
+      return { signedUrls, deniedIds } as T
+    }
+    throw new ApiError(
+      403,
+      '当前为纯静态快照展示版，仅供浏览；如需编辑，请在本机运行 npm run dev。',
+      'READONLY_SNAPSHOT',
+    )
+  }
+
+  let endpoint: string
+  let headers: Record<string, string>
+  if (mode === 'local-studio') {
+    endpoint = `/__local-cms/${name}`
+    headers = {
+      ...(options.requireAuth ? getLocalHeaders() : {}),
+      ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    }
+  } else {
+    const token = options.requireAuth ? await getAccessToken() : supabaseAnonKey
+    endpoint = `${supabaseUrl}/functions/v1/${name}`
+    headers = {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${token}`,
+      ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    }
+  }
+
   let response: Response
   try {
-    response = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
+    response = await fetch(endpoint, {
       method: options.method ?? (options.body ? 'POST' : 'GET'),
-      headers: {
-        apikey: supabaseAnonKey,
-        Authorization: `Bearer ${token}`,
-        ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      },
+      headers,
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     })
   } catch {
-    throw new ApiError(0, '网络连接中断或无法访问云端服务，当前输入已保留，请检查网络后重试。', 'NETWORK_ERROR')
+    throw new ApiError(
+      0,
+      mode === 'local-studio'
+        ? '无法连接本地工作室存储服务（请确认 Vite 开发服务正在运行），当前输入已保留。'
+        : '网络连接中断或无法访问云端服务，当前输入已保留，请检查网络后重试。',
+      'NETWORK_ERROR',
+    )
   }
 
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>
   if (response.status === 409) {
     throw new ConflictError(
-      String(data.error ?? '云端内容已被另一台设备修改。'),
+      String(data.error ?? '内容已被另一窗口或设备修改。'),
       data.latest ?? null,
       typeof data.order_version === 'number' ? data.order_version : undefined,
       Array.isArray(data.latest_order) ? (data.latest_order as string[]) : undefined,
@@ -194,7 +270,24 @@ export async function signInAdmin(email: string, password: string) {
   return data.session
 }
 
+export async function enterLocalOwnerMode(): Promise<string> {
+  const health = await resolveBackendHealth(true)
+  if (health.mode !== 'local-studio') {
+    throw new ApiError(503, '当前未检测到本地工作室写入服务（请通过 npm run dev 打开）。', 'UNCONFIGURED')
+  }
+  if (!health.writable) {
+    throw new ApiError(403, '为保护本机文件安全，仅本机（127.0.0.1 / localhost）允许开启本地编辑模式。', 'FORBIDDEN')
+  }
+  setLocalOwnerActive(true)
+  return '本地主人（本机保存）'
+}
+
 export async function signOutAdmin() {
+  const mode = await getBackendMode()
+  if (mode === 'local-studio') {
+    setLocalOwnerActive(false)
+    return
+  }
   if (!isCloudConfigured) return
   const client = getSupabaseClient()
   await client.auth.signOut()
@@ -358,4 +451,29 @@ export function publishProfileApi(expectedVersion: number) {
 
 export function unpublishProfileApi(expectedVersion: number) {
   return mutateAndNormalize<AdminProfile>('profile.unpublish', { expectedVersion }, normalizeAdminProfile)
+}
+
+export async function saveSiteSettingsApi(
+  expectedVersion: number | undefined,
+  settings: SiteSettingsPayload,
+): Promise<{ siteSettings: SiteSettingsPayload; siteSettingsVersion: number }> {
+  return await callFunction<{ ok: true; siteSettings: SiteSettingsPayload; siteSettingsVersion: number }>(
+    'admin-mutate',
+    {
+      method: 'POST',
+      body: {
+        action: 'settings.save',
+        payload: { expectedVersion, ...settings },
+      },
+      requireAuth: true,
+    },
+  )
+}
+
+export async function initLocalSampleApi(force = false) {
+  return await callFunction<{ ok: true; skipped?: boolean; reason?: string }>('init-sample', {
+    method: 'POST',
+    body: { force },
+    requireAuth: true,
+  })
 }

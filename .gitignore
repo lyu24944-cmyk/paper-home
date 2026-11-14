@@ -3,6 +3,8 @@ dist/
 *.tsbuildinfo
 .taste-skill/inspect/
 .qa/
+local-data/
+.impeccable/hook.cache.json
 .env
 .env.local
 .env.*.local

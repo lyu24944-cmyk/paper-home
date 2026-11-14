@@ -156,7 +156,12 @@ textarea,select{font:inherit}
 .admin-auth-title{display:inline-flex;align-items:center;gap:8px;font-size:15px}
 .admin-logged-meta{margin-top:10px;display:flex;flex-direction:column;gap:8px}
 .admin-login-form{margin-top:14px;display:flex;flex-direction:column;gap:12px}
-.admin-auth-hint{font-size:12px;color:var(--muted);margin:0;line-height:1.6}
+.admin-auth-hint{font-size:12px;color:var(--muted);margin:8px 0 0;line-height:1.6}
+.admin-auth-hint code{background:#ecebdf;padding:1px 5px;border-radius:2px;font-size:11px;color:var(--ink)}
+.site-extra-settings{margin-top:10px;display:block}
+.name-form .cms-ghost-btn{background:#e7e6da;color:var(--ink);padding:8px 12px;font-size:12px}
+.name-form .cms-ghost-btn:hover:not(:disabled){background:#dbdace}
+.site-extra-fields{margin-top:10px;display:flex;flex-direction:column;gap:8px;padding:12px;background:#eeede1;border-left:2px solid #9ba592}
 .cleanup-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#efe7d3;padding:8px 12px;font-size:12px}
 
 .cms-editor-dialog,.project-detail-dialog,.note-detail-dialog{max-width:740px}

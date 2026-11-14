@@ -1,5 +1,6 @@
 import { Upload } from 'tus-js-client'
 import { getSupabaseClient, supabaseAnonKey, supabaseUrl } from './supabase'
+import { getBackendMode, getLocalHeaders } from './backend'
 import { registerMediaAssetApi, signMediaUrlsApi } from './api'
 import type { MediaAsset, SignedMediaEntry } from '../types/content'
 
@@ -176,6 +177,57 @@ export async function processAndUploadImage(file: File): Promise<{ asset: MediaA
   const assetId = createId()
   const displayPath = `images/${assetId}/display.${display.ext}`
   const thumbPath = `images/${assetId}/thumb.${thumb.ext}`
+  const mode = await getBackendMode()
+
+  if (mode === 'local-studio') {
+    const uploadLocalBlob = async (variant: 'display' | 'thumb', blob: Blob, mimeType: string) => {
+      const res = await fetch(
+        `/__local-cms/media-upload?assetId=${encodeURIComponent(assetId)}&variant=${variant}&mimeType=${encodeURIComponent(mimeType)}`,
+        {
+          method: 'POST',
+          headers: {
+            ...getLocalHeaders(),
+            'Content-Type': 'application/octet-stream',
+          },
+          body: blob,
+        },
+      )
+      const bodyText = await res.text().catch(() => '')
+      if (!res.ok) {
+        let errMsg = ''
+        try {
+          errMsg = (JSON.parse(bodyText) as { error?: string }).error || ''
+        } catch {
+          errMsg = ''
+        }
+        throw new Error(errMsg || `本地保存图片失败（${res.status}）`)
+      }
+    }
+    await Promise.all([
+      uploadLocalBlob('display', display.blob, display.mimeType),
+      uploadLocalBlob('thumb', thumb.blob, thumb.mimeType),
+    ])
+
+    const asset = await registerMediaAssetApi({
+      assetId,
+      kind: 'image',
+      displayPath,
+      thumbPath,
+      mimeType: display.mimeType,
+      byteSize: display.blob.size + thumb.blob.size,
+      width: display.width,
+      height: display.height,
+      durationSec: null,
+      originalFilename: file.name,
+    })
+
+    const signedEntry = await refreshSignedUrl(asset.id, 'admin', true)
+    return { asset, signedEntry }
+  }
+
+  if (mode !== 'cloud') {
+    throw new Error('当前为只读展示模式，无法上传图片。')
+  }
 
   const client = getSupabaseClient()
   const [upDisplay, upThumb] = await Promise.all([
@@ -238,16 +290,23 @@ export async function validateVideoFile(file: File): Promise<{ mimeType: string;
       video.muted = true
       video.playsInline = true
       const timer = window.setTimeout(() => {
+        video.removeAttribute('src')
+        video.load()
         reject(new Error('视频元信息解析超时，请检查视频编码是否为浏览器支持的 MP4（H.264）或 WebM。'))
       }, 10_000)
 
       video.onloadedmetadata = () => {
         window.clearTimeout(timer)
-        if (video.videoWidth > 0 && video.videoHeight > 0 && Number.isFinite(video.duration) && video.duration > 0) {
+        const w = video.videoWidth
+        const h = video.videoHeight
+        const d = video.duration
+        video.removeAttribute('src')
+        video.load()
+        if (w > 0 && h > 0 && Number.isFinite(d) && d > 0) {
           resolve({
-            width: video.videoWidth,
-            height: video.videoHeight,
-            durationSec: video.duration,
+            width: w,
+            height: h,
+            durationSec: d,
           })
         } else {
           reject(new Error('无法识别视频画面或时长，请转换编码后重试。'))
@@ -255,6 +314,8 @@ export async function validateVideoFile(file: File): Promise<{ mimeType: string;
       }
       video.onerror = () => {
         window.clearTimeout(timer)
+        video.removeAttribute('src')
+        video.load()
         reject(new Error('当前浏览器无法播放该视频编码，请转码为 H.264 MP4 或 WebM 后上传。'))
       }
       video.src = objectUrl
@@ -272,6 +333,110 @@ export interface VideoUploadController {
   cancel: () => Promise<void>
 }
 
+function createLocalVideoUpload(
+  file: File,
+  meta: { mimeType: string; width: number; height: number; durationSec: number },
+  callbacks: {
+    onProgress: (percent: number, uploadedBytes: number, totalBytes: number) => void
+    onSuccess: (asset: MediaAsset) => void
+    onError: (message: string) => void
+  },
+): VideoUploadController {
+  const assetId = createId()
+  const ext = meta.mimeType === 'video/webm' ? 'webm' : 'mp4'
+  const displayPath = `videos/${assetId}/demo.${ext}`
+  const chunkSize = 6 * 1024 * 1024
+  let cancelled = false
+  let activeXhr: XMLHttpRequest | null = null
+
+  const sendChunk = (chunk: Blob, startOffset: number, reset: boolean, isFinal: boolean) =>
+    new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      activeXhr = xhr
+      const url = `/__local-cms/media-upload?assetId=${encodeURIComponent(assetId)}&variant=video&ext=${ext}&mimeType=${encodeURIComponent(meta.mimeType)}&reset=${reset ? 1 : 0}&final=${isFinal ? 1 : 0}`
+      xhr.open('POST', url)
+      for (const [k, v] of Object.entries(getLocalHeaders())) {
+        xhr.setRequestHeader(k, v)
+      }
+      xhr.setRequestHeader('Content-Type', 'application/octet-stream')
+      xhr.upload.onprogress = (e) => {
+        if (cancelled) return
+        const loaded = Math.min(file.size, startOffset + (e.lengthComputable ? e.loaded : 0))
+        const pct = file.size > 0 ? Math.min(99, Math.round((loaded / file.size) * 100)) : 0
+        callbacks.onProgress(pct, loaded, file.size)
+      }
+      xhr.onload = () => {
+        activeXhr = null
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve()
+          return
+        }
+        try {
+          const body = JSON.parse(xhr.responseText || '{}') as { error?: string }
+          reject(new Error(body.error || `本地视频写入失败（${xhr.status}）`))
+        } catch {
+          reject(new Error(`本地视频写入失败（${xhr.status}）`))
+        }
+      }
+      xhr.onerror = () => {
+        activeXhr = null
+        reject(new Error('本地视频传输中断'))
+      }
+      xhr.onabort = () => {
+        activeXhr = null
+        reject(new Error('ABORTED'))
+      }
+      xhr.send(chunk)
+    })
+
+  const start = () => {
+    cancelled = false
+    void (async () => {
+      try {
+        let offset = 0
+        let index = 0
+        while (offset < file.size) {
+          if (cancelled) return
+          const end = Math.min(file.size, offset + chunkSize)
+          await sendChunk(file.slice(offset, end), offset, index === 0, end >= file.size)
+          offset = end
+          index += 1
+        }
+        if (cancelled) return
+        const asset = await registerMediaAssetApi({
+          assetId,
+          kind: 'video',
+          displayPath,
+          thumbPath: null,
+          mimeType: meta.mimeType,
+          byteSize: file.size,
+          width: meta.width,
+          height: meta.height,
+          durationSec: meta.durationSec,
+          originalFilename: file.name,
+        })
+        callbacks.onProgress(100, file.size, file.size)
+        callbacks.onSuccess(asset)
+      } catch (err) {
+        if (cancelled || (err instanceof Error && err.message === 'ABORTED')) return
+        callbacks.onError(err instanceof Error ? `${err.message}。可点击“重试上传”。` : '视频上传失败，请重试。')
+      }
+    })()
+  }
+
+  const cancel = async () => {
+    cancelled = true
+    activeXhr?.abort()
+    activeXhr = null
+    await fetch(`/__local-cms/media-upload?assetId=${encodeURIComponent(assetId)}`, {
+      method: 'DELETE',
+      headers: getLocalHeaders(),
+    }).catch(() => undefined)
+  }
+
+  return { assetId, start, cancel }
+}
+
 export async function createResumableVideoUpload(
   file: File,
   callbacks: {
@@ -281,6 +446,13 @@ export async function createResumableVideoUpload(
   },
 ): Promise<VideoUploadController> {
   const meta = await validateVideoFile(file)
+  const mode = await getBackendMode()
+  if (mode === 'local-studio') {
+    return createLocalVideoUpload(file, meta, callbacks)
+  }
+  if (mode !== 'cloud') {
+    throw new Error('当前为只读展示模式，无法上传视频。')
+  }
   const client = getSupabaseClient()
   const { data: sessionData, error: sessionErr } = await client.auth.getSession()
   const token = sessionData.session?.access_token

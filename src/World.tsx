@@ -23,9 +23,9 @@ function Plaque({text,sub='',at,size=[1.45,.38],rotation=0}:{text:string;sub?:st
   const texture=useMemo(()=>textMap(text,sub),[text,sub]);useEffect(()=>()=>texture.dispose(),[texture])
   return <group position={at} rotation={[0,rotation,0]}><mesh castShadow receiveShadow><boxGeometry args={[size[0]+.04,size[1]+.04,.045]}/><meshStandardMaterial color="#6f6047" roughness={.75}/></mesh><mesh position={[0,0,.024]}><planeGeometry args={size}/><meshStandardMaterial map={texture} roughness={.85}/></mesh></group>
 }
-function Signage({homeName,materials}:{homeName:string;materials:ReturnType<typeof makeMaterials>}){
+function Signage({homeName,plaqueTitle,plaqueSubtitle,materials}:{homeName:string;plaqueTitle:string;plaqueSubtitle:string;materials:ReturnType<typeof makeMaterials>}){
   const signs=useMemo(()=>{
-    const labels=[{text:homeName,sub:'',at:[0,2.38,.13] as V3,size:[1.48,.25],r:0},{text:'欢迎回家',sub:'留一点时间，慢慢逛',at:[1.075,1.75,-1.45] as V3,size:[.9,.42],r:-Math.PI/2},...doorStops.map(d=>({text:d.name,sub:'',at:[d.side*1.075,2.43,-d.depth] as V3,size:[.88,.22],r:-d.side*Math.PI/2}))]
+    const labels=[{text:homeName,sub:'',at:[0,2.38,.13] as V3,size:[1.48,.25],r:0},{text:plaqueTitle,sub:plaqueSubtitle,at:[1.075,1.75,-1.45] as V3,size:[.9,.42],r:-Math.PI/2},...doorStops.map(d=>({text:d.name,sub:'',at:[d.side*1.075,2.43,-d.depth] as V3,size:[.88,.22],r:-d.side*Math.PI/2}))]
     const canvas=document.createElement('canvas');canvas.width=canvas.height=2048;const c=canvas.getContext('2d')!,b=new Builder(),geometries:PlaneGeometry[]=[]
     c.fillStyle='#eee9dc';c.fillRect(0,0,2048,2048)
     labels.forEach((label,index)=>{
@@ -37,7 +37,7 @@ function Signage({homeName,materials}:{homeName:string;materials:ReturnType<type
     })
     const texture=new CanvasTexture(canvas);texture.colorSpace=SRGBColorSpace;texture.anisotropy=8
     return {b,geometry:mergeGeometries(geometries,false)!,texture}
-  },[homeName])
+  },[homeName,plaqueTitle,plaqueSubtitle])
   useEffect(()=>()=>{signs.geometry.dispose();signs.texture.dispose()},[signs])
   return <group><StaticBatch builder={signs.b} materials={materials}/><mesh geometry={signs.geometry} receiveShadow><meshStandardMaterial map={signs.texture} roughness={.85}/></mesh></group>
 }
@@ -308,7 +308,7 @@ function RoomDecor({id,pack,materials,interact,reduced,exterior,galleryProjects,
     {id==='blank'&&<Plaque text="关于我" sub="认识小屋的主人" at={[1.65,1.75,-2.02]} size={[1.2,.4]}/>}
   </group>
 }
-export function World({place,opening,destination,navigate,interact,homeName,reduced,pack,galleryProjects,onCoverExpired}:{place:Place;opening:Place|null;destination:Place|null;navigate:(p:Place)=>void;interact:(i:number)=>void;homeName:string;reduced:boolean;pack:ResourcePack;galleryProjects:GalleryDisplayItem[];onCoverExpired?:(assetId:string)=>void}){
+export function World({place,opening,destination,navigate,interact,homeName,plaqueTitle='欢迎回家',plaqueSubtitle='留一点时间，慢慢逛',reduced,pack,galleryProjects,onCoverExpired}:{place:Place;opening:Place|null;destination:Place|null;navigate:(p:Place)=>void;interact:(i:number)=>void;homeName:string;plaqueTitle?:string;plaqueSubtitle?:string;reduced:boolean;pack:ResourcePack;galleryProjects:GalleryDisplayItem[];onCoverExpired?:(assetId:string)=>void}){
   const materials=useMemo(()=>makeMaterials(pack),[pack]),house=useMemo(shell,[]),yard=useMemo(garden,[]),{scene}=useThree()
   const glass=useMemo(()=>{const b=new Builder();for(const w of windows)b.add(new PlaneGeometry(w.w-.08,w.h-.08),w.at,'glass',[0,w.r,0]);return b},[])
   // Thin architectural glazing: direct clear view plus dielectric environment reflection.
@@ -327,7 +327,7 @@ export function World({place,opening,destination,navigate,interact,homeName,redu
     <StaticBatch builder={house} materials={materials}/><StaticBatch builder={yard} materials={materials}/>
     <StaticBatch builder={glass} materials={glassMaterials} castShadow={false}/>
     <Door at={[0,0,.045]} open={outside&&(!!opening||!!destination)} click={()=>navigate('hall')} materials={materials} reduced={reduced}/>
-    <Signage homeName={homeName} materials={materials}/>
+    <Signage homeName={homeName} plaqueTitle={plaqueTitle} plaqueSubtitle={plaqueSubtitle} materials={materials}/>
     {doorStops.map(d=><group key={d.id}>
       <Door at={[d.side*1.08,0,-d.depth]} rotation={-d.side*Math.PI/2} open={place===d.id||opening===d.id||destination===d.id} click={()=>navigate(d.id)} materials={materials} reduced={reduced}/>
       <RoomDecor id={d.id} pack={pack} materials={materials} interact={interact} reduced={reduced} exterior={outside} galleryProjects={galleryProjects} onCoverExpired={onCoverExpired}/>

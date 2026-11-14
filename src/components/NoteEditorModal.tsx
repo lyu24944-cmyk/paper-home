@@ -7,6 +7,7 @@ import {
   unpublishNoteApi,
 } from '../lib/api'
 import { buildStatusLabel } from '../lib/text'
+import { isCloudConfigured } from '../lib/supabase'
 import {
   ConflictError,
   type AdminNote,
@@ -152,7 +153,7 @@ export function NoteEditorModal({
     try {
       const saved = await saveDraftInternal()
       if (saved) {
-        setSaveStatus('手记草稿已保存到云端。')
+        setSaveStatus(isCloudConfigured ? '手记草稿已保存到云端。' : '手记草稿已保存到本机。')
       }
     } catch (err) {
       if (err instanceof ConflictError) {

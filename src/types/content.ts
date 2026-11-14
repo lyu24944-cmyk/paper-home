@@ -112,10 +112,37 @@ export interface AdminProfile {
   published: (ProfilePayload & { publishedAt: string | null }) | null
 }
 
+export type BackendMode = 'cloud' | 'local-studio' | 'static-snapshot' | 'unconfigured-readonly'
+
+export interface SiteSettingsPayload {
+  homeName: string
+  plaqueTitle: string
+  plaqueSubtitle: string
+  yardHeading: string
+  yardSubtitle: string
+}
+
+export const DEFAULT_SITE_SETTINGS: SiteSettingsPayload = {
+  homeName: '我的小屋',
+  plaqueTitle: '欢迎回家',
+  plaqueSubtitle: '留一点时间，慢慢逛',
+  yardHeading: '来家里坐坐。',
+  yardSubtitle: '推开门，里面是我的作品、过程记录与自我介绍。',
+}
+
+export interface LocalStudioHealth {
+  mode: BackendMode
+  writable: boolean
+  isLoopback: boolean
+  hasContent: boolean
+  dataDir?: string
+}
+
 export interface PublicCottageData {
   projects: PublicProject[]
   notes: PublicNote[]
   profile: PublicProfile | null
+  siteSettings?: SiteSettingsPayload
   signedUrls: Record<string, SignedMediaEntry>
 }
 
@@ -124,6 +151,8 @@ export interface AdminCottageData {
   projects: AdminProject[]
   notes: AdminNote[]
   profile: AdminProfile | null
+  siteSettings?: SiteSettingsPayload
+  siteSettingsVersion?: number
   orderVersions: {
     projects: number
     notes: number

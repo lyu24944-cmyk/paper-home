@@ -10,24 +10,30 @@ import {
   cleanupMediaAssetsApi,
   fetchAdminCottage,
   fetchPublicCottage,
+  initLocalSampleApi,
   reorderNotesApi,
   reorderProjectsApi,
+  saveSiteSettingsApi,
   signOutAdmin,
 } from './lib/api'
+import { isLocalOwnerActive, resolveBackendHealth } from './lib/backend'
 import { evictSignedUrl, getCachedUrl, refreshSignedUrl, seedSignedUrls } from './lib/media'
 import { getSupabaseClient, isCloudConfigured } from './lib/supabase'
 import {
   ApiError,
   ConflictError,
+  DEFAULT_SITE_SETTINGS,
   type AdminCottageData,
   type AdminNote,
   type AdminProfile,
   type AdminProject,
   type GalleryDisplayItem,
+  type LocalStudioHealth,
   type MediaAsset,
   type NotePayload,
   type ProjectPayload,
   type PublicCottageData,
+  type SiteSettingsPayload,
 } from './types/content'
 import { Icon } from './components/Icon'
 import { Modal } from './components/Modal'
@@ -108,8 +114,16 @@ export default function App() {
 
   const [mapOpen, setMapOpen] = useState(false)
   const [galleryIndex, setGalleryIndex] = useState(0)
-  const [homeName, setHomeName] = useState(savedName)
-  const [nameDraft, setNameDraft] = useState(homeName)
+  const [siteSettings, setSiteSettings] = useState<SiteSettingsPayload>(() => ({
+    ...DEFAULT_SITE_SETTINGS,
+    homeName: savedName(),
+  }))
+  const [settingsDraft, setSettingsDraft] = useState<SiteSettingsPayload>(() => ({
+    ...DEFAULT_SITE_SETTINGS,
+    homeName: savedName(),
+  }))
+  const [settingsExpanded, setSettingsExpanded] = useState(false)
+  const [settingsBusy, setSettingsBusy] = useState(false)
   const [nameMessage, setNameMessage] = useState('')
   const [reduced, setReduced] = useState(() => matchMedia('(prefers-reduced-motion: reduce)').matches)
   const [ambient, setAmbient] = useState(false)
@@ -122,9 +136,15 @@ export default function App() {
   const root = useRef<HTMLDivElement>(null)
   const animation = useRef<gsap.core.Tween | null>(null)
 
-  // Cloud CMS state
+  // Cloud / Local Studio CMS state
+  const [backendHealth, setBackendHealth] = useState<LocalStudioHealth>(() => ({
+    mode: isCloudConfigured ? 'cloud' : 'unconfigured-readonly',
+    writable: isCloudConfigured,
+    isLoopback: false,
+    hasContent: false,
+  }))
   const [publicData, setPublicData] = useState<PublicCottageData>(emptyPublicData)
-  const [cloudLoading, setCloudLoading] = useState(isCloudConfigured)
+  const [cloudLoading, setCloudLoading] = useState(true)
   const [cloudError, setCloudError] = useState('')
   const [signedUrlRevision, setSignedUrlRevision] = useState(0)
 
@@ -132,6 +152,8 @@ export default function App() {
   const [adminData, setAdminData] = useState<AdminCottageData | null>(null)
   const [adminError, setAdminError] = useState('')
   const [reorderBusy, setReorderBusy] = useState(false)
+
+  const homeName = siteSettings.homeName
 
   // Detail & editor modals
   const [viewingProject, setViewingProject] = useState<ViewingProjectState | null>(null)
@@ -156,17 +178,21 @@ export default function App() {
   modalOpenRef.current = anyModalOpen
 
   const loadPublic = useCallback(async () => {
-    if (!isCloudConfigured) {
-      setCloudLoading(false)
-      setCloudError('')
-      return
-    }
     setCloudLoading(true)
     setCloudError('')
     try {
+      const health = await resolveBackendHealth()
+      setBackendHealth(health)
+      if (health.mode === 'unconfigured-readonly') {
+        setPublicData(emptyPublicData)
+        return
+      }
       const data = await fetchPublicCottage()
       seedSignedUrls(data.signedUrls)
       setPublicData(data)
+      if (data.siteSettings) {
+        setSiteSettings(data.siteSettings)
+      }
       setSignedUrlRevision((r) => r + 1)
     } catch (err) {
       setCloudError(err instanceof Error ? err.message : '公开内容读取失败，请稍后重试。')
@@ -176,9 +202,34 @@ export default function App() {
   }, [])
 
   const loadAdmin = useCallback(async () => {
-    if (!isCloudConfigured) return
     setAdminError('')
     try {
+      const health = await resolveBackendHealth()
+      setBackendHealth(health)
+
+      if (health.mode === 'local-studio') {
+        if (!health.writable || !isLocalOwnerActive()) {
+          setAdminEmail(null)
+          setAdminData(null)
+          return
+        }
+        const data = await fetchAdminCottage()
+        seedSignedUrls(data.signedUrls)
+        setAdminData(data)
+        setAdminEmail('本地主人')
+        if (data.siteSettings) {
+          setSiteSettings(data.siteSettings)
+        }
+        setSignedUrlRevision((r) => r + 1)
+        return
+      }
+
+      if (health.mode !== 'cloud') {
+        setAdminEmail(null)
+        setAdminData(null)
+        return
+      }
+
       const client = getSupabaseClient()
       const { data: sess } = await client.auth.getSession()
       if (!sess.session?.access_token) {
@@ -196,7 +247,7 @@ export default function App() {
         await signOutAdmin().catch(() => {})
         setAdminEmail(null)
         setAdminData(null)
-        setAdminError('当前账号无管理员权限或登录已失效，已恢复访客视图。')
+        setAdminError('当前无管理权限或登录已失效，已恢复访客视图。')
       } else {
         setAdminError(err instanceof Error ? err.message : '管理数据读取失败。')
       }
@@ -205,7 +256,15 @@ export default function App() {
 
   const refreshCloud = useCallback(async () => {
     await loadPublic()
-    if (isCloudConfigured) {
+    const health = await resolveBackendHealth(true)
+    setBackendHealth(health)
+    if (health.mode === 'local-studio') {
+      if (health.writable && isLocalOwnerActive()) {
+        await loadAdmin()
+      }
+      return
+    }
+    if (health.mode === 'cloud') {
       const client = getSupabaseClient()
       const { data } = await client.auth.getSession()
       if (data.session?.access_token) {
@@ -216,27 +275,46 @@ export default function App() {
 
   useEffect(() => {
     void loadPublic()
-    if (!isCloudConfigured) return
-    const client = getSupabaseClient()
-    void client.auth.getSession().then(({ data }) => {
-      if (data.session?.access_token) {
-        setAdminEmail(data.session.user?.email ?? '主人')
-        void loadAdmin()
+    let active = true
+    let unsubscribe: (() => void) | null = null
+
+    void resolveBackendHealth().then((health) => {
+      if (!active) return
+      setBackendHealth(health)
+      if (health.mode === 'local-studio') {
+        if (health.writable && isLocalOwnerActive()) {
+          setAdminEmail('本地主人')
+          void loadAdmin()
+        }
+        return
       }
+      if (health.mode !== 'cloud') return
+      const client = getSupabaseClient()
+      void client.auth.getSession().then(({ data }) => {
+        if (active && data.session?.access_token) {
+          setAdminEmail(data.session.user?.email ?? '主人')
+          void loadAdmin()
+        }
+      })
+      const { data: sub } = client.auth.onAuthStateChange((event, session) => {
+        if (!session || event === 'SIGNED_OUT') {
+          setAdminEmail(null)
+          setAdminData(null)
+          setProjectEditorOpen(false)
+          setNoteEditorOpen(false)
+          setProfileEditorOpen(false)
+        } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          setAdminEmail(session.user?.email ?? '主人')
+          if (event === 'SIGNED_IN') void loadAdmin()
+        }
+      })
+      unsubscribe = () => sub.subscription.unsubscribe()
     })
-    const { data: sub } = client.auth.onAuthStateChange((event, session) => {
-      if (!session || event === 'SIGNED_OUT') {
-        setAdminEmail(null)
-        setAdminData(null)
-        setProjectEditorOpen(false)
-        setNoteEditorOpen(false)
-        setProfileEditorOpen(false)
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        setAdminEmail(session.user?.email ?? '主人')
-        if (event === 'SIGNED_IN') void loadAdmin()
-      }
-    })
-    return () => sub.subscription.unsubscribe()
+
+    return () => {
+      active = false
+      unsubscribe?.()
+    }
   }, [loadAdmin, loadPublic])
 
   // Clamp galleryIndex smoothly when published project count changes
@@ -743,6 +821,8 @@ export default function App() {
                 navigate={navigate}
                 interact={interact}
                 homeName={homeName}
+                plaqueTitle={siteSettings.plaqueTitle}
+                plaqueSubtitle={siteSettings.plaqueSubtitle}
                 reduced={reduced}
                 pack={pack}
                 galleryProjects={galleryProjects}
@@ -800,7 +880,12 @@ export default function App() {
             type="button"
             className={`map-button ${isAdmin ? 'admin-active' : ''}`}
             aria-label={isAdmin ? '小屋地图（主人已登录）' : '小屋地图'}
-            onClick={() => { setMapOpen(true); setNameDraft(homeName); setNameMessage('') }}
+            onClick={() => {
+              setMapOpen(true)
+              setSettingsDraft({ ...siteSettings })
+              setSettingsExpanded(false)
+              setNameMessage('')
+            }}
             disabled={busy || !ready}
           >
             <Icon name="map" size={19} />
@@ -813,8 +898,8 @@ export default function App() {
         <div className="welcome-copy" key={place}>
           {place === 'yard' ? (
             <>
-              <h1 ref={title} tabIndex={-1}>来家里坐坐。</h1>
-              <p>推开门，里面是我的作品、过程记录与自我介绍。</p>
+              <h1 ref={title} tabIndex={-1}>{siteSettings.yardHeading}</h1>
+              <p>{siteSettings.yardSubtitle}</p>
             </>
           ) : (
             <>
@@ -1038,11 +1123,46 @@ export default function App() {
           className="name-form"
           onSubmit={(e) => {
             e.preventDefault()
-            const value = nameDraft.trim().slice(0, 12)
-            if (!value) { setNameMessage('先为小屋写一个名字吧。'); return }
-            setHomeName(value)
+            const trimmedName = settingsDraft.homeName.trim().slice(0, 12)
+            if (!trimmedName) {
+              setNameMessage('先为小屋写一个名字吧。')
+              return
+            }
+            const nextPayload: SiteSettingsPayload = {
+              ...settingsDraft,
+              homeName: trimmedName,
+              plaqueTitle: settingsDraft.plaqueTitle.trim().slice(0, 12) || DEFAULT_SITE_SETTINGS.plaqueTitle,
+              plaqueSubtitle: settingsDraft.plaqueSubtitle.trim().slice(0, 24),
+              yardHeading: settingsDraft.yardHeading.trim().slice(0, 24) || DEFAULT_SITE_SETTINGS.yardHeading,
+              yardSubtitle: settingsDraft.yardSubtitle.trim().slice(0, 80),
+            }
+            if (backendHealth.mode === 'local-studio' && isAdmin) {
+              void (async () => {
+                setSettingsBusy(true)
+                setNameMessage('')
+                try {
+                  const res = await saveSiteSettingsApi(adminData?.siteSettingsVersion, nextPayload)
+                  setSiteSettings(res.siteSettings)
+                  setSettingsDraft(res.siteSettings)
+                  await refreshCloud()
+                  setNameMessage('小屋名称与外观文字已保存到本机 local-data/。')
+                } catch (err) {
+                  if (err instanceof ConflictError) {
+                    await refreshCloud()
+                    setNameMessage('小屋设置在另一窗口已被修改，已为你同步最新内容。')
+                  } else {
+                    setNameMessage(err instanceof Error ? err.message : '保存失败，请重试。')
+                  }
+                } finally {
+                  setSettingsBusy(false)
+                }
+              })()
+              return
+            }
+
+            setSiteSettings((prev) => ({ ...prev, homeName: trimmedName }))
             try {
-              localStorage.setItem('paper-home:name', value)
+              localStorage.setItem('paper-home:name', trimmedName)
               setNameMessage('小屋的名字记住了。')
             } catch {
               setNameMessage('名字已更新；当前浏览器无法保存，下次打开会恢复默认。')
@@ -1057,18 +1177,90 @@ export default function App() {
             <input
               id="home-name"
               maxLength={12}
-              value={nameDraft}
-              onChange={(e) => { setNameDraft(e.target.value); setNameMessage('') }}
+              value={settingsDraft.homeName}
+              onChange={(e) => {
+                setSettingsDraft((prev) => ({ ...prev, homeName: e.target.value }))
+                setNameMessage('')
+              }}
               placeholder="最多 12 个字"
+              disabled={settingsBusy}
             />
-            <button type="submit">记住</button>
+            <button type="submit" disabled={settingsBusy}>
+              {settingsBusy ? '保存中…' : backendHealth.mode === 'local-studio' && isAdmin ? '保存本机' : '记住'}
+            </button>
           </div>
-          <p className="name-message" role="status">{nameMessage || '名字会保存在这台设备的浏览器里。'}</p>
+          {backendHealth.mode === 'local-studio' && isAdmin && (
+            <section className="site-extra-settings" aria-label="小屋文字外观设置">
+              <button
+                type="button"
+                className="cms-ghost-btn"
+                onClick={() => setSettingsExpanded((v) => !v)}
+              >
+                {settingsExpanded ? '收起门牌与迎客语设置' : '自定义门牌与小院迎客语'}
+              </button>
+              {settingsExpanded && (
+                <div className="site-extra-fields">
+                  <label className="cms-field">
+                    <span>门厅牌匾主标题</span>
+                    <input
+                      maxLength={12}
+                      value={settingsDraft.plaqueTitle}
+                      onChange={(e) => setSettingsDraft((prev) => ({ ...prev, plaqueTitle: e.target.value }))}
+                      placeholder={DEFAULT_SITE_SETTINGS.plaqueTitle}
+                    />
+                  </label>
+                  <label className="cms-field">
+                    <span>门厅牌匾副标题</span>
+                    <input
+                      maxLength={24}
+                      value={settingsDraft.plaqueSubtitle}
+                      onChange={(e) => setSettingsDraft((prev) => ({ ...prev, plaqueSubtitle: e.target.value }))}
+                      placeholder={DEFAULT_SITE_SETTINGS.plaqueSubtitle}
+                    />
+                  </label>
+                  <label className="cms-field">
+                    <span>小院欢迎大标题</span>
+                    <input
+                      maxLength={24}
+                      value={settingsDraft.yardHeading}
+                      onChange={(e) => setSettingsDraft((prev) => ({ ...prev, yardHeading: e.target.value }))}
+                      placeholder={DEFAULT_SITE_SETTINGS.yardHeading}
+                    />
+                  </label>
+                  <label className="cms-field">
+                    <span>小院欢迎导语</span>
+                    <input
+                      maxLength={80}
+                      value={settingsDraft.yardSubtitle}
+                      onChange={(e) => setSettingsDraft((prev) => ({ ...prev, yardSubtitle: e.target.value }))}
+                      placeholder={DEFAULT_SITE_SETTINGS.yardSubtitle}
+                    />
+                  </label>
+                </div>
+              )}
+            </section>
+          )}
+          <p className="name-message" role="status">
+            {nameMessage ||
+              (backendHealth.mode === 'local-studio' && isAdmin
+                ? '在本地编辑模式下保存后，会写入本机 local-data/ 并应用到所有页面。'
+                : '名字会保存在这台设备的浏览器里。')}
+          </p>
         </form>
 
         <AdminAuthPanel
           adminEmail={adminEmail}
           pendingCleanupCount={adminData?.pendingCleanupCount ?? 0}
+          backendHealth={backendHealth}
+          hasContent={Boolean(
+            (adminData?.projects.length ?? 0) > 0 ||
+              (adminData?.notes.length ?? 0) > 0 ||
+              adminData?.profile?.draft?.displayName ||
+              adminData?.profile?.draft?.bio ||
+              publicData.projects.length > 0 ||
+              publicData.notes.length > 0 ||
+              publicData.profile,
+          )}
           onSignedIn={async () => { await refreshCloud() }}
           onSignedOut={async () => {
             setAdminEmail(null)
@@ -1078,6 +1270,10 @@ export default function App() {
           onRetryCleanup={async () => {
             const res = await cleanupMediaAssetsApi({ sweepOrphans: true })
             setAdminData((prev) => (prev ? { ...prev, pendingCleanupCount: res.remaining } : prev))
+          }}
+          onImportSample={async () => {
+            await initLocalSampleApi(false)
+            await refreshCloud()
           }}
         />
       </Modal>
