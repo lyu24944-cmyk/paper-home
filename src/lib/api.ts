@@ -32,6 +32,14 @@ function cleanLinks(raw: unknown): ContactLink[] {
     .filter((item) => item.label && item.url)
 }
 
+function cleanStringList(raw: unknown, maxItems = 8, maxLen = 120): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((item) => (typeof item === 'string' ? item.trim().slice(0, maxLen) : ''))
+    .filter(Boolean)
+    .slice(0, maxItems)
+}
+
 export function normalizeAdminProject(row: Record<string, unknown>): AdminProject {
   if ('draft' in row && row.draft && typeof row.draft === 'object') {
     return row as unknown as AdminProject
@@ -122,6 +130,8 @@ export function normalizeAdminProfile(row: Record<string, unknown>): AdminProfil
       avatarAssetId: (row.draft_avatar_asset_id as string | null) ?? null,
       contactEmail: String(row.draft_contact_email ?? ''),
       contactLinks: cleanLinks(row.draft_contact_links),
+      nowNotes: cleanStringList(row.draft_now_notes, 3, 36),
+      quotes: cleanStringList(row.draft_quotes, 8, 120),
     },
     published: pub
       ? {
@@ -131,6 +141,8 @@ export function normalizeAdminProfile(row: Record<string, unknown>): AdminProfil
           avatarAssetId: (pub.avatar_asset_id as string | null) ?? null,
           contactEmail: String(pub.contact_email ?? ''),
           contactLinks: cleanLinks(pub.contact_links),
+          nowNotes: cleanStringList(pub.now_notes ?? pub.nowNotes, 3, 36),
+          quotes: cleanStringList(pub.quotes, 8, 120),
           publishedAt: (pub.published_at as string | null) ?? (row.published_at as string | null) ?? null,
         }
       : null,

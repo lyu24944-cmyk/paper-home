@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { Box3, CanvasTexture, DoubleSide, ExtrudeGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshDepthMaterial, MeshPhysicalMaterial, PlaneGeometry, Quaternion, RGBADepthPacking, Shape, ShapeGeometry, SRGBColorSpace, Vector3 } from 'three'
+import { Box3, CanvasTexture, CylinderGeometry, DoubleSide, Euler, ExtrudeGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshDepthMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PlaneGeometry, Quaternion, RGBADepthPacking, Shape, ShapeGeometry, SRGBColorSpace, Vector3 } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import gsap from 'gsap'
+import { DEFAULT_NOW_NOTES, getAtmosphereLighting } from './atmosphere'
 import type { Place } from './content'
-import type { GalleryDisplayItem } from './types/content'
+import type { AtmospherePreset, GalleryDisplayItem, WeatherMode } from './types/content'
 import { Builder, makeMaterials, StaticBatch } from './Geometry'
-import { doorStops, gallerySlotX, layout, roomTransform, type V3 } from './layout'
+import { doorStops, gallerySlotX, layout, roomTransform, type FocusSubPoseId, type V3 } from './layout'
 import type { ResourcePack } from './resources'
 export { CameraController, type CameraHandle } from './Camera'
 export { doorStops, hallPose } from './layout'
@@ -172,7 +173,15 @@ function garden(){
   }
   b.box([1.65,.075,.43],[-5,.25,6.1],'wood',[0,.1,0],.015)
   for(const x of [-5.6,-4.4])b.box([.065,.5,.36],[x,-.01,6.1],'dark')
+  // Soft linen seat cushion & open garden notebook on the wooden bench
+  b.box([.52,.04,.34],[-4.72,.305,6.08],'linen',[0,.16,0],.012)
+  b.box([.24,.016,.18],[-5.28,.296,6.12],'paper',[0,-.18,0],.004)
   b.cylinder(1.05,1.12,.08,[-5.5,-.27,5.3],'soil',[0,0,0],32)
+  // Porchside wooden postbox
+  b.cylinder(.042,.048,1.02,[1.72,.28,1.92],'dark')
+  b.box([.32,.24,.42],[1.72,.84,1.92],'wood',[0,-.18,0],.018)
+  b.box([.35,.045,.45],[1.72,.97,1.92],'roof',[0,-.18,0],.01)
+  b.box([.18,.025,.02],[1.7,.89,2.13],'brass',[0,-.18,0],.004)
   return b
 }
 function Plant({pack,at,height=1,tree=false,rotation=0}:{pack:ResourcePack;at:V3;height?:number;tree?:boolean;rotation?:number}){
@@ -192,6 +201,49 @@ function Grass(){
   useEffect(()=>{if(!ref.current)return;const m=new Matrix4(),p=new Vector3(),q=new Quaternion(),s=new Vector3();for(let i=0;i<420;i++){const x=Math.sin(i*127.1)*6.8,z=2.4+((i*7.31)%7.7);p.set(Math.abs(x)<.9?x+1.8:x,-.32,z);q.setFromAxisAngle(new Vector3(0,1,0),i*2.4);s.setScalar(.65+(i%6)*.18);m.compose(p,q,s);ref.current.setMatrixAt(i,m)}ref.current.instanceMatrix.needsUpdate=true},[])
   return <instancedMesh ref={ref} args={[geometry,undefined,420]} castShadow receiveShadow><meshStandardMaterial color="#42613b" roughness={1} side={DoubleSide}/></instancedMesh>
 }
+function RainOverlay({count,reduced,isNight}:{count:number;reduced:boolean;isNight:boolean}){
+  const ref=useRef<InstancedMesh>(null)
+  const geometry=useMemo(()=>new CylinderGeometry(.0035,.0035,.58,4,1),[])
+  const material=useMemo(()=>new MeshBasicMaterial({color:isNight?'#9bb8d4':'#d8e6ee',transparent:true,opacity:isNight?.32:.38,depthWrite:false}),[isNight])
+  const drops=useMemo(()=>{
+    const arr:{x:number;y:number;z:number;speed:number}[]=[]
+    for(let i=0;i<count;i++){
+      // Place drops in the yard and outside the side/front windows, never inside the house footprint [-5.6..5.6, -15.2..0.25]
+      const inFrontYard=i%3!==0
+      const x=inFrontYard?((i*73.17)%14.4)-7.2:((i%2===0?-1:1)*(6.0+((i*19.3)%2.4)))
+      const z=inFrontYard?0.65+((i*41.9)%9.6):-((i*53.7)%14.2)
+      const y=((i*29.3)%6.6)-0.2
+      const speed=6.8+(i%7)*.65
+      arr.push({x,y,z,speed})
+    }
+    return arr
+  },[count])
+  const dummy=useMemo(()=>({m:new Matrix4(),p:new Vector3(),q:new Quaternion().setFromEuler(new Euler(0,0,.07)),s:new Vector3(1,1,1)}),[])
+  useEffect(()=>{
+    if(!ref.current)return
+    drops.forEach((d,i)=>{
+      dummy.p.set(d.x,d.y,d.z)
+      dummy.m.compose(dummy.p,dummy.q,dummy.s)
+      ref.current!.setMatrixAt(i,dummy.m)
+    })
+    ref.current.instanceMatrix.needsUpdate=true
+  },[drops,dummy])
+  useEffect(()=>()=>{geometry.dispose();material.dispose()},[geometry,material])
+  useFrame((_,dt)=>{
+    if(reduced||!ref.current)return
+    const step=Math.min(dt,.05)
+    for(let i=0;i<drops.length;i++){
+      const d=drops[i]
+      d.y-=d.speed*step
+      if(d.y<-.25)d.y=6.4+(i%5)*.2
+      dummy.p.set(d.x,d.y,d.z)
+      dummy.m.compose(dummy.p,dummy.q,dummy.s)
+      ref.current.setMatrixAt(i,dummy.m)
+    }
+    ref.current.instanceMatrix.needsUpdate=true
+  })
+  return <instancedMesh ref={ref} args={[geometry,material,count]} userData={{skipAO:true}} frustumCulled={false} castShadow={false} receiveShadow={false}/>
+}
 function roomFurniture(id:Place){
   const b=new Builder()
   if(id==='study'){
@@ -206,7 +258,6 @@ function roomFurniture(id:Place){
     for(let i=0;i<38;i++)b.box([.055+(i%3)*.014,.24+(i%4)*.035,.2],[1.78+(i%13)*.085,.66+Math.floor(i/13)*.415,-1.46],['bookRed','bookBlue','bookGreen','linen'][i%4],[0,0,i%11===0?.1:0],.003)
     b.cylinder(.105,.12,.03,[.08,.79,-1.08],'dark')
     b.cylinder(.009,.009,.36,[.08,.98,-1.08],'brass')
-    b.cylinder(.09,.18,.15,[.08,1.2,-1.08],'green')
     b.box([1.5,.012,1.55],[-.45,.009,.1],'linen',[0,.04,0])
     // Apron joints, a shallow drawer and writing objects, sized in metres.
     b.box([1.38,.13,.035],[-.45,.65,-.59],'wood',[0,0,0],.005)
@@ -235,10 +286,91 @@ function roomFurniture(id:Place){
     b.box([1.35,.065,.65],[0,.39,-.6],'wood',[0,0,0],.022)
     for(const x of [-.53,.53])b.box([.07,.36,.5],[x,.18,-.6],'wood',[0,0,0],.007)
     b.box([2.1,.012,1.45],[0,.009,-.15],'linen',[0,.035,0])
-    b.box([.3,.025,.22],[-.25,.44,-.6],'paper',[0,.1,0],.006)
-    b.cylinder(.08,.06,.2,[.3,.52,-.63],'terracotta',[0,0,0],24)
+    // Wooden postcard & guestbook stamp box on the left side of the table
+    b.box([.28,.085,.21],[-.38,.465,-.59],'wood',[0,.12,0],.012)
+    b.box([.29,.022,.22],[-.38,.515,-.59],'trim',[0,.12,0],.006)
+    b.box([.055,.028,.018],[-.365,.475,-.48],'brass',[0,.12,0],.004)
+    // Wooden stamp handle next to the guestbox
+    b.cylinder(.024,.028,.022,[-.17,.435,-.47],'brass',[0,0,0],16)
+    b.cylinder(.012,.016,.055,[-.17,.47,-.47],'wood',[0,0,0],16)
+    b.cylinder(.08,.06,.2,[.42,.52,-.64],'terracotta',[0,0,0],24)
   }
   return b
+}
+function drawNowNoteCard(canvas:HTMLCanvasElement,text:string,index:number){
+  const w=canvas.width,h=canvas.height,c=canvas.getContext('2d')!
+  c.fillStyle=index===0?'#fbf7ec':index===1?'#f4f0e1':'#f8f3e6'
+  c.fillRect(0,0,w,h)
+  c.strokeStyle='rgba(86,110,87,.28)';c.lineWidth=4;c.strokeRect(14,14,w-28,h-28)
+  c.fillStyle='#566e57';c.font='24px Microsoft YaHei, sans-serif';c.textAlign='left';c.textBaseline='top'
+  c.fillText(`NOW · 0${index+1}`,28,26)
+  c.fillStyle='#2f3830';c.font='36px HomeHand, KaiTi, serif';c.textAlign='center';c.textBaseline='middle'
+  const clean=text.trim()||DEFAULT_NOW_NOTES[index]||DEFAULT_NOW_NOTES[0]
+  const line1=clean.slice(0,10),line2=clean.slice(10,22)
+  if(line2){
+    c.fillText(line1,w/2,h*.5-22,w-48)
+    c.fillText(line2,w/2,h*.5+26,w-48)
+  }else{
+    c.fillText(line1,w/2,h*.52,w-48)
+  }
+}
+function BlankTabletopCards({nowNotes,onSelect}:{nowNotes?:string[];onSelect:()=>void}){
+  const notes=useMemo(()=>{
+    const list=(nowNotes&&nowNotes.length>0?nowNotes:DEFAULT_NOW_NOTES).slice(0,3)
+    while(list.length<3)list.push(DEFAULT_NOW_NOTES[list.length]||'记录日常微光')
+    return list
+  },[nowNotes])
+  const textures=useMemo(()=>{
+    return notes.map((note,idx)=>{
+      const cvs=document.createElement('canvas');cvs.width=360;cvs.height=240
+      drawNowNoteCard(cvs,note,idx)
+      const tex=new CanvasTexture(cvs);tex.colorSpace=SRGBColorSpace;tex.anisotropy=4
+      return tex
+    })
+  },[notes])
+  useEffect(()=>()=>{textures.forEach(t=>t.dispose())},[textures])
+  const placements:{pos:V3;rot:number}[]=[
+    {pos:[-.03,.428,-.64],rot:-.09},
+    {pos:[.16,.431,-.52],rot:.11},
+    {pos:[-.08,.434,-.44],rot:.04},
+  ]
+  return <group onClick={e=>{e.stopPropagation();if(e.delta<8)onSelect()}} onPointerOver={on} onPointerOut={off}>
+    {textures.map((tex,i)=>(
+      <mesh key={i} position={placements[i].pos} rotation={[-Math.PI/2,0,placements[i].rot]} receiveShadow castShadow>
+        <planeGeometry args={[.22,.15]}/>
+        <meshStandardMaterial map={tex} roughness={.92}/>
+      </mesh>
+    ))}
+    <group position={[-.38,.56,-.59]} rotation={[-Math.PI/3,0,.12]}>
+      <Plaque text="近况与寄语匣" sub="点击俯瞰桌面 · 盖章留念" at={[0,0,0]} size={[.34,.16]}/>
+    </group>
+  </group>
+}
+function StudyInteractiveNodes({deskLampOn,onToggleLamp,onDrawQuote}:{deskLampOn:boolean;onToggleLamp?:()=>void;onDrawQuote?:()=>void}){
+  const shadeMaterial=useMemo(()=>new MeshStandardMaterial({
+    color:deskLampOn?'#8fb07c':'#7e8c73',
+    emissive:deskLampOn?'#ffcf75':'#000000',
+    emissiveIntensity:deskLampOn?.75:0,
+    roughness:.48,
+  }),[deskLampOn])
+  useEffect(()=>()=>shadeMaterial.dispose(),[shadeMaterial])
+  return <>
+    <group position={[.08,1.2,-1.08]} onClick={e=>{e.stopPropagation();if(e.delta<8)onToggleLamp?.()}} onPointerOver={on} onPointerOut={off}>
+      <mesh castShadow receiveShadow material={shadeMaterial}>
+        <cylinderGeometry args={[.09,.18,.15,16]}/>
+      </mesh>
+      <mesh position={[0,-.04,0]}>
+        <sphereGeometry args={[.038,12,12]}/>
+        <meshBasicMaterial color={deskLampOn?'#fff4d2':'#cfc9b8'}/>
+      </mesh>
+      {deskLampOn&&(
+        <pointLight position={[0,-.08,.04]} color="#ffcf80" intensity={3.8} distance={4.4} decay={2}/>
+      )}
+    </group>
+    <group position={[2.3,1.48,-1.3]} onClick={e=>{e.stopPropagation();if(e.delta<8)onDrawQuote?.()}} onPointerOver={on} onPointerOut={off}>
+      <Plaque text="书架灵感签" sub="抽一张读过的句子" at={[0,0,0]} size={[.36,.18]}/>
+    </group>
+  </>
 }
 function drawGallerySheet(canvas:HTMLCanvasElement,title:string,img?:HTMLImageElement|null){
   const w=canvas.width,h=canvas.height,c=canvas.getContext('2d')!
@@ -289,7 +421,7 @@ function Paper({item,index,count,reduced,interact,onCoverExpired}:{item:GalleryD
     <mesh position={[0,.61,.035]} castShadow><boxGeometry args={[.045,.055,.03]}/><meshStandardMaterial color="#8e8a7c" metalness={.8} roughness={.28}/></mesh>
   </group>
 }
-function RoomDecor({id,pack,materials,interact,reduced,exterior,galleryProjects,onCoverExpired}:{id:Place;pack:ResourcePack;materials:ReturnType<typeof makeMaterials>;interact:(i:number)=>void;reduced:boolean;exterior:boolean;galleryProjects:GalleryDisplayItem[];onCoverExpired?:(assetId:string)=>void}){
+function RoomDecor({id,pack,materials,interact,reduced,exterior,galleryProjects,onCoverExpired,deskLampOn=false,onToggleDeskLamp,onDrawStudyQuote,onSelectBlankTable,nowNotes}:{id:Place;pack:ResourcePack;materials:ReturnType<typeof makeMaterials>;interact:(i:number)=>void;reduced:boolean;exterior:boolean;galleryProjects:GalleryDisplayItem[];onCoverExpired?:(assetId:string)=>void;deskLampOn?:boolean;onToggleDeskLamp?:()=>void;onDrawStudyQuote?:()=>void;onSelectBlankTable?:()=>void;nowNotes?:string[]}){
   const b=useMemo(()=>roomFurniture(id),[id]),t=roomTransform(id)
   const root=useRef<Group>(null),scratch=useMemo(()=>({forward:new Vector3(),delta:new Vector3()}),[])
   useFrame(({camera})=>{
@@ -303,34 +435,126 @@ function RoomDecor({id,pack,materials,interact,reduced,exterior,galleryProjects,
   const displayed=galleryProjects.slice(0,3)
   return <group ref={root} userData={{skipAO:exterior}} position={[t.x,0,t.z]} rotation={[0,t.rotation,0]}><StaticBatch builder={b} materials={materials} castShadow={!exterior}/>
     {id==='gallery'&&<group name="gallery-papers">{displayed.map((item,i)=><Paper key={item.id} item={item} index={i} count={displayed.length} interact={interact} reduced={reduced} onCoverExpired={onCoverExpired}/>)}</group>}
-    {id==='study'&&<group position={[-.5,.79,-.85]} rotation={[-Math.PI/2,0,-.08]} onClick={e=>{e.stopPropagation();interact(0)}} onPointerOver={on} onPointerOut={off}><Plaque text="创作手记" sub="翻开，读一会儿" at={[0,0,0]} size={[.32,.24]}/></group>}
+    {id==='study'&&<>
+      <group position={[-.5,.79,-.85]} rotation={[-Math.PI/2,0,-.08]} onClick={e=>{e.stopPropagation();interact(0)}} onPointerOver={on} onPointerOut={off}><Plaque text="创作手记" sub="翻开，读一会儿" at={[0,0,0]} size={[.32,.24]}/></group>
+      <StudyInteractiveNodes deskLampOn={deskLampOn} onToggleLamp={onToggleDeskLamp} onDrawQuote={onDrawStudyQuote}/>
+    </>}
     <Plant pack={pack} at={id==='study'?[-2.5,0,-1.35]:id==='gallery'?[2.45,0,-1.5]:[-2.5,0,-1.3]} height={id==='blank'?1.2:.9}/>
-    {id==='blank'&&<Plaque text="关于我" sub="认识小屋的主人" at={[1.65,1.75,-2.02]} size={[1.2,.4]}/>}
+    {id==='blank'&&<>
+      <Plaque text="关于我" sub="认识小屋的主人" at={[1.65,1.75,-2.02]} size={[1.2,.4]}/>
+      <BlankTabletopCards nowNotes={nowNotes} onSelect={()=>onSelectBlankTable?.()}/>
+    </>}
   </group>
 }
-export function World({place,opening,destination,navigate,interact,homeName,plaqueTitle='欢迎回家',plaqueSubtitle='留一点时间，慢慢逛',reduced,pack,galleryProjects,onCoverExpired}:{place:Place;opening:Place|null;destination:Place|null;navigate:(p:Place)=>void;interact:(i:number)=>void;homeName:string;plaqueTitle?:string;plaqueSubtitle?:string;reduced:boolean;pack:ResourcePack;galleryProjects:GalleryDisplayItem[];onCoverExpired?:(assetId:string)=>void}){
-  const materials=useMemo(()=>makeMaterials(pack),[pack]),house=useMemo(shell,[]),yard=useMemo(garden,[]),{scene}=useThree()
+export function World({
+  place,
+  opening,
+  destination,
+  navigate,
+  interact,
+  homeName,
+  plaqueTitle='欢迎回家',
+  plaqueSubtitle='留一点时间，慢慢逛',
+  reduced,
+  pack,
+  galleryProjects,
+  onCoverExpired,
+  atmospherePreset='daylight',
+  weather='clear',
+  deskLampOn=false,
+  onToggleDeskLamp,
+  onDrawStudyQuote,
+  onSelectFocus,
+  onTriggerMailbox,
+  nowNotes,
+}:{
+  place:Place
+  opening:Place|null
+  destination:Place|null
+  navigate:(p:Place)=>void
+  interact:(i:number)=>void
+  homeName:string
+  plaqueTitle?:string
+  plaqueSubtitle?:string
+  reduced:boolean
+  pack:ResourcePack
+  galleryProjects:GalleryDisplayItem[]
+  onCoverExpired?:(assetId:string)=>void
+  atmospherePreset?:AtmospherePreset
+  weather?:WeatherMode
+  deskLampOn?:boolean
+  onToggleDeskLamp?:()=>void
+  onDrawStudyQuote?:()=>void
+  onSelectFocus?:(id:FocusSubPoseId)=>void
+  onTriggerMailbox?:()=>void
+  nowNotes?:string[]
+}){
+  const materials=useMemo(()=>makeMaterials(pack),[pack]),house=useMemo(shell,[]),yard=useMemo(garden,[]),{scene,gl}=useThree()
+  const lighting=useMemo(()=>getAtmosphereLighting(atmospherePreset,weather),[atmospherePreset,weather])
   const glass=useMemo(()=>{const b=new Builder();for(const w of windows)b.add(new PlaneGeometry(w.w-.08,w.h-.08),w.at,'glass',[0,w.r,0]);return b},[])
   // Thin architectural glazing: direct clear view plus dielectric environment reflection.
   // No volume refraction capture; flat 6 mm panes do not need a second full-scene render.
   const glassMaterials=useMemo(()=>({glass:new MeshPhysicalMaterial({color:'#d5e4de',roughness:.025,transparent:true,opacity:.14,depthWrite:false,transmission:0,thickness:.006,ior:1.5,metalness:0,envMapIntensity:.8,side:DoubleSide,forceSinglePass:true})}),[])
-  useEffect(()=>{scene.environment=pack.environment;scene.background=pack.environment;scene.backgroundIntensity=.8;scene.environmentIntensity=.4;return()=>{scene.environment=null;scene.background=null}},[pack,scene])
+  useEffect(()=>{
+    scene.environment=pack.environment
+    scene.background=pack.environment
+    return()=>{scene.environment=null;scene.background=null}
+  },[pack,scene])
+  useEffect(()=>{
+    scene.backgroundIntensity=lighting.backgroundIntensity
+    scene.environmentIntensity=lighting.environmentIntensity
+    glassMaterials.glass.opacity=lighting.glassOpacity
+    glassMaterials.glass.envMapIntensity=lighting.glassEnvIntensity
+    gl.setClearColor(lighting.clearColor,1)
+    gl.shadowMap.needsUpdate=true
+  },[lighting,scene,gl,glassMaterials])
   useEffect(()=>()=>{Object.values(materials).forEach(m=>m.dispose());glassMaterials.glass.dispose()},[materials,glassMaterials])
   const outside=place==='yard'||destination==='yard'||opening==='hall'||opening==='yard'
   return <>
-    <fog attach="fog" args={['#cbdde2',55,110]}/>
-    <hemisphereLight args={['#e8f1f4','#777761',.32]}/>
-    <directionalLight position={[-8,13,9]} intensity={3.3} color="#fff3dd" castShadow shadow-mapSize={pack.quality==='high'?[2048,2048]:[1024,1024]} shadow-camera-left={-18} shadow-camera-right={18} shadow-camera-top={18} shadow-camera-bottom={-18} shadow-camera-near={.5} shadow-camera-far={55} shadow-normalBias={.025} shadow-bias={-.00008} shadow-radius={3}/>
-    <ambientLight intensity={.06}/>
-    {[1.8,6.8,11.8].map(d=><pointLight key={d} position={[0,2.55,-d]} color="#fff4dd" intensity={2.4} distance={4.5} decay={2}/>)}
-    {doorStops.map(d=><rectAreaLight key={d.id} position={[d.side*5.12,1.85,-d.depth]} rotation={[0,d.side*Math.PI/2,0]} width={1.7} height={1.3} color="#e5eeff" intensity={3.8}/>)}
+    <fog attach="fog" args={[lighting.fogColor,lighting.fogNear,lighting.fogFar]}/>
+    <hemisphereLight args={[lighting.hemiSkyColor,lighting.hemiGroundColor,lighting.hemiIntensity]}/>
+    <directionalLight position={lighting.sunPosition} intensity={lighting.sunIntensity} color={lighting.sunColor} castShadow shadow-mapSize={pack.quality==='high'?[2048,2048]:[1024,1024]} shadow-camera-left={-18} shadow-camera-right={18} shadow-camera-top={18} shadow-camera-bottom={-18} shadow-camera-near={.5} shadow-camera-far={55} shadow-normalBias={.025} shadow-bias={-.00008} shadow-radius={3}/>
+    <ambientLight intensity={lighting.ambientIntensity} color={lighting.ambientColor}/>
+    {[1.8,6.8,11.8].map(d=><pointLight key={d} position={[0,2.55,-d]} color={lighting.hallPointColor} intensity={lighting.hallPointIntensity} distance={4.5} decay={2}/>)}
+    {doorStops.map(d=><rectAreaLight key={d.id} position={[d.side*5.12,1.85,-d.depth]} rotation={[0,d.side*Math.PI/2,0]} width={1.7} height={1.3} color={lighting.windowRectColor} intensity={lighting.windowRectIntensity}/>)}
+    {lighting.porchLanternIntensity>0&&(
+      <pointLight position={[-.84,1.78,.48]} color={lighting.porchLanternColor} intensity={lighting.porchLanternIntensity} distance={6.5} decay={2}/>
+    )}
+    {lighting.roomWarmFillIntensity>0&&doorStops.map(d=>(
+      <pointLight key={`warm-${d.id}`} position={[d.side*3.1,2.35,-d.depth]} color="#ffdfa8" intensity={lighting.roomWarmFillIntensity} distance={6.2} decay={2}/>
+    ))}
+    {weather==='rain'&&(
+      <RainOverlay count={pack.quality==='high'?180:90} reduced={reduced} isNight={lighting.preset==='night'}/>
+    )}
     <StaticBatch builder={house} materials={materials}/><StaticBatch builder={yard} materials={materials}/>
     <StaticBatch builder={glass} materials={glassMaterials} castShadow={false}/>
     <Door at={[0,0,.045]} open={outside&&(!!opening||!!destination)} click={()=>navigate('hall')} materials={materials} reduced={reduced}/>
     <Signage homeName={homeName} plaqueTitle={plaqueTitle} plaqueSubtitle={plaqueSubtitle} materials={materials}/>
+    {/* Yard interactive bench and porch mailbox */}
+    <group position={[-5,.42,6.1]} rotation={[0,.1,0]} onClick={e=>{e.stopPropagation();if(e.delta<8&&place==='yard')onSelectFocus?.('yard-bench')}} onPointerOver={on} onPointerOut={off}>
+      <mesh visible={false}><boxGeometry args={[1.75,.55,.6]}/><meshBasicMaterial/></mesh>
+    </group>
+    <group position={[1.72,.84,1.92]} rotation={[0,-.18,0]} onClick={e=>{e.stopPropagation();if(e.delta<8&&place==='yard')onTriggerMailbox?.()}} onPointerOver={on} onPointerOut={off}>
+      <mesh visible={false}><boxGeometry args={[.48,.52,.52]}/><meshBasicMaterial/></mesh>
+      <Plaque text="寄语信箱" sub="留张便签" at={[0,.24,0]} size={[.34,.14]}/>
+    </group>
     {doorStops.map(d=><group key={d.id}>
       <Door at={[d.side*1.08,0,-d.depth]} rotation={-d.side*Math.PI/2} open={place===d.id||opening===d.id||destination===d.id} click={()=>navigate(d.id)} materials={materials} reduced={reduced}/>
-      <RoomDecor id={d.id} pack={pack} materials={materials} interact={interact} reduced={reduced} exterior={outside} galleryProjects={galleryProjects} onCoverExpired={onCoverExpired}/>
+      <RoomDecor
+        id={d.id}
+        pack={pack}
+        materials={materials}
+        interact={interact}
+        reduced={reduced}
+        exterior={outside}
+        galleryProjects={galleryProjects}
+        onCoverExpired={onCoverExpired}
+        deskLampOn={deskLampOn}
+        onToggleDeskLamp={onToggleDeskLamp}
+        onDrawStudyQuote={onDrawStudyQuote}
+        onSelectBlankTable={()=>onSelectFocus?.('blank-table')}
+        nowNotes={nowNotes}
+      />
     </group>)}
     <Plant pack={pack} at={[-5.5,-.29,5.3]} height={5.7} tree rotation={.5}/>
     <Plant pack={pack} at={[-1.05,0,1.15]} height={.86}/><Plant pack={pack} at={[1.08,0,1.12]} height={.67}/>

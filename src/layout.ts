@@ -3,6 +3,7 @@ import type { Place } from './content'
 
 export type V3 = [number, number, number]
 export type CameraPose = { position: Vector3; orientation: Quaternion; fov: number }
+export type FocusSubPoseId = 'yard-bench' | 'study-shelf' | 'blank-table'
 export type TransitionState = { from: Place; to: Place; phase: 'loading' | 'approach' | 'threshold' | 'settling' | 'complete' | 'failed'; progress: number }
 export const layout = { width: 11, length: 15, wallHeight: 2.9, hallWidth: 2.2, hallLength: 13.5, walkLength: 12.5, stepDistance:1.1, eyeHeight: 1.65, doorWidth: 1.02, doorHeight: 2.2, front: 0, back: -15 }
 export const doorStops = [
@@ -76,6 +77,22 @@ export function yardPose(aspect: number): CameraPose {
 }
 export function stablePose(place: Place, progress: number, aspect: number, galleryIndex = 1, galleryCount = 3) {
   return place==='yard'?yardPose(aspect):place==='hall'?hallPose(progress,aspect):roomPose(place,aspect,galleryIndex,galleryCount)
+}
+export function focusPoseForPlace(focusId: FocusSubPoseId | null | undefined, place: Place): FocusSubPoseId | null {
+  if (!focusId) return null
+  if (focusId === 'yard-bench' && place === 'yard') return focusId
+  if (focusId === 'study-shelf' && place === 'study') return focusId
+  if (focusId === 'blank-table' && place === 'blank') return focusId
+  return null
+}
+export function focusSubPose(focusId: FocusSubPoseId, aspect = 1.6): CameraPose {
+  if (focusId === 'yard-bench') {
+    return pose([-4.85, 1.08, 6.08], [0.15, 1.82, -0.45], aspect < 0.8 ? 58 : 48)
+  }
+  if (focusId === 'study-shelf') {
+    return pose(roomPoint('study', [1.62, 1.46, 0.18]), roomPoint('study', [2.28, 1.32, -1.46]), aspect < 0.8 ? 64 : 50)
+  }
+  return pose(roomPoint('blank', [0, 1.18, 0.42]), roomPoint('blank', [0, 0.46, -0.58]), aspect < 0.8 ? 62 : 48)
 }
 export type RoutePoint = { pose: CameraPose; phase: TransitionState['phase']; duration: number }
 export function makeRoute(from: Place, to: Place, progress: number, aspect: number, galleryIndex = 1, galleryCount = 3): RoutePoint[] {

@@ -1,92 +1,103 @@
-# 我的小屋 · 可交互的三维个人网站模板
+# Paper Home · A Living 3D Digital Cottage for Creators
 
-一座用 React、Three.js 与 Vite 搭建的白昼手绘感三维小屋：可以从庭院推门走入走廊，逛完 **「创作手记」「作品室」「关于我」** 三个房间，并直接在网页里维护属于你自己的图文、作品封面和演示视频。
+<p align="center">
+  <a href="./README.md"><strong>English</strong></a> · <a href="./README.zh-CN.md"><strong>简体中文</strong></a> · <a href="./DEPLOY.md"><strong>Cloud Deployment (ZH)</strong></a> · <a href="./QA.md"><strong>Rendering & QA Notes</strong></a>
+</p>
 
-项目支持 **两种使用方式**：
-- **本地工作室模式（推荐起步，零账号）**：克隆代码后无需任何云服务或密钥，直接 `npm install && npm run dev` 即可在自己电脑里进入编辑模式，所有作品、手记、个人介绍、小屋名称与图片/视频自动保存在本机 `local-data/` 文件夹。
-- **云端跨设备模式（可选升级）**：接入你自己的 **Supabase + Cloudflare Pages**，即可实现电脑与手机多端在线登录编辑，具体步骤见 [DEPLOY.md](./DEPLOY.md)。
+**Paper Home** is an architectural, tactile 3D personal website and portfolio template built with **React 19, Three.js (`@react-three/fiber`), and Vite**.
+
+Instead of a floating 3D gimmick or a static link-in-bio page, Paper Home gives you a **real 11×15m single-story house** with 6mm physical glass windows, a courtyard tree, a central hallway, and three dedicated rooms (**Study Notes**, **Gallery**, and **About Me**) — complete with **living time-of-day lighting, rain & procedural WebAudio soundscapes, clickable room objects, and a zero-config in-browser Local Studio**.
 
 ---
 
-## 一、3 分钟在本地电脑跑起来（零云端配置）
+## ✨ Why Paper Home Stands Out
 
-前置需求：[Node.js](https://nodejs.org/) 20+ 与任意现代桌面浏览器（Chrome / Edge / Safari / Firefox）。
+| Capability | Typical 3D Portfolio Templates | Paper Home |
+| --- | --- | --- |
+| **Architectural Continuity** | Isolated scenes or skybox illusions | **True 11×15m walkable cottage** — look through the 6mm courtyard windows and see the actual Study desk and Gallery frames inside |
+| **Living Time & Weather** | Frozen midday lighting | **4 physical atmospheres (`Dawn`, `Daylight`, `Sunset`, `Night`, plus `Auto` local-clock sync) + `Rain`**, with warm interior lamps glowing through the windows at dusk and night |
+| **Procedural Audio & Tactile Props** | Heavy MP3 downloads & static meshes | **Zero external audio files** — WebAudio synthesizes wind chimes and filtered rain (automatically muffled when you step indoors); click the brass desk lamp, draw a bookshelf quote slip, sit on the yard bench, or stamp the wooden guestbox |
+| **Editing Experience** | Edit raw JSON/TSX files in an IDE | **Built-in Local Studio CMS** — create projects, write study notes, compress images to WebP, upload chunked videos, and preview drafts right in the browser with zero cloud accounts |
+| **Publishing & Hosting** | Locked to a single backend | **1-command static snapshot (`npm run build:local`)** that strips drafts and admin UI for GitHub Pages / Vercel / Netlify, or upgrade to **Supabase + Cloudflare Pages** anytime |
+| **Performance & Privacy** | External CDN fonts/textures & per-frame shadow baking | **0 runtime external network requests**, procedural canvas textures, on-demand shadow map updates (`shadowMap.autoUpdate = false`), and strict mobile viewport discipline |
+
+---
+
+## 🚀 30-Second Quickstart (Zero Cloud Setup)
+
+Prerequisites: [Node.js](https://nodejs.org/) 20+ and any modern desktop or mobile browser.
 
 ```bash
-# 1. 克隆仓库（或点击 GitHub 页面右上角 "Use this template" 生成你自己的仓库）
-git clone <你的仓库地址>
+# 1. Clone the repo (or click "Use this template" on GitHub)
+git clone <your-repo-url>
 cd paper-home
 
-# 2. 安装依赖
+# 2. Install dependencies
 npm install
 
-# 3. 启动本地小屋（或用 npm run studio 自动打开浏览器）
+# 3. Start the Local Studio (or run `npm run studio` to auto-open your browser)
 npm run dev
 ```
 
-打开浏览器访问 `http://127.0.0.1:4318/` 即可看到一座干净的小屋。
+Open `http://127.0.0.1:4318/` to step into your cottage.
 
-> 想先看一套示例作品与手记的展示效果？可在终端执行 `npm run init:sample`，或在进入「本地编辑模式」后点击面板里的 **「导入示例内容」**（不会包含作者个人隐私资料，你可随时修改或删除）。
-
----
-
-## 二、怎么编辑并打造你自己的小屋
-
-1. 打开页面右上角 **「小屋地图」**，点击底部 **「进入编辑模式」**。
-   - **安全边界**：本地写操作仅允许本机回环地址（`127.0.0.1` / `localhost`）；通过其他地址访问时仅作为访客只读查看。
-2. **自定义名称与欢迎语**：在「小屋地图」弹窗中直接修改 **小屋名称**，可展开 **「自定义门牌与小院迎客语」** 修改门厅木牌文字和小院开场白，点击 **「保存本机」** 后会写入 `local-data/cottage.json`。
-3. **走进对应房间新增内容**：
-   - **作品室**：点击 **「添加作品」**，支持封面图、多张细节图（上传前自动浏览器端压缩生成展示图与缩略图，单张原文件上限 `10 MB`）、一个可播放演示视频（MP4/WebM，上限 `50 MB`，点击详情后再按需加载播放）和访问链接；三维展墙最多按手动顺序呈现前 3 件已发布作品。
-   - **创作手记**：点击 **「写手记」**，记录过程、截图或视频，并可关联某一件作品互相跳转。
-   - **关于我**：点击 **「编辑介绍」**，填写称呼、头像、关注方向、公开邮箱或社交链接（未填写字段不会公开显示）。
-4. **草稿与发布隔离**：
-   - 新建内容默认为 **草稿**；已发布条目再次修改也先保存为修改草稿。
-   - 随时点击「小屋地图 -> **退出编辑（访客预览）**」即可检查访客最终看到的公开效果；未发布草稿与草稿素材在访客视角不可见。
+> 💡 **Want to explore with sample projects & notes pre-loaded?**
+> Run `npm run init:sample` in your terminal, or open **Cottage Map (`小屋地图`) -> Enter Edit Mode (`进入编辑模式`) -> Import Sample Content (`导入示例内容`)**.
 
 ---
 
-## 三、如何备份与发布给别人看
+## 🌤️ Interactive Highlights
 
-### 方案 1：本地文件夹直接备份 / 换电脑迁移
-你的全部本地内容和媒体都存储在未纳入 Git 跟踪的 `local-data/` 目录中（`local-data/cottage.json` + `local-data/media/`）。换电脑时把 `local-data/` 整个文件夹复制过去即可继续编辑。
+1. **Four Time-of-Day Atmospheres + Rain Soundscape**
+   - Switch between **Dawn (`晨雾`)**, **Daylight (`晴昼`)**, **Sunset (`落日`)**, **Night (`夜灯`)**, **Auto (`随时间`)**, and **Rain (`细雨`)** directly from the top bar — or share a mood via URL parameters such as `?at=night&weather=rain#yard`.
+   - Enable the bottom-right **Ambient Sound** toggle to hear procedural pentatonic chimes and multi-band filtered rain that subtly muffles when you walk from the courtyard into an indoor room.
+2. **Tactile Room Objects & Camera Sub-Poses**
+   - **Courtyard (`#yard`)**: Click the wooden bench under the tree to sit and look up at the porch eaves, or click the porch postbox to jump straight to the Guestbook box.
+   - **Study (`#study`)**: Click the green-shaded brass desk lamp to toggle warm task lighting, or click the bookshelf to draw a random quote slip.
+   - **About Me (`#blank`)**: Inspect the 3 angled **Now Notes** on the wooden table and leave a mood stamp in the **Visitor Guestbox**.
 
-### 方案 2：导出为纯静态网站（无需后台服务器）
-当你已经在本地整理并 **发布** 了想要公开的作品、手记与个人介绍，可以运行：
+---
 
+## ✍️ Editing Your Cottage in Local Studio
+
+1. Click **Cottage Map (`小屋地图`)** in the top-right corner and select **Enter Edit Mode (`进入编辑模式`)**.
+   - *Security boundary*: Local write APIs only accept requests from loopback addresses (`127.0.0.1` / `localhost`).
+2. **Customize Branding & Default Atmosphere**:
+   - Rename your cottage, customize the wooden hallway plaque and courtyard greeting, and choose the default atmosphere/weather visitors see first.
+3. **Curate Room Content**:
+   - **Gallery (`#gallery`)**: Add projects with cover art, multi-image galleries (automatically compressed client-side into WebP display & thumb variants), and demo videos (chunked upload with HTTP 206 Range streaming). The top 3 published projects are framed directly on the 3D gallery wall.
+   - **Study (`#study`)**: Write long-form notes with images, video, and bi-directional links to your projects.
+   - **About Me (`#blank`)**: Update your profile, avatar, 3 tabletop **Now Notes**, custom bookshelf quotes, and contact links.
+4. **Draft vs. Public Isolation**:
+   - All edits save as drafts first (`local-data/`). Switch to **Visitor Preview (`退出编辑（访客预览）`)** at any time to verify that unpublished drafts remain hidden.
+
+---
+
+## 📦 Deploying Your Cottage
+
+### Option 1: GitHub Pages (Included Workflow)
+This repository includes a ready-to-use GitHub Actions workflow at [`.github/workflows/deploy-pages.yml`](./.github/workflows/deploy-pages.yml):
+1. In your GitHub repository, go to **Settings -> Pages** and set **Build and deployment -> Source** to **GitHub Actions**.
+2. Push to `main` (or trigger the workflow manually from the **Actions** tab) to build a clean static snapshot (`npm run build:local`) and deploy it to GitHub Pages.
+
+### Option 2: Export a Pure Static Bundle Anywhere
 ```bash
 npm run build:local
 ```
+This exports a read-only production bundle into `dist/` containing only **published** items and referenced media (`dist/local-snapshot/`), with all draft data and admin UI stripped out. Host `dist/` on Cloudflare Pages, Vercel, Netlify, or any static server.
 
-该命令会把 `dist/` 打包为**纯静态只读展馆**，自动只提取**已发布**条目和被引用的图片/视频放入 `dist/local-snapshot/`，**不会包含草稿或任何编辑入口**。你可以本地运行 `npm run preview`（默认 `http://127.0.0.1:4319/`）验证效果，再把 `dist/` 上传到 GitHub Pages、Cloudflare Pages、Vercel、Netlify Drop 或任何静态文件服务器。
-
-### 方案 3：升级到云端，在手机与多台电脑同步编辑
-1. 按照 [DEPLOY.md](./DEPLOY.md) 准备好你自己的免费 **Supabase** 项目与 **Cloudflare Pages**。
-2. 把你本地 `local-data/` 攒好的内容一键迁移上传到你的 Supabase：
-
-```bash
-npm run sync:supabase
-```
+### Option 3: Upgrade to Supabase + Cloudflare Pages (Multi-Device Cloud CMS)
+When you want to edit from both your laptop and phone with magic-link authentication and cloud storage, follow [DEPLOY.md](./DEPLOY.md) and run `npm run sync:supabase` to migrate your local `local-data/` to Supabase in one command.
 
 ---
 
-## 四、常用命令速览
+## 🧪 Verification & Quality Scripts
 
-| 命令 | 用途 |
+| Command | Description |
 | --- | --- |
-| `npm run dev` | 启动本地工作室（`http://127.0.0.1:4318/`，可本地保存与编辑） |
-| `npm run studio` | 启动本地工作室并自动打开浏览器 |
-| `npm run init:sample` | 向空白 `local-data/` 导入 1 组中性示例作品与手记（加 `--force` 强制覆盖） |
-| `npm run build:local` | 将本地已发布内容导出为纯静态 `dist/` |
-| `npm run sync:supabase` | 将本地 `local-data/` 内容与媒体上传同步到你自己的 Supabase |
-| `npm run build` | 标准云端生产构建（配合 `.env.local` 或 Cloudflare 环境变量） |
-| `npm run preview` | 在 `http://127.0.0.1:4319/` 预览构建出的 `dist/` 产物 |
-| `npm run check:local` | 自动化端到端验证本地工作室、媒体隔离、重启持久性与静态导出 |
-| `npm run check:cms` | 自动化端到端验证云端 CMS 交互、TUS 断点续传与版本冲突 |
-| `npm run check:camera` | 校验三维相机穿门路线与视口几何约束 |
-
----
-
-## 五、致谢与字体说明
-
-- 自带手写字体见 `public/fonts/OFL.txt`。
-- 三维场景与纹理预算、光影调优方法与实测记录见 [QA.md](./QA.md)。
+| `npm run dev` | Start Local Studio at `http://127.0.0.1:4318/` |
+| `npm run build:local` | Build a read-only static snapshot into `dist/` |
+| `npm run assets:verify` | Verify asset budget and enforce 0 runtime external network requests |
+| `npm run check:camera` | Verify 75,000+ camera trajectory samples across 120 doorway routes & 6 viewports |
+| `npm run check:local` | End-to-end Playwright verification of Local Studio, draft isolation & static export |
+| `npm run check:cms` | End-to-end Playwright verification of Cloud CMS, TUS chunked upload & conflict recovery |

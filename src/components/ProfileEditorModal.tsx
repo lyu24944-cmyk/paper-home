@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import {
   cleanupMediaAssetsApi,
   publishProfileApi,
@@ -17,6 +17,7 @@ import type { ConflictContext } from './ConflictDialog'
 import { Icon } from './Icon'
 import { ImageListPicker } from './MediaPickers'
 import { Modal } from './Modal'
+import type { SaveActionKind } from './ProjectEditorModal'
 import { SignedImage } from './SignedImage'
 
 export function ProfileEditorModal({
@@ -32,10 +33,11 @@ export function ProfileEditorModal({
   initialProfile: AdminProfile | null
   assets: Record<string, MediaAsset>
   onAssetUploaded: (asset: MediaAsset) => void
-  onSaved: (profile: AdminProfile, pendingCleanupCount: number) => void
+  onSaved: (profile: AdminProfile, pendingCleanupCount: number, action?: SaveActionKind) => void
   onConflict: (conflict: ConflictContext) => void
   onClose: () => void
 }) {
+  const uid = useId()
   const [current, setCurrent] = useState<AdminProfile | null>(initialProfile)
   const [displayName, setDisplayName] = useState('')
   const [bio, setBio] = useState('')
@@ -43,6 +45,8 @@ export function ProfileEditorModal({
   const [avatarAssetId, setAvatarAssetId] = useState<string | null>(null)
   const [contactEmail, setContactEmail] = useState('')
   const [contactLinks, setContactLinks] = useState<ContactLink[]>([])
+  const [nowNotes, setNowNotes] = useState<string[]>(['', '', ''])
+  const [quotesText, setQuotesText] = useState('')
   const [previewOpen, setPreviewOpen] = useState(false)
 
   const [uploadBusy, setUploadBusy] = useState(false)
@@ -61,6 +65,9 @@ export function ProfileEditorModal({
     setAvatarAssetId(draft?.avatarAssetId ?? null)
     setContactEmail(draft?.contactEmail ?? '')
     setContactLinks(draft?.contactLinks ? draft.contactLinks.map((l) => ({ ...l })) : [])
+    const existingNow = Array.isArray(draft?.nowNotes) ? draft.nowNotes : []
+    setNowNotes([existingNow[0] ?? '', existingNow[1] ?? '', existingNow[2] ?? ''])
+    setQuotesText(Array.isArray(draft?.quotes) ? draft.quotes.join('\n') : '')
   }
 
   useEffect(() => {
@@ -82,6 +89,12 @@ export function ProfileEditorModal({
       contactLinks: contactLinks
         .map((item) => ({ label: item.label.trim(), url: item.url.trim() }))
         .filter((item) => item.label || item.url),
+      nowNotes: nowNotes.map((n) => n.trim().slice(0, 36)).filter(Boolean).slice(0, 3),
+      quotes: quotesText
+        .split(/\r?\n/)
+        .map((q) => q.trim().slice(0, 120))
+        .filter(Boolean)
+        .slice(0, 8),
     }
   }
 
@@ -102,7 +115,9 @@ export function ProfileEditorModal({
         Boolean(draft.focusAreas) ||
         Boolean(draft.avatarAssetId) ||
         Boolean(draft.contactEmail) ||
-        draft.contactLinks.length > 0
+        draft.contactLinks.length > 0 ||
+        (draft.nowNotes?.length ?? 0) > 0 ||
+        (draft.quotes?.length ?? 0) > 0
       if (!hasAny) {
         return '请至少填写一项公开个人资料（昵称、介绍、关注方向、头像或联系方式）后再发布。'
       }
@@ -148,7 +163,7 @@ export function ProfileEditorModal({
     })
   }
 
-  async function saveDraftInternal(): Promise<AdminProfile | null> {
+  async function saveDraftInternal(notifyAction?: SaveActionKind): Promise<AdminProfile | null> {
     const draft = buildDraftPayload()
     const validationErr = validateDraft(draft, false)
     if (validationErr) {
@@ -158,7 +173,7 @@ export function ProfileEditorModal({
     const res = await saveProfileDraftApi(current?.version ?? 0, draft)
     if (res.item) {
       setCurrent(res.item)
-      onSaved(res.item, res.pendingCleanupCount)
+      onSaved(res.item, res.pendingCleanupCount, notifyAction)
       return res.item
     }
     return null
@@ -169,7 +184,7 @@ export function ProfileEditorModal({
     setSaveError('')
     setSaveStatus('')
     try {
-      const saved = await saveDraftInternal()
+      const saved = await saveDraftInternal('draft')
       if (saved) {
         setSaveStatus('个人资料草稿已保存。')
       }
@@ -200,7 +215,7 @@ export function ProfileEditorModal({
       const res = await publishProfileApi(saved.version)
       if (res.item) {
         setCurrent(res.item)
-        onSaved(res.item, res.pendingCleanupCount)
+        onSaved(res.item, res.pendingCleanupCount, 'publish')
         setSaveStatus('“关于我”公开内容已更新。')
       }
     } catch (err) {
@@ -223,7 +238,7 @@ export function ProfileEditorModal({
       const res = await unpublishProfileApi(current.version)
       if (res.item) {
         setCurrent(res.item)
-        onSaved(res.item, res.pendingCleanupCount)
+        onSaved(res.item, res.pendingCleanupCount, 'unpublish')
         setSaveStatus('已撤回公开展示；未填写状态下访客将看到简洁的待完善提示。')
       }
     } catch (err) {
@@ -267,109 +282,170 @@ export function ProfileEditorModal({
         填写你想公开的称呼、个人介绍、关注方向与联系方式。空白字段不会公开展示；管理员登录邮箱默认与此处分开。
       </p>
 
-      <div className="cms-form-grid">
-        <label className="cms-field">
-          <span>称呼 / 名字（可留空）</span>
-          <input
-            type="text"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="例如：你的名字或网名"
-          />
-        </label>
-
-        <label className="cms-field">
-          <span>关注方向（可留空）</span>
-          <input
-            type="text"
-            value={focusAreas}
-            onChange={(e) => setFocusAreas(e.target.value)}
-            placeholder="例如：网页交互、空间设计、个人工具创作"
-          />
-        </label>
-
-        <label className="cms-field">
-          <span>个人介绍（可留空）</span>
-          <textarea
-            rows={5}
-            value={bio}
-            onChange={(e) => setBio(e.target.value)}
-            placeholder="简单介绍你是谁、正在做什么，未填写时不会编造经历…"
-          />
-        </label>
-
-        <ImageListPicker
-          label="个人头像（可选）"
-          hint="支持 JPEG / PNG / WebP，单张上限 10 MB"
-          assetIds={avatarAssetId ? [avatarAssetId] : []}
-          multiple={false}
-          disabled={saving}
-          onChange={(ids) => setAvatarAssetId(ids[0] ?? null)}
-          onAssetUploaded={(asset) => {
-            sessionUploadedIdsRef.current.push(asset.id)
-            onAssetUploaded(asset)
-          }}
-          onUploadStateChange={setUploadBusy}
-        />
-
-        <label className="cms-field">
-          <span>公开联系邮箱（可选，独立于登录邮箱）</span>
-          <input
-            type="email"
-            value={contactEmail}
-            onChange={(e) => setContactEmail(e.target.value)}
-            placeholder="希望对外显示的联系邮箱，不填则不公开"
-          />
-        </label>
-
-        <div className="media-picker-block">
-          <div className="media-picker-head">
-            <div>
-              <strong>更多联系方式 / 主页链接（可选）</strong>
-              <small>例如 GitHub、作品集或博客</small>
+      <div className="cms-editor-columns">
+        <div className="cms-editor-main cms-form-grid">
+          <div className="cms-field">
+            <div className="cms-field-head">
+              <label htmlFor={`${uid}-displayName`}>称呼 / 名字（可留空）</label>
+              <span className="cms-char-count">{displayName.length} 字</span>
             </div>
-            <button
-              type="button"
-              className="cms-ghost-btn"
-              disabled={saving}
-              onClick={() => setContactLinks((prev) => [...prev, { label: '', url: '' }])}
-            >
-              <Icon name="plus" size={14} />
-              <span>添加链接</span>
-            </button>
+            <input
+              id={`${uid}-displayName`}
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="例如：你的名字或网名"
+            />
           </div>
-          {contactLinks.map((link, idx) => (
-            <div key={idx} className="contact-link-edit-row">
-              <input
-                type="text"
-                placeholder="名称（如 GitHub）"
-                value={link.label}
-                onChange={(e) =>
-                  setContactLinks((prev) =>
-                    prev.map((row, i) => (i === idx ? { ...row, label: e.target.value } : row)),
-                  )
-                }
-              />
-              <input
-                type="url"
-                placeholder="https://..."
-                value={link.url}
-                onChange={(e) =>
-                  setContactLinks((prev) =>
-                    prev.map((row, i) => (i === idx ? { ...row, url: e.target.value } : row)),
-                  )
-                }
-              />
+
+          <div className="cms-field">
+            <div className="cms-field-head">
+              <label htmlFor={`${uid}-focusAreas`}>关注方向（可留空）</label>
+              <span className="cms-char-count">{focusAreas.length} 字</span>
+            </div>
+            <input
+              id={`${uid}-focusAreas`}
+              type="text"
+              value={focusAreas}
+              onChange={(e) => setFocusAreas(e.target.value)}
+              placeholder="例如：网页交互、空间设计、个人工具创作"
+            />
+          </div>
+
+          <div className="cms-field">
+            <div className="cms-field-head">
+              <label htmlFor={`${uid}-bio`}>个人介绍（可留空）</label>
+              <span className="cms-char-count">{bio.replace(/\s+/g, '').length} 字</span>
+            </div>
+            <textarea
+              id={`${uid}-bio`}
+              rows={6}
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              placeholder="简单介绍你是谁、正在做什么，未填写时不会编造经历…"
+            />
+          </div>
+
+          <div className="cms-field">
+            <div className="cms-field-head">
+              <label htmlFor={`${uid}-now-0`}>桌面「近期在做 · Now」便签（可选，最多 3 张）</label>
+              <span className="cms-char-count">同步展示在三维木桌</span>
+            </div>
+            <div className="now-notes-edit-list">
+              {[0, 1, 2].map((idx) => (
+                <input
+                  key={idx}
+                  id={`${uid}-now-${idx}`}
+                  type="text"
+                  maxLength={32}
+                  value={nowNotes[idx] ?? ''}
+                  onChange={(e) =>
+                    setNowNotes((prev) => prev.map((v, i) => (i === idx ? e.target.value : v)))
+                  }
+                  placeholder={
+                    idx === 0
+                      ? '便签 01（例如：正在打磨四时天色与窗景）'
+                      : idx === 1
+                        ? '便签 02（例如：在读《建筑的模式语言》）'
+                        : '便签 03（例如：周末去山里徒步收集声音）'
+                  }
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="cms-field">
+            <div className="cms-field-head">
+              <label htmlFor={`${uid}-quotes`}>书房书架灵感签（可选，每行一句，最多 8 句）</label>
+              <span className="cms-char-count">点击书房书架随机抽取</span>
+            </div>
+            <textarea
+              id={`${uid}-quotes`}
+              rows={3}
+              value={quotesText}
+              onChange={(e) => setQuotesText(e.target.value)}
+              placeholder="写下你喜欢的书摘或创作随想，访客点击书房书架时会抽出一张纸签…"
+            />
+          </div>
+        </div>
+
+        <div className="cms-editor-media cms-form-grid">
+          <ImageListPicker
+            label="个人头像（可选）"
+            hint="支持 JPEG / PNG / WebP，单张上限 10 MB"
+            assetIds={avatarAssetId ? [avatarAssetId] : []}
+            multiple={false}
+            disabled={saving}
+            onChange={(ids) => setAvatarAssetId(ids[0] ?? null)}
+            onAssetUploaded={(asset) => {
+              sessionUploadedIdsRef.current.push(asset.id)
+              onAssetUploaded(asset)
+            }}
+            onUploadStateChange={setUploadBusy}
+          />
+
+          <div className="cms-field">
+            <div className="cms-field-head">
+              <label htmlFor={`${uid}-email`}>公开联系邮箱（可选，独立于登录邮箱）</label>
+            </div>
+            <input
+              id={`${uid}-email`}
+              type="email"
+              value={contactEmail}
+              onChange={(e) => setContactEmail(e.target.value)}
+              placeholder="希望对外显示的联系邮箱，不填则不公开"
+            />
+          </div>
+
+          <div className="media-picker-block">
+            <div className="media-picker-head">
+              <div>
+                <strong>更多联系方式 / 主页链接（可选）</strong>
+                <small>例如 GitHub、作品集或博客</small>
+              </div>
               <button
                 type="button"
                 className="cms-ghost-btn"
-                aria-label="删除链接"
-                onClick={() => setContactLinks((prev) => prev.filter((_, i) => i !== idx))}
+                disabled={saving}
+                onClick={() => setContactLinks((prev) => [...prev, { label: '', url: '' }])}
               >
-                删除
+                <Icon name="plus" size={14} />
+                <span>添加链接</span>
               </button>
             </div>
-          ))}
+            {contactLinks.map((link, idx) => (
+              <div key={idx} className="contact-link-edit-row">
+                <input
+                  type="text"
+                  placeholder="名称（如 GitHub）"
+                  value={link.label}
+                  onChange={(e) =>
+                    setContactLinks((prev) =>
+                      prev.map((row, i) => (i === idx ? { ...row, label: e.target.value } : row)),
+                    )
+                  }
+                />
+                <input
+                  type="url"
+                  placeholder="https://..."
+                  value={link.url}
+                  onChange={(e) =>
+                    setContactLinks((prev) =>
+                      prev.map((row, i) => (i === idx ? { ...row, url: e.target.value } : row)),
+                    )
+                  }
+                />
+                <button
+                  type="button"
+                  className="cms-ghost-btn"
+                  aria-label="删除链接"
+                  onClick={() => setContactLinks((prev) => prev.filter((_, i) => i !== idx))}
+                >
+                  删除
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 

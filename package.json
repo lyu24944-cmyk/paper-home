@@ -14,6 +14,7 @@
     "check:edge-cases": "node scripts/edge-cases.mjs",
     "check:cms": "node scripts/cms-verify.mjs",
     "check:local": "node scripts/local-verify.mjs",
+    "check:phase1": "node scripts/phase1-verify.mjs",
     "qa:report": "node scripts/polish-report.mjs",
     "dev": "vite --host 127.0.0.1 --port 4318 --strictPort",
     "studio": "vite --host 127.0.0.1 --port 4318 --strictPort --open",

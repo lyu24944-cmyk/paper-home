@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import {
   cleanupMediaAssetsApi,
   deleteNoteApi,
@@ -20,6 +20,7 @@ import type { ConflictContext } from './ConflictDialog'
 import { Icon } from './Icon'
 import { ImageListPicker, VideoUploadPicker } from './MediaPickers'
 import { Modal } from './Modal'
+import type { SaveActionKind } from './ProjectEditorModal'
 
 export function NoteEditorModal({
   open,
@@ -38,12 +39,13 @@ export function NoteEditorModal({
   projects: AdminProject[]
   assets: Record<string, MediaAsset>
   onAssetUploaded: (asset: MediaAsset) => void
-  onSaved: (note: AdminNote, pendingCleanupCount: number) => void
+  onSaved: (note: AdminNote, pendingCleanupCount: number, action?: SaveActionKind) => void
   onDeleted: (noteId: string, pendingCleanupCount: number) => void
   onPreview: (draft: NotePayload & { id: string; publishedAt?: string | null }) => void
   onConflict: (conflict: ConflictContext) => void
   onClose: () => void
 }) {
+  const uid = useId()
   const [current, setCurrent] = useState<AdminNote | null>(initialNote)
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
@@ -131,7 +133,7 @@ export function NoteEditorModal({
     })
   }
 
-  async function saveDraftInternal(): Promise<AdminNote | null> {
+  async function saveDraftInternal(notifyAction?: SaveActionKind): Promise<AdminNote | null> {
     if (uploadBusy) {
       setSaveError('尚有图片或视频正在上传中，请等待完成或先取消上传后再保存。')
       return null
@@ -140,7 +142,7 @@ export function NoteEditorModal({
     const res = await saveNoteDraftApi(current?.id ?? null, current?.version ?? 0, draft)
     if (res.item) {
       setCurrent(res.item)
-      onSaved(res.item, res.pendingCleanupCount)
+      onSaved(res.item, res.pendingCleanupCount, notifyAction)
       return res.item
     }
     return null
@@ -151,7 +153,7 @@ export function NoteEditorModal({
     setSaveError('')
     setSaveStatus('')
     try {
-      const saved = await saveDraftInternal()
+      const saved = await saveDraftInternal('draft')
       if (saved) {
         setSaveStatus(isCloudConfigured ? '手记草稿已保存到云端。' : '手记草稿已保存到本机。')
       }
@@ -182,7 +184,7 @@ export function NoteEditorModal({
       const pubRes = await publishNoteApi(saved.id, saved.version)
       if (pubRes.item) {
         setCurrent(pubRes.item)
-        onSaved(pubRes.item, pubRes.pendingCleanupCount)
+        onSaved(pubRes.item, pubRes.pendingCleanupCount, 'publish')
         setSaveStatus(current?.isPublished ? '手记更新已发布。' : '手记已发布到创作手记。')
       }
     } catch (err) {
@@ -205,7 +207,7 @@ export function NoteEditorModal({
       const res = await unpublishNoteApi(current.id, current.version)
       if (res.item) {
         setCurrent(res.item)
-        onSaved(res.item, res.pendingCleanupCount)
+        onSaved(res.item, res.pendingCleanupCount, 'unpublish')
         setSaveStatus('已撤回发布，草稿内容仍已保留。')
       }
     } catch (err) {
@@ -269,65 +271,83 @@ export function NoteEditorModal({
           记录设计判断、调优过程与取舍；保存草稿不会影响访客当前看到的内容。
         </p>
 
-        <div className="cms-form-grid">
-          <label className="cms-field">
-            <span>手记标题（发布必填）</span>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="例如：空间与浏览路线"
+        <div className="cms-editor-columns">
+          <div className="cms-editor-main cms-form-grid">
+            <div className="cms-field">
+              <div className="cms-field-head">
+                <label htmlFor={`${uid}-title`}>手记标题（发布必填）</label>
+                <span className="cms-char-count">{title.length} 字</span>
+              </div>
+              <input
+                id={`${uid}-title`}
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="例如：空间与浏览路线"
+              />
+            </div>
+
+            <div className="cms-field">
+              <div className="cms-field-head">
+                <label htmlFor={`${uid}-project`}>关联作品（可选）</label>
+              </div>
+              <select
+                id={`${uid}-project`}
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+              >
+                <option value="">不关联具体作品</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.draft.title || '未命名作品'}
+                    {p.isPublished ? '' : '（草稿）'}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="cms-field">
+              <div className="cms-field-head">
+                <label htmlFor={`${uid}-body`}>手记正文（发布必填）</label>
+                <span className="cms-char-count">{body.replace(/\s+/g, '').length} 字</span>
+              </div>
+              <textarea
+                id={`${uid}-body`}
+                rows={10}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder="写下思考过程、对比尝试、依据与结论…"
+              />
+            </div>
+          </div>
+
+          <div className="cms-editor-media cms-form-grid">
+            <ImageListPicker
+              label="过程附图（可选）"
+              hint="支持 JPEG / PNG / WebP，单张上限 10 MB；上传前自动调整尺寸"
+              assetIds={imageAssetIds}
+              multiple={true}
+              disabled={saving}
+              onChange={setImageAssetIds}
+              onAssetUploaded={(asset) => {
+                sessionUploadedIdsRef.current.push(asset.id)
+                onAssetUploaded(asset)
+              }}
+              onUploadStateChange={setUploadBusy}
             />
-          </label>
 
-          <label className="cms-field">
-            <span>关联作品（可选）</span>
-            <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-              <option value="">不关联具体作品</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.draft.title || '未命名作品'}
-                  {p.isPublished ? '' : '（草稿）'}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="cms-field">
-            <span>手记正文（发布必填）</span>
-            <textarea
-              rows={9}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="写下思考过程、对比尝试、依据与结论…"
+            <VideoUploadPicker
+              videoAssetId={videoAssetId}
+              assetInfo={videoAssetId ? assets[videoAssetId] : null}
+              disabled={saving}
+              onChange={setVideoAssetId}
+              onAssetUploaded={(asset) => {
+                sessionUploadedIdsRef.current.push(asset.id)
+                onAssetUploaded(asset)
+              }}
+              onUploadStateChange={setUploadBusy}
             />
-          </label>
-
-          <ImageListPicker
-            label="过程附图（可选）"
-            hint="支持 JPEG / PNG / WebP，单张上限 10 MB；上传前自动调整尺寸"
-            assetIds={imageAssetIds}
-            multiple={true}
-            disabled={saving}
-            onChange={setImageAssetIds}
-            onAssetUploaded={(asset) => {
-              sessionUploadedIdsRef.current.push(asset.id)
-              onAssetUploaded(asset)
-            }}
-            onUploadStateChange={setUploadBusy}
-          />
-
-          <VideoUploadPicker
-            videoAssetId={videoAssetId}
-            assetInfo={videoAssetId ? assets[videoAssetId] : null}
-            disabled={saving}
-            onChange={setVideoAssetId}
-            onAssetUploaded={(asset) => {
-              sessionUploadedIdsRef.current.push(asset.id)
-              onAssetUploaded(asset)
-            }}
-            onUploadStateChange={setUploadBusy}
-          />
+          </div>
         </div>
 
         {saveStatus && (

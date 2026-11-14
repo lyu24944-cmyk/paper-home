@@ -1,5 +1,10 @@
 export type Place = 'yard' | 'hall' | 'study' | 'gallery' | 'blank'
 
+export type AtmospherePreset = 'dawn' | 'daylight' | 'golden' | 'night'
+export type AtmosphereMode = AtmospherePreset | 'auto'
+export type WeatherMode = 'clear' | 'rain'
+export type FocusPoseId = 'yard-bench' | 'study-shelf' | 'blank-table'
+
 export interface RoomMeta {
   id: Place
   name: string
@@ -96,6 +101,8 @@ export interface ProfilePayload {
   avatarAssetId: string | null
   contactEmail: string
   contactLinks: ContactLink[]
+  nowNotes?: string[]
+  quotes?: string[]
 }
 
 export interface PublicProfile extends ProfilePayload {
@@ -120,6 +127,8 @@ export interface SiteSettingsPayload {
   plaqueSubtitle: string
   yardHeading: string
   yardSubtitle: string
+  defaultAtmosphere?: AtmosphereMode
+  defaultWeather?: WeatherMode
 }
 
 export const DEFAULT_SITE_SETTINGS: SiteSettingsPayload = {
@@ -128,6 +137,8 @@ export const DEFAULT_SITE_SETTINGS: SiteSettingsPayload = {
   plaqueSubtitle: '留一点时间，慢慢逛',
   yardHeading: '来家里坐坐。',
   yardSubtitle: '推开门，里面是我的作品、过程记录与自我介绍。',
+  defaultAtmosphere: 'daylight',
+  defaultWeather: 'clear',
 }
 
 export interface LocalStudioHealth {

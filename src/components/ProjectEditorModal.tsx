@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import {
   cleanupMediaAssetsApi,
   deleteProjectApi,
@@ -20,6 +20,8 @@ import { Icon } from './Icon'
 import { ImageListPicker, VideoUploadPicker } from './MediaPickers'
 import { Modal } from './Modal'
 
+export type SaveActionKind = 'draft' | 'publish' | 'unpublish'
+
 export function ProjectEditorModal({
   open,
   initialProject,
@@ -35,12 +37,13 @@ export function ProjectEditorModal({
   initialProject: AdminProject | null
   assets: Record<string, MediaAsset>
   onAssetUploaded: (asset: MediaAsset) => void
-  onSaved: (project: AdminProject, pendingCleanupCount: number) => void
+  onSaved: (project: AdminProject, pendingCleanupCount: number, action?: SaveActionKind) => void
   onDeleted: (projectId: string, pendingCleanupCount: number) => void
   onPreview: (draft: ProjectPayload & { id: string; publishedAt?: string | null }) => void
   onConflict: (conflict: ConflictContext) => void
   onClose: () => void
 }) {
+  const uid = useId()
   const [current, setCurrent] = useState<AdminProject | null>(initialProject)
   const [title, setTitle] = useState('')
   const [summary, setSummary] = useState('')
@@ -153,7 +156,7 @@ export function ProjectEditorModal({
     })
   }
 
-  async function saveDraftInternal(): Promise<AdminProject | null> {
+  async function saveDraftInternal(notifyAction?: SaveActionKind): Promise<AdminProject | null> {
     const draft = buildDraftPayload()
     const errMsg = validateForSave(draft)
     if (errMsg) {
@@ -164,7 +167,7 @@ export function ProjectEditorModal({
     const res = await saveProjectDraftApi(current?.id ?? null, current?.version ?? 0, draft)
     if (res.item) {
       setCurrent(res.item)
-      onSaved(res.item, res.pendingCleanupCount)
+      onSaved(res.item, res.pendingCleanupCount, notifyAction)
       return res.item
     }
     return null
@@ -175,7 +178,7 @@ export function ProjectEditorModal({
     setSaveError('')
     setSaveStatus('')
     try {
-      const saved = await saveDraftInternal()
+      const saved = await saveDraftInternal('draft')
       if (saved) {
         setSaveStatus(
           isCloudConfigured
@@ -211,7 +214,7 @@ export function ProjectEditorModal({
       const pubRes = await publishProjectApi(saved.id, saved.version)
       if (pubRes.item) {
         setCurrent(pubRes.item)
-        onSaved(pubRes.item, pubRes.pendingCleanupCount)
+        onSaved(pubRes.item, pubRes.pendingCleanupCount, 'publish')
         setSaveStatus(
           current?.isPublished ? '已发布更新，访客目录与三维展示已同步。' : '作品已发布到作品室。',
         )
@@ -236,7 +239,7 @@ export function ProjectEditorModal({
       const res = await unpublishProjectApi(current.id, current.version)
       if (res.item) {
         setCurrent(res.item)
-        onSaved(res.item, res.pendingCleanupCount)
+        onSaved(res.item, res.pendingCleanupCount, 'unpublish')
         setSaveStatus('已撤回发布，访客不再看到此作品；草稿内容仍已保留。')
       }
     } catch (err) {
@@ -302,86 +305,105 @@ export function ProjectEditorModal({
             : '新建作品默认为草稿，预览确认后再点击发布。'}
         </p>
 
-        <div className="cms-form-grid">
-          <label className="cms-field">
-            <span>作品标题（发布必填）</span>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="例如：我的小屋 · 交互式个人网站"
+        <div className="cms-editor-columns">
+          <div className="cms-editor-main cms-form-grid">
+            <div className="cms-field">
+              <div className="cms-field-head">
+                <label htmlFor={`${uid}-title`}>作品标题（发布必填）</label>
+                <span className="cms-char-count">{title.length} 字</span>
+              </div>
+              <input
+                id={`${uid}-title`}
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="例如：我的小屋 · 交互式个人网站"
+              />
+            </div>
+
+            <div className="cms-field">
+              <div className="cms-field-head">
+                <label htmlFor={`${uid}-summary`}>作品简介（发布必填）</label>
+                <span className="cms-char-count">{summary.length} 字</span>
+              </div>
+              <textarea
+                id={`${uid}-summary`}
+                rows={2}
+                value={summary}
+                onChange={(e) => setSummary(e.target.value)}
+                placeholder="一句话概括作品定位、特点与完成效果"
+              />
+            </div>
+
+            <div className="cms-field">
+              <div className="cms-field-head">
+                <label htmlFor={`${uid}-url`}>访问链接（可选）</label>
+              </div>
+              <input
+                id={`${uid}-url`}
+                type="url"
+                value={demoUrl}
+                onChange={(e) => setDemoUrl(e.target.value)}
+                placeholder="https://..."
+              />
+            </div>
+
+            <div className="cms-field">
+              <div className="cms-field-head">
+                <label htmlFor={`${uid}-body`}>作品正文（发布必填，支持分段纯文本）</label>
+                <span className="cms-char-count">{body.replace(/\s+/g, '').length} 字</span>
+              </div>
+              <textarea
+                id={`${uid}-body`}
+                rows={8}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder="介绍完成效果、空间设计与交互亮点…"
+              />
+            </div>
+          </div>
+
+          <div className="cms-editor-media cms-form-grid">
+            <ImageListPicker
+              label="作品封面图（发布必填）"
+              hint="用于三维画框展示与作品封面；JPEG / PNG / WebP，单张上限 10 MB"
+              assetIds={coverAssetId ? [coverAssetId] : []}
+              multiple={false}
+              disabled={saving}
+              onChange={(ids) => setCoverAssetId(ids[0] ?? null)}
+              onAssetUploaded={(asset) => {
+                sessionUploadedIdsRef.current.push(asset.id)
+                onAssetUploaded(asset)
+              }}
+              onUploadStateChange={setUploadBusy}
             />
-          </label>
 
-          <label className="cms-field">
-            <span>作品简介（发布必填）</span>
-            <textarea
-              rows={2}
-              value={summary}
-              onChange={(e) => setSummary(e.target.value)}
-              placeholder="一句话概括作品定位、特点与完成效果"
+            <ImageListPicker
+              label="详情展示截图（可选）"
+              hint="展示庭院、厅堂、房间与手机端截图；自动压缩并生成展示图与缩略图"
+              assetIds={galleryAssetIds}
+              multiple={true}
+              disabled={saving}
+              onChange={setGalleryAssetIds}
+              onAssetUploaded={(asset) => {
+                sessionUploadedIdsRef.current.push(asset.id)
+                onAssetUploaded(asset)
+              }}
+              onUploadStateChange={setUploadBusy}
             />
-          </label>
 
-          <label className="cms-field">
-            <span>访问链接（可选）</span>
-            <input
-              type="url"
-              value={demoUrl}
-              onChange={(e) => setDemoUrl(e.target.value)}
-              placeholder="https://..."
+            <VideoUploadPicker
+              videoAssetId={videoAssetId}
+              assetInfo={videoAssetId ? assets[videoAssetId] : null}
+              disabled={saving}
+              onChange={setVideoAssetId}
+              onAssetUploaded={(asset) => {
+                sessionUploadedIdsRef.current.push(asset.id)
+                onAssetUploaded(asset)
+              }}
+              onUploadStateChange={setUploadBusy}
             />
-          </label>
-
-          <label className="cms-field">
-            <span>作品正文（发布必填，支持分段纯文本）</span>
-            <textarea
-              rows={7}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="介绍完成效果、空间设计与交互亮点…"
-            />
-          </label>
-
-          <ImageListPicker
-            label="作品封面图（发布必填）"
-            hint="用于三维画框展示与作品封面；JPEG / PNG / WebP，单张上限 10 MB"
-            assetIds={coverAssetId ? [coverAssetId] : []}
-            multiple={false}
-            disabled={saving}
-            onChange={(ids) => setCoverAssetId(ids[0] ?? null)}
-            onAssetUploaded={(asset) => {
-              sessionUploadedIdsRef.current.push(asset.id)
-              onAssetUploaded(asset)
-            }}
-            onUploadStateChange={setUploadBusy}
-          />
-
-          <ImageListPicker
-            label="详情展示截图（可选）"
-            hint="展示庭院、厅堂、房间与手机端截图；自动压缩并生成展示图与缩略图"
-            assetIds={galleryAssetIds}
-            multiple={true}
-            disabled={saving}
-            onChange={setGalleryAssetIds}
-            onAssetUploaded={(asset) => {
-              sessionUploadedIdsRef.current.push(asset.id)
-              onAssetUploaded(asset)
-            }}
-            onUploadStateChange={setUploadBusy}
-          />
-
-          <VideoUploadPicker
-            videoAssetId={videoAssetId}
-            assetInfo={videoAssetId ? assets[videoAssetId] : null}
-            disabled={saving}
-            onChange={setVideoAssetId}
-            onAssetUploaded={(asset) => {
-              sessionUploadedIdsRef.current.push(asset.id)
-              onAssetUploaded(asset)
-            }}
-            onUploadStateChange={setUploadBusy}
-          />
+          </div>
         </div>
 
         {saveStatus && (

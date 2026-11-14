@@ -56,7 +56,7 @@ export function RoomDirectory({
   publicData,
   adminData,
   reorderBusy,
-  onCloseGalleryDirectory,
+  onCloseDirectory,
   onRetryCloud,
   onOpenPublicProject,
   onOpenAdminProjectPreview,
@@ -67,6 +67,7 @@ export function RoomDirectory({
   onOpenNoteEditor,
   onReorderNote,
   onOpenProfileEditor,
+  onCopyEmail,
   onNavigateHall,
 }: {
   place: 'study' | 'gallery' | 'blank'
@@ -77,7 +78,7 @@ export function RoomDirectory({
   publicData: PublicCottageData
   adminData: AdminCottageData | null
   reorderBusy: boolean
-  onCloseGalleryDirectory: () => void
+  onCloseDirectory: () => void
   onRetryCloud: () => void
   onOpenPublicProject: (index: number) => void
   onOpenAdminProjectPreview: (project: AdminProject) => void
@@ -88,6 +89,7 @@ export function RoomDirectory({
   onOpenNoteEditor: (note: AdminNote | null) => void
   onReorderNote: (index: number, delta: -1 | 1) => void
   onOpenProfileEditor: () => void
+  onCopyEmail: (email: string) => void
   onNavigateHall: () => void
 }) {
   const publishedProjects: PublicProject[] = publicData.projects
@@ -101,8 +103,15 @@ export function RoomDirectory({
 
   if (place === 'gallery') {
     if (isAdmin && adminData) {
+      const wallSlotById = new Map<string, number>()
+      adminData.projects
+        .filter((p) => p.isPublished)
+        .slice(0, 3)
+        .forEach((p, idx) => wallSlotById.set(p.id, idx + 1))
+
       return (
         <>
+          <div className="drawer-handle" aria-hidden="true" />
           <div className="directory-heading">
             <h2>作品管理（{adminData.projects.length}）</h2>
             <div className="directory-head-actions">
@@ -118,7 +127,7 @@ export function RoomDirectory({
                 type="button"
                 className="icon-button"
                 aria-label="收起作品目录"
-                onClick={onCloseGalleryDirectory}
+                onClick={onCloseDirectory}
               >
                 <Icon name="close" size={18} />
               </button>
@@ -135,6 +144,7 @@ export function RoomDirectory({
             <div className="cms-manage-list">
               {adminData.projects.map((project, i) => {
                 const coverId = project.draft.coverAssetId ?? project.published?.coverAssetId
+                const wallSlot = wallSlotById.get(project.id)
                 return (
                   <div key={project.id} className="cms-manage-card">
                     <div className="cms-manage-main">
@@ -151,9 +161,14 @@ export function RoomDirectory({
                       )}
                       <div className="cms-manage-text">
                         <strong>{project.draft.title || '未命名作品'}</strong>
-                        <span className={`status-badge ${project.isPublished ? 'live' : 'draft'}`}>
-                          {buildStatusLabel(project)}
-                        </span>
+                        <div className="cms-manage-subline">
+                          <span className={`status-badge ${project.isPublished ? 'live' : 'draft'}`}>
+                            {buildStatusLabel(project)}
+                          </span>
+                          {wallSlot && (
+                            <span className="wall-slot-badge">墙面展位 {wallSlot}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="cms-manage-actions">
@@ -194,13 +209,14 @@ export function RoomDirectory({
 
     return (
       <>
+        <div className="drawer-handle" aria-hidden="true" />
         <div className="directory-heading">
           <h2>作品室目录</h2>
           <button
             type="button"
             className="icon-button"
             aria-label="收起作品目录"
-            onClick={onCloseGalleryDirectory}
+            onClick={onCloseDirectory}
           >
             <Icon name="close" size={18} />
           </button>
@@ -232,7 +248,10 @@ export function RoomDirectory({
                 ) : (
                   <div className="art-list-placeholder" aria-hidden="true" />
                 )}
-                <span>{item.title}</span>
+                <span className="art-list-copy">
+                  <span className="art-list-title">{item.title}</span>
+                  {i < 3 && <small className="wall-slot-badge">墙面展位 {i + 1}</small>}
+                </span>
                 <Icon name="arrow" size={17} />
               </button>
             ))}
@@ -251,16 +270,27 @@ export function RoomDirectory({
     if (isAdmin && adminData) {
       return (
         <>
+          <div className="drawer-handle" aria-hidden="true" />
           <div className="directory-heading">
             <h2>创作手记管理（{adminData.notes.length}）</h2>
-            <button
-              type="button"
-              className="cms-primary-btn compact"
-              onClick={() => onOpenNoteEditor(null)}
-            >
-              <Icon name="plus" size={14} />
-              <span>写手记</span>
-            </button>
+            <div className="directory-head-actions">
+              <button
+                type="button"
+                className="cms-primary-btn compact"
+                onClick={() => onOpenNoteEditor(null)}
+              >
+                <Icon name="plus" size={14} />
+                <span>写手记</span>
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="收起手记目录"
+                onClick={onCloseDirectory}
+              >
+                <Icon name="close" size={18} />
+              </button>
+            </div>
           </div>
 
           {adminError && <p className="cms-error-inline" role="alert">{adminError}</p>}
@@ -320,7 +350,18 @@ export function RoomDirectory({
 
     return (
       <>
-        <h2>创作手记</h2>
+        <div className="drawer-handle" aria-hidden="true" />
+        <div className="directory-heading">
+          <h2>创作手记</h2>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="收起手记目录"
+            onClick={onCloseDirectory}
+          >
+            <Icon name="close" size={18} />
+          </button>
+        </div>
         {cloudError && (
           <div className="cms-error-inline" role="alert">
             <span>{cloudError}</span>
@@ -356,6 +397,8 @@ export function RoomDirectory({
   if (isAdmin && adminData) {
     const profile = adminData.profile
     const draft = profile?.draft
+    const validDraftLinks = (draft?.contactLinks ?? []).filter((l) => safeExternalUrl(l.url))
+    const draftNowNotes = (draft?.nowNotes ?? []).filter(Boolean)
     const hasDraft = Boolean(
       draft &&
         (draft.displayName ||
@@ -363,21 +406,33 @@ export function RoomDirectory({
           draft.focusAreas ||
           draft.avatarAssetId ||
           draft.contactEmail ||
-          draft.contactLinks.length > 0),
+          draft.contactLinks.length > 0 ||
+          draftNowNotes.length > 0),
     )
 
     return (
       <>
+        <div className="drawer-handle" aria-hidden="true" />
         <div className="directory-heading">
           <h2>关于我</h2>
-          <button
-            type="button"
-            className="cms-primary-btn compact"
-            onClick={onOpenProfileEditor}
-          >
-            <Icon name="pencil" size={14} />
-            <span>编辑介绍</span>
-          </button>
+          <div className="directory-head-actions">
+            <button
+              type="button"
+              className="cms-primary-btn compact"
+              onClick={onOpenProfileEditor}
+            >
+              <Icon name="pencil" size={14} />
+              <span>编辑介绍</span>
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="收起关于我"
+              onClick={onCloseDirectory}
+            >
+              <Icon name="close" size={18} />
+            </button>
+          </div>
         </div>
 
         <span className={`status-badge ${profile?.isPublished ? 'live' : 'draft'}`}>
@@ -386,19 +441,75 @@ export function RoomDirectory({
 
         {hasDraft && draft ? (
           <div className="profile-room-body">
-            {draft.avatarAssetId && (
-              <SignedImage
-                assetId={draft.avatarAssetId}
-                scope="admin"
-                variant="thumb"
-                alt="个人头像"
-                className="profile-avatar-card"
-              />
+            {(draft.avatarAssetId || draft.displayName || draft.focusAreas) && (
+              <div className="profile-header-card">
+                {draft.avatarAssetId && (
+                  <SignedImage
+                    assetId={draft.avatarAssetId}
+                    scope="admin"
+                    variant="thumb"
+                    alt="个人头像"
+                    className="profile-avatar-card"
+                  />
+                )}
+                <div className="profile-identity">
+                  {draft.displayName && <p className="profile-display-name">{draft.displayName}</p>}
+                  {draft.focusAreas && <p className="profile-focus-text">关注方向：{draft.focusAreas}</p>}
+                </div>
+              </div>
             )}
-            {draft.displayName && <p className="profile-display-name">{draft.displayName}</p>}
-            {draft.focusAreas && <p className="profile-focus-text">关注方向：{draft.focusAreas}</p>}
             {draft.bio && <div className="profile-bio-text">{renderParagraphs(draft.bio)}</div>}
-            {draft.contactEmail && <p className="profile-contact-line">联系：{draft.contactEmail}</p>}
+            {draftNowNotes.length > 0 && (
+              <div className="profile-now-box" aria-label="近期在做">
+                <strong>近期在做 · Now</strong>
+                <ul className="profile-now-list">
+                  {draftNowNotes.map((note, idx) => (
+                    <li key={idx}>
+                      <span className="now-index">0{idx + 1}</span>
+                      <span>{note}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {(draft.contactEmail || validDraftLinks.length > 0) && (
+              <div className="profile-contact-box">
+                <strong>联系方式</strong>
+                {draft.contactEmail && (
+                  <div className="profile-email-row">
+                    <a className="profile-contact-link" href={`mailto:${draft.contactEmail}`}>
+                      {draft.contactEmail}
+                    </a>
+                    <button
+                      type="button"
+                      className="cms-mini-btn copy-email-btn"
+                      onClick={() => onCopyEmail(draft.contactEmail)}
+                      aria-label="复制联系邮箱"
+                    >
+                      <Icon name="copy" size={12} />
+                      <span>复制</span>
+                    </button>
+                  </div>
+                )}
+                {validDraftLinks.length > 0 && (
+                  <div className="profile-links-pills">
+                    {validDraftLinks.map((link, idx) => (
+                      <a
+                        key={idx}
+                        className="profile-link-pill"
+                        href={safeExternalUrl(link.url)!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Icon name="link" size={12} />
+                        <span>{link.label}</span>
+                        <Icon name="arrow" size={12} />
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <p className="blank-note">
@@ -411,6 +522,7 @@ export function RoomDirectory({
 
   const pubProfile = publicData.profile
   const validLinks = (pubProfile?.contactLinks ?? []).filter((l) => safeExternalUrl(l.url))
+  const pubNowNotes = (pubProfile?.nowNotes ?? []).filter(Boolean)
   const hasPublicProfile = Boolean(
     pubProfile &&
       (pubProfile.displayName ||
@@ -418,14 +530,28 @@ export function RoomDirectory({
         pubProfile.focusAreas ||
         pubProfile.avatarAssetId ||
         pubProfile.contactEmail ||
-        validLinks.length > 0),
+        validLinks.length > 0 ||
+        pubNowNotes.length > 0),
   )
 
   if (!hasPublicProfile || !pubProfile) {
     return (
       <>
-        <Icon name="user" size={32} />
-        <h2>关于我</h2>
+        <div className="drawer-handle" aria-hidden="true" />
+        <div className="directory-heading">
+          <span className="directory-title-with-icon">
+            <Icon name="user" size={22} />
+            <h2>关于我</h2>
+          </span>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="收起关于我"
+            onClick={onCloseDirectory}
+          >
+            <Icon name="close" size={18} />
+          </button>
+        </div>
         <p className="blank-note">
           个人介绍与联系方式仍在完善中，尚未填写的资料暂不公开展示。
         </p>
@@ -438,41 +564,90 @@ export function RoomDirectory({
   }
 
   return (
-    <div className="profile-room-body">
-      {pubProfile.avatarAssetId && (
-        <SignedImage
-          assetId={pubProfile.avatarAssetId}
-          scope="public"
-          variant="thumb"
-          alt={pubProfile.displayName || '小屋主人头像'}
-          className="profile-avatar-card"
-        />
-      )}
-      <h2>{pubProfile.displayName || '关于我'}</h2>
-      {pubProfile.focusAreas && <p className="profile-focus-text">关注方向：{pubProfile.focusAreas}</p>}
-      {pubProfile.bio && <div className="profile-bio-text">{renderParagraphs(pubProfile.bio)}</div>}
-      {(pubProfile.contactEmail || validLinks.length > 0) && (
-        <div className="profile-contact-box">
-          <strong>联系方式</strong>
-          {pubProfile.contactEmail && (
-            <a className="profile-contact-link" href={`mailto:${pubProfile.contactEmail}`}>
-              {pubProfile.contactEmail}
-            </a>
+    <>
+      <div className="drawer-handle" aria-hidden="true" />
+      <div className="directory-heading">
+        <h2>关于我</h2>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="收起关于我"
+          onClick={onCloseDirectory}
+        >
+          <Icon name="close" size={18} />
+        </button>
+      </div>
+      <div className="profile-room-body">
+        <div className="profile-header-card">
+          {pubProfile.avatarAssetId && (
+            <SignedImage
+              assetId={pubProfile.avatarAssetId}
+              scope="public"
+              variant="thumb"
+              alt={pubProfile.displayName || '小屋主人头像'}
+              className="profile-avatar-card"
+            />
           )}
-          {validLinks.map((link, idx) => (
-            <a
-              key={idx}
-              className="profile-contact-link"
-              href={safeExternalUrl(link.url)!}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <span>{link.label}</span>
-              <Icon name="arrow" size={14} />
-            </a>
-          ))}
+          <div className="profile-identity">
+            <p className="profile-display-name">{pubProfile.displayName || '小屋主人'}</p>
+            {pubProfile.focusAreas && (
+              <p className="profile-focus-text">关注方向：{pubProfile.focusAreas}</p>
+            )}
+          </div>
         </div>
-      )}
-    </div>
+        {pubProfile.bio && <div className="profile-bio-text">{renderParagraphs(pubProfile.bio)}</div>}
+        {pubNowNotes.length > 0 && (
+          <div className="profile-now-box" aria-label="近期在做">
+            <strong>近期在做 · Now</strong>
+            <ul className="profile-now-list">
+              {pubNowNotes.map((note, idx) => (
+                <li key={idx}>
+                  <span className="now-index">0{idx + 1}</span>
+                  <span>{note}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {(pubProfile.contactEmail || validLinks.length > 0) && (
+          <div className="profile-contact-box">
+            <strong>联系方式</strong>
+            {pubProfile.contactEmail && (
+              <div className="profile-email-row">
+                <a className="profile-contact-link" href={`mailto:${pubProfile.contactEmail}`}>
+                  {pubProfile.contactEmail}
+                </a>
+                <button
+                  type="button"
+                  className="cms-mini-btn copy-email-btn"
+                  onClick={() => onCopyEmail(pubProfile.contactEmail)}
+                  aria-label="复制联系邮箱"
+                >
+                  <Icon name="copy" size={12} />
+                  <span>复制</span>
+                </button>
+              </div>
+            )}
+            {validLinks.length > 0 && (
+              <div className="profile-links-pills">
+                {validLinks.map((link, idx) => (
+                  <a
+                    key={idx}
+                    className="profile-link-pill"
+                    href={safeExternalUrl(link.url)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Icon name="link" size={12} />
+                    <span>{link.label}</span>
+                    <Icon name="arrow" size={12} />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
   )
 }

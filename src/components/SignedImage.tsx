@@ -63,7 +63,6 @@ export function SignedImage({
       src={src}
       alt={alt}
       className={className}
-      loading="lazy"
       onError={() => {
         if (retried || !assetId) {
           setUnavailable(true)

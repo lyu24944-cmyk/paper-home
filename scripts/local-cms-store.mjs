@@ -13,6 +13,8 @@ export const DEFAULT_SITE_SETTINGS = {
   plaqueSubtitle: '留一点时间，慢慢逛',
   yardHeading: '来家里坐坐。',
   yardSubtitle: '推开门，里面是我的作品、过程记录与自我介绍。',
+  defaultAtmosphere: 'daylight',
+  defaultWeather: 'clear',
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -58,6 +60,17 @@ function cleanContactLinks(input) {
     .filter((item) => item.label && item.url)
 }
 
+function cleanShortLines(input, maxItems = 3, maxLen = 36) {
+  if (!Array.isArray(input)) return []
+  return input
+    .map((item) => (typeof item === 'string' ? item.trim().slice(0, maxLen) : ''))
+    .filter(Boolean)
+    .slice(0, maxItems)
+}
+
+const VALID_ATMOSPHERES = new Set(['dawn', 'daylight', 'golden', 'night', 'auto'])
+const VALID_WEATHERS = new Set(['clear', 'rain'])
+
 export function normalizeSiteSettings(raw) {
   const src = raw && typeof raw === 'object' ? raw : {}
   const homeName = typeof src.homeName === 'string' ? src.homeName.trim().slice(0, 12) : ''
@@ -65,6 +78,12 @@ export function normalizeSiteSettings(raw) {
   const plaqueSubtitle = typeof src.plaqueSubtitle === 'string' ? src.plaqueSubtitle.trim().slice(0, 24) : ''
   const yardHeading = typeof src.yardHeading === 'string' ? src.yardHeading.trim().slice(0, 24) : ''
   const yardSubtitle = typeof src.yardSubtitle === 'string' ? src.yardSubtitle.trim().slice(0, 80) : ''
+  const defaultAtmosphere = VALID_ATMOSPHERES.has(src.defaultAtmosphere)
+    ? src.defaultAtmosphere
+    : DEFAULT_SITE_SETTINGS.defaultAtmosphere
+  const defaultWeather = VALID_WEATHERS.has(src.defaultWeather)
+    ? src.defaultWeather
+    : DEFAULT_SITE_SETTINGS.defaultWeather
 
   return {
     homeName: homeName || DEFAULT_SITE_SETTINGS.homeName,
@@ -72,6 +91,8 @@ export function normalizeSiteSettings(raw) {
     plaqueSubtitle: src.plaqueSubtitle !== undefined ? plaqueSubtitle : DEFAULT_SITE_SETTINGS.plaqueSubtitle,
     yardHeading: yardHeading || DEFAULT_SITE_SETTINGS.yardHeading,
     yardSubtitle: src.yardSubtitle !== undefined ? yardSubtitle : DEFAULT_SITE_SETTINGS.yardSubtitle,
+    defaultAtmosphere,
+    defaultWeather,
   }
 }
 
@@ -97,6 +118,8 @@ export function createEmptyStoreData() {
         avatarAssetId: null,
         contactEmail: '',
         contactLinks: [],
+        nowNotes: [],
+        quotes: [],
       },
       published: null,
     },
@@ -334,6 +357,8 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
             avatarAssetId: db.profile.published.avatarAssetId ?? null,
             contactEmail: db.profile.published.contactEmail || '',
             contactLinks: Array.isArray(db.profile.published.contactLinks) ? db.profile.published.contactLinks : [],
+            nowNotes: cleanShortLines(db.profile.published.nowNotes, 3, 36),
+            quotes: cleanShortLines(db.profile.published.quotes, 8, 120),
             publishedAt: db.profile.published.publishedAt ?? db.profile.publishedAt ?? null,
           }
         : null
@@ -865,6 +890,8 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
         avatarAssetId: isValidUuid(payload.avatarAssetId) ? payload.avatarAssetId.trim() : null,
         contactEmail: String(payload.contactEmail ?? '').trim(),
         contactLinks: cleanContactLinks(payload.contactLinks),
+        nowNotes: cleanShortLines(payload.nowNotes, 3, 36),
+        quotes: cleanShortLines(payload.quotes, 8, 120),
       }
       db.profile = {
         ...current,
@@ -893,7 +920,9 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
         !d.focusAreas.trim() &&
         !d.avatarAssetId &&
         !d.contactEmail.trim() &&
-        d.contactLinks.length === 0
+        d.contactLinks.length === 0 &&
+        (!Array.isArray(d.nowNotes) || d.nowNotes.length === 0) &&
+        (!Array.isArray(d.quotes) || d.quotes.length === 0)
       ) {
         errors.push('请至少填写一项公开介绍内容后再发布')
       }

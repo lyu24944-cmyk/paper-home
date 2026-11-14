@@ -25,6 +25,20 @@ export function Icon({ name, size = 22 }: { name: string; size?: number }) {
     user: <><circle cx="12" cy="8" r="4" /><path d="M4 20a8 8 0 0 1 16 0" /></>,
     refresh: <path d="M20 11a8 8 0 0 0-14-4M4 4v5h5M4 13a8 8 0 0 0 14 4m2 3v-5h-5" />,
     copy: <><rect x="9" y="9" width="11" height="11" rx="1" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></>,
+    zoom: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5M11 8v6M8 11h6" /></>,
+    check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
+    sliders: <><path d="M4 7h16M4 17h16" /><circle cx="9" cy="7" r="2.2" fill="currentColor" /><circle cx="15" cy="17" r="2.2" fill="currentColor" /></>,
+    chevronDown: <path d="m6 9 6 6 6-6" />,
+    chevronUp: <path d="m6 15 6-6 6 6" />,
+    dawn: <><path d="M3 17h18M5 20h14" /><path d="M7 17a5 5 0 0 1 10 0" /><path d="M12 7v2M5.6 9.6l1.4 1.4M18.4 9.6 17 11" /></>,
+    sunset: <><path d="M3 17h18M6 20h12" /><path d="M7 17a5 5 0 0 1 10 0" /><path d="M12 4v5m-3-2 3 3 3-3" /></>,
+    moon: <path d="M20.2 14.8A8.5 8.5 0 0 1 9.2 3.8a8.5 8.5 0 1 0 11 11z" />,
+    clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5v4.8l3.2 2" /></>,
+    rain: <><path d="M7 15a4 4 0 0 1-.4-7.9A5.5 5.5 0 0 1 17.3 9a3.5 3.5 0 0 1 .2 6H7z" /><path d="m8.5 18-1.2 2.5m5.2-2.5-1.2 2.5m5.2-2.5-1.2 2.5" /></>,
+    lamp: <><path d="M8 4h8l2.5 7h-13L8 4z" /><path d="M12 11v8m-4 0h8" /></>,
+    stamp: <><path d="M9 6a3 3 0 1 1 6 0c0 1.6-1.2 2.6-1.2 4.2h-3.6C10.2 8.6 9 7.6 9 6z" /><rect x="5" y="13" width="14" height="4" rx="1.2" /><path d="M6 20h12" /></>,
+    bench: <><path d="M4 11h16M5 7h14v4H5zM6 11v6m12-6v6M3 14h18" /></>,
+    mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6" /></>,
   }
   return (
     <svg
