@@ -126,6 +126,7 @@ export function NoteDetailModal({
                       <button
                         type="button"
                         className="detail-image-trigger"
+                        data-sound="shutter"
                         onClick={() => setLightboxIndex(idx)}
                         aria-label={`放大查看手记附图 ${idx + 1}`}
                       >
@@ -165,6 +166,7 @@ export function NoteDetailModal({
                   <button
                     type="button"
                     className="linked-pill-btn"
+                    data-sound="paper-card"
                     onClick={() => onOpenProject?.(linkedProject.id)}
                   >
                     <Icon name="frame" size={15} />
@@ -181,6 +183,7 @@ export function NoteDetailModal({
                   <button
                     type="button"
                     className="cms-ghost-btn"
+                    data-sound="paper-flip"
                     onClick={() => onStep(-1)}
                     aria-label="上一篇手记"
                   >
@@ -193,6 +196,7 @@ export function NoteDetailModal({
                   <button
                     type="button"
                     className="cms-ghost-btn"
+                    data-sound="paper-flip"
                     onClick={() => onStep(1)}
                     aria-label="下一篇手记"
                   >

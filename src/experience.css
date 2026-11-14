@@ -64,6 +64,7 @@ a:focus-visible {
 .walk-hint,
 .place-indicator,
 .interaction-hint,
+.sfx-button,
 .ambient-button,
 .gallery-viewer > button,
 .gallery-empty-pill {
@@ -631,6 +632,7 @@ a:focus-visible {
   color: var(--muted);
 }
 
+.sfx-button,
 .ambient-button {
   width: 36px;
   height: 36px;
@@ -638,6 +640,8 @@ a:focus-visible {
   transition: background 0.2s var(--ease-editorial), color 0.2s var(--ease-editorial), border-color 0.2s var(--ease-editorial);
 }
 
+.sfx-button:hover,
+.sfx-button.active,
 .ambient-button:hover,
 .ambient-button.active {
   background: var(--paper-surface-hover);
@@ -646,6 +650,7 @@ a:focus-visible {
   border-radius: var(--radius-pill);
 }
 
+.sfx-button.active,
 .ambient-button.active {
   background: rgba(235, 241, 232, 0.92);
   border-color: rgba(54, 88, 64, 0.24);
@@ -2482,6 +2487,7 @@ a:focus-visible {
     width: 14px;
     height: 14px;
   }
+  .sfx-button,
   .ambient-button {
     width: 34px;
     height: 34px;

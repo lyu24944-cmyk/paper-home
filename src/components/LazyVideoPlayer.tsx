@@ -70,6 +70,7 @@ export function LazyVideoPlayer({
         <button
           type="button"
           className="cms-primary-btn"
+          data-sound="ui-switch"
           disabled={loading}
           onClick={() => void onPlayRequest()}
         >
@@ -96,7 +97,7 @@ export function LazyVideoPlayer({
         }}
       />
       <div className="video-player-actions">
-        <button type="button" className="cms-ghost-btn" onClick={stopPlayback}>
+        <button type="button" className="cms-ghost-btn" data-sound="modal-close" onClick={stopPlayback}>
           收起并停止播放
         </button>
       </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import { playSound } from '../lib/sound'
 import { Icon } from './Icon'
 
 export function Modal({
@@ -29,11 +30,25 @@ export function Modal({
       className={`paper-dialog ${className}`}
       aria-label={label}
       onClose={close}
+      onCancel={(e) => {
+        e.preventDefault()
+        playSound('modal-close')
+        close()
+      }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) close()
+        if (e.target === e.currentTarget) {
+          playSound('modal-close')
+          close()
+        }
       }}
     >
-      <button className="icon-button dialog-close" onClick={close} aria-label="关闭" type="button">
+      <button
+        className="icon-button dialog-close"
+        data-sound="modal-close"
+        onClick={close}
+        aria-label="关闭"
+        type="button"
+      >
         <Icon name="close" />
       </button>
       {children}

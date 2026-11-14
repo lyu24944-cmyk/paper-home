@@ -28,6 +28,7 @@ function ReorderButtons({
       <button
         type="button"
         className="cms-mini-btn"
+        data-sound="step"
         aria-label={`上移${label}`}
         disabled={disabled || index === 0}
         onClick={() => onMove(-1)}
@@ -37,6 +38,7 @@ function ReorderButtons({
       <button
         type="button"
         className="cms-mini-btn"
+        data-sound="step"
         aria-label={`下移${label}`}
         disabled={disabled || index >= total - 1}
         onClick={() => onMove(1)}
@@ -128,6 +130,7 @@ export function RoomDirectory({
                 className="icon-button"
                 aria-label="收起作品目录"
                 onClick={onCloseDirectory}
+                data-sound="drawer-slide"
               >
                 <Icon name="close" size={18} />
               </button>
@@ -216,6 +219,7 @@ export function RoomDirectory({
             type="button"
             className="icon-button"
             aria-label="收起作品目录"
+            data-sound="drawer-slide"
             onClick={onCloseDirectory}
           >
             <Icon name="close" size={18} />
@@ -236,7 +240,7 @@ export function RoomDirectory({
         ) : (
           <div className="art-list">
             {publishedProjects.map((item, i) => (
-              <button key={item.id} type="button" onClick={() => onOpenPublicProject(i)}>
+              <button key={item.id} type="button" data-sound="paper-card" onClick={() => onOpenPublicProject(i)}>
                 {item.coverAssetId ? (
                   <SignedImage
                     assetId={item.coverAssetId}
@@ -287,6 +291,7 @@ export function RoomDirectory({
                 className="icon-button"
                 aria-label="收起手记目录"
                 onClick={onCloseDirectory}
+                data-sound="drawer-slide"
               >
                 <Icon name="close" size={18} />
               </button>
@@ -357,6 +362,7 @@ export function RoomDirectory({
             type="button"
             className="icon-button"
             aria-label="收起手记目录"
+            data-sound="drawer-slide"
             onClick={onCloseDirectory}
           >
             <Icon name="close" size={18} />
@@ -377,7 +383,7 @@ export function RoomDirectory({
             {publishedNotes.map((item, i) => {
               const linkedTitle = item.projectId ? publicProjectTitleById.get(item.projectId) : undefined
               return (
-                <button key={item.id} type="button" onClick={() => onOpenPublicNote(i)}>
+                <button key={item.id} type="button" data-sound="paper-card" onClick={() => onOpenPublicNote(i)}>
                   <span className="article-item-copy">
                     <strong>{item.title}</strong>
                     {linkedTitle && <small>关联作品：{linkedTitle}</small>}
@@ -428,6 +434,7 @@ export function RoomDirectory({
               type="button"
               className="icon-button"
               aria-label="收起关于我"
+              data-sound="drawer-slide"
               onClick={onCloseDirectory}
             >
               <Icon name="close" size={18} />
@@ -547,6 +554,7 @@ export function RoomDirectory({
             type="button"
             className="icon-button"
             aria-label="收起关于我"
+            data-sound="drawer-slide"
             onClick={onCloseDirectory}
           >
             <Icon name="close" size={18} />
@@ -571,6 +579,7 @@ export function RoomDirectory({
         <button
           type="button"
           className="icon-button"
+          data-sound="drawer-slide"
           aria-label="收起关于我"
           onClick={onCloseDirectory}
         >

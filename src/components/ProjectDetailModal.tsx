@@ -134,6 +134,7 @@ export function ProjectDetailModal({
                 <button
                   type="button"
                   className="detail-image-trigger"
+                  data-sound="shutter"
                   onClick={() => setLightboxIndex(0)}
                   aria-label={`放大查看《${project.title || '作品'}》封面图`}
                 >
@@ -179,6 +180,7 @@ export function ProjectDetailModal({
                         <button
                           type="button"
                           className="detail-image-trigger"
+                          data-sound="shutter"
                           onClick={() => setLightboxIndex(lbIndex)}
                           aria-label={`放大查看作品截图 ${idx + 1}`}
                         >
@@ -221,6 +223,7 @@ export function ProjectDetailModal({
                       key={note.id}
                       type="button"
                       className="linked-pill-btn"
+                      data-sound="paper-card"
                       onClick={() => onOpenNote?.(note.id)}
                     >
                       <Icon name="book" size={15} />
@@ -238,6 +241,7 @@ export function ProjectDetailModal({
                   <button
                     type="button"
                     className="cms-ghost-btn"
+                    data-sound="paper-flip"
                     onClick={() => onStep(-1)}
                     aria-label="上一件作品"
                   >
@@ -250,6 +254,7 @@ export function ProjectDetailModal({
                   <button
                     type="button"
                     className="cms-ghost-btn"
+                    data-sound="paper-flip"
                     onClick={() => onStep(1)}
                     aria-label="下一件作品"
                   >

@@ -27,6 +27,14 @@ import {
 } from './lib/api'
 import { isLocalOwnerActive, resolveBackendHealth } from './lib/backend'
 import { evictSignedUrl, getCachedUrl, refreshSignedUrl, seedSignedUrls } from './lib/media'
+import {
+  installGlobalClickSoundDelegator,
+  isSfxEnabled,
+  playSound,
+  setAcousticSpace,
+  setSfxEnabled as persistSfxEnabled,
+  type SoundEffectId,
+} from './lib/sound'
 import { getSupabaseClient, isCloudConfigured } from './lib/supabase'
 import {
   ApiError,
@@ -150,59 +158,12 @@ function loadGuestStamps(): GuestStampEntry[] {
   }
 }
 
-function playTactileSound(kind: 'lamp' | 'paper' | 'stamp' | 'bench') {
-  try {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-    if (!Ctx) return
-    const ctx = new Ctx()
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    const now = ctx.currentTime
-    if (kind === 'lamp') {
-      osc.type = 'triangle'
-      osc.frequency.setValueAtTime(620, now)
-      osc.frequency.exponentialRampToValueAtTime(1180, now + 0.045)
-      gain.gain.setValueAtTime(0.06, now)
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07)
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.start(now)
-      osc.stop(now + 0.075)
-    } else if (kind === 'paper') {
-      osc.type = 'sine'
-      osc.frequency.setValueAtTime(440, now)
-      osc.frequency.exponentialRampToValueAtTime(660, now + 0.09)
-      gain.gain.setValueAtTime(0.045, now)
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11)
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.start(now)
-      osc.stop(now + 0.12)
-    } else if (kind === 'stamp') {
-      osc.type = 'sine'
-      osc.frequency.setValueAtTime(190, now)
-      osc.frequency.exponentialRampToValueAtTime(92, now + 0.08)
-      gain.gain.setValueAtTime(0.08, now)
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1)
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.start(now)
-      osc.stop(now + 0.11)
-    } else {
-      osc.type = 'sine'
-      osc.frequency.setValueAtTime(330, now)
-      osc.frequency.exponentialRampToValueAtTime(495, now + 0.1)
-      gain.gain.setValueAtTime(0.04, now)
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12)
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.start(now)
-      osc.stop(now + 0.13)
-    }
-    window.setTimeout(() => { void ctx.close().catch(() => {}) }, 220)
-  } catch {
-    // Audio synthesis is non-critical in headless or restricted environments
-  }
+const ATMO_SOUND_MAP: Record<AtmosphereMode, SoundEffectId> = {
+  dawn: 'atmo-dawn',
+  daylight: 'atmo-daylight',
+  golden: 'atmo-golden',
+  night: 'atmo-night',
+  auto: 'atmo-auto',
 }
 
 function startingPlace(): Place {
@@ -251,6 +212,8 @@ export default function App() {
   const [nameMessage, setNameMessage] = useState('')
   const [reduced, setReduced] = useState(() => matchMedia('(prefers-reduced-motion: reduce)').matches)
   const [ambient, setAmbient] = useState(false)
+  const [sfxEnabled, setSfxEnabled] = useState<boolean>(isSfxEnabled)
+  const doorKnockTimerRef = useRef<number | null>(null)
   const [atmosphereMode, setAtmosphereMode] = useState<AtmosphereMode>(initialAtmosphereMode)
   const [weather, setWeather] = useState<WeatherMode>(initialWeatherMode)
   const [autoClockTick, setAutoClockTick] = useState(0)
@@ -600,7 +563,11 @@ export default function App() {
     return () => ctx.revert()
   }, [place, reduced])
 
-  useEffect(() => () => { animation.current?.kill(); document.body.style.cursor = '' }, [])
+  useEffect(() => () => {
+    animation.current?.kill()
+    if (doorKnockTimerRef.current !== null) window.clearTimeout(doorKnockTimerRef.current)
+    document.body.style.cursor = ''
+  }, [])
 
   useEffect(() => {
     if (!userTouchedLampRef.current) {
@@ -614,6 +581,12 @@ export default function App() {
     return () => window.clearInterval(timer)
   }, [atmosphereMode])
 
+  useEffect(() => installGlobalClickSoundDelegator(), [])
+
+  useEffect(() => {
+    setAcousticSpace(place === 'yard' ? 'yard' : 'indoor')
+  }, [place])
+
   useEffect(() => {
     if (!qaEnabled) return
     const w = window as unknown as { __HOME_QA__?: Record<string, unknown> }
@@ -624,8 +597,9 @@ export default function App() {
       weather,
       deskLampOn,
       focusId,
+      sfxEnabled,
     })
-  }, [atmosphereMode, atmospherePreset, weather, deskLampOn, focusId])
+  }, [atmosphereMode, atmospherePreset, weather, deskLampOn, focusId, sfxEnabled])
 
   useEffect(() => {
     if (!atmoPopoverOpen) return
@@ -789,6 +763,7 @@ export default function App() {
   function step(direction: number) {
     const el = root.current
     if (el && !anyModalOpen) {
+      playSound('step')
       el.scrollBy({
         top: (direction * (el.scrollHeight - el.clientHeight) * layout.stepDistance) / layout.walkLength,
         behavior: reduced ? 'instant' : 'smooth',
@@ -796,7 +771,7 @@ export default function App() {
     }
   }
 
-  async function navigate(target: Place) {
+  async function navigate(target: Place, opts?: { skipOpenSound?: boolean }) {
     if (busyRef.current || !ready) return
     setStudioMenuOpen(false)
     setAtmoPopoverOpen(false)
@@ -813,6 +788,10 @@ export default function App() {
       (target === 'study' || target === 'blank') && !matchMedia('(max-width: 650px)').matches
     setDirectoryOpen(defaultDirOpen)
     if (target === place) return
+    if (!opts?.skipOpenSound) {
+      const goingBack = target === 'yard' || (place !== 'yard' && place !== 'hall' && target === 'hall')
+      playSound(goingBack ? 'door-close' : 'door-open')
+    }
     const resumeProgress = place === 'hall' && nearby === target ? progress.current : null
     if (place === 'yard') progress.current = 0
     busyRef.current = true; setBusy(true); setDestination(target)
@@ -945,6 +924,7 @@ export default function App() {
       if (!email) return
       try {
         await navigator.clipboard.writeText(email)
+        playSound('success-seal')
         showToast(`已复制联系邮箱：${email}`, 'success')
       } catch {
         showToast('浏览器未授权剪贴板，请长按或右键复制邮箱', 'info')
@@ -983,7 +963,7 @@ export default function App() {
     })
     void loadPublic()
     if (action === 'draft') showToast('作品草稿已保存', 'success')
-    else if (action === 'publish') showToast('作品已发布到作品室', 'success')
+    else if (action === 'publish') { playSound('success-seal'); showToast('作品已发布到作品室', 'success') }
     else if (action === 'unpublish') showToast('已撤回发布，草稿仍保留', 'info')
   }
 
@@ -1017,7 +997,7 @@ export default function App() {
     })
     void loadPublic()
     if (action === 'draft') showToast('手记草稿已保存', 'success')
-    else if (action === 'publish') showToast('手记已发布到创作手记', 'success')
+    else if (action === 'publish') { playSound('success-seal'); showToast('手记已发布到创作手记', 'success') }
     else if (action === 'unpublish') showToast('已撤回发布，草稿仍保留', 'info')
   }
 
@@ -1033,7 +1013,7 @@ export default function App() {
     setAdminData((prev) => (prev ? { ...prev, profile: saved, pendingCleanupCount } : prev))
     void loadPublic()
     if (action === 'draft') showToast('个人介绍草稿已保存', 'success')
-    else if (action === 'publish') showToast('“关于我”公开内容已更新', 'success')
+    else if (action === 'publish') { playSound('success-seal'); showToast('“关于我”公开内容已更新', 'success') }
     else if (action === 'unpublish') showToast('已撤回“关于我”公开展示', 'info')
   }
 
@@ -1186,6 +1166,7 @@ export default function App() {
 
   const handleSelectAtmosphere = useCallback((mode: AtmosphereMode) => {
     userTouchedAtmoRef.current = true
+    playSound(ATMO_SOUND_MAP[mode])
     setAtmosphereMode(mode)
     try { localStorage.setItem('paper-home:atmosphere', mode) } catch {}
   }, [])
@@ -1194,16 +1175,31 @@ export default function App() {
     userTouchedAtmoRef.current = true
     setWeather((prev) => {
       const next: WeatherMode = prev === 'rain' ? 'clear' : 'rain'
+      playSound(next === 'rain' ? 'rain-on' : 'rain-off')
       try { localStorage.setItem('paper-home:weather', next) } catch {}
       return next
     })
   }, [])
 
+  const handleToggleSfx = useCallback(() => {
+    setSfxEnabled((prev) => {
+      const next = !prev
+      persistSfxEnabled(next)
+      if (next) playSound('ui-switch', { force: true })
+      showToast(next ? '已开启交互触感音效' : '已静音交互触感音效', 'info')
+      return next
+    })
+  }, [showToast])
+
+  const handleTapProp = useCallback((msg: string) => {
+    showToast(msg, 'info')
+  }, [showToast])
+
   const handleToggleDeskLamp = useCallback(() => {
     userTouchedLampRef.current = true
-    playTactileSound('lamp')
     setDeskLampOn((prev) => {
       const next = !prev
+      playSound(next ? 'lamp-on' : 'lamp-off')
       showToast(next ? '已点亮书房黄铜绿台灯' : '已关上书桌台灯', 'info')
       return next
     })
@@ -1211,7 +1207,7 @@ export default function App() {
 
   const handleDrawStudyQuote = useCallback(() => {
     if (busyRef.current) return
-    playTactileSound('paper')
+    playSound('paper-flip')
     setFocusId('study-shelf')
     setQuoteIdx((prev) => {
       const nextIdx = (prev + 1) % activeQuotesPool.length
@@ -1222,7 +1218,7 @@ export default function App() {
 
   const handleToggleFocus = useCallback((targetFocus: FocusSubPoseId) => {
     if (busyRef.current) return
-    playTactileSound(targetFocus === 'yard-bench' ? 'bench' : 'paper')
+    playSound(targetFocus === 'yard-bench' ? 'bench' : 'paper-card')
     setFocusId((prev) => {
       const next = prev === targetFocus ? null : targetFocus
       if (next !== 'study-shelf') setStudyQuote(null)
@@ -1232,14 +1228,14 @@ export default function App() {
 
   function handleTriggerMailbox() {
     if (busyRef.current) return
-    playTactileSound('stamp')
+    playSound('mailbox')
     showToast('已打开信箱，带去「关于我」木桌寄语匣盖章留念…', 'info')
     pendingFocusAfterNavRef.current = 'blank-table'
-    void navigate('blank')
+    void navigate('blank', { skipOpenSound: true })
   }
 
   const handleLeaveStamp = useCallback(() => {
-    playTactileSound('stamp')
+    playSound('ink-stamp')
     const moodItem = STAMP_MOODS.find((m) => m.id === selectedStampMood) ?? STAMP_MOODS[0]
     const entry: GuestStampEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -1328,6 +1324,7 @@ export default function App() {
                 onDrawStudyQuote={handleDrawStudyQuote}
                 onSelectFocus={handleToggleFocus}
                 onTriggerMailbox={handleTriggerMailbox}
+                onTapProp={handleTapProp}
                 nowNotes={activeNowNotes}
               />
               <RenderPipeline
@@ -1385,7 +1382,7 @@ export default function App() {
                   aria-pressed={atmosphereMode === opt.id}
                   aria-label={`天色：${opt.label}`}
                   title={opt.id === 'auto' ? `跟随当地时间（当前：${activeAtmoMeta.label}）` : opt.label}
-                  onClick={() => setAtmosphereMode(opt.id)}
+                  onClick={() => handleSelectAtmosphere(opt.id)}
                 >
                   <Icon name={opt.icon} size={13} />
                   <span>{opt.label}</span>
@@ -1397,7 +1394,7 @@ export default function App() {
                 aria-pressed={weather === 'rain'}
                 aria-label={weather === 'rain' ? '关闭细雨' : '开启细雨'}
                 title="切换庭院细雨与雨声"
-                onClick={() => setWeather((w) => (w === 'rain' ? 'clear' : 'rain'))}
+                onClick={handleToggleWeather}
               >
                 <Icon name="rain" size={13} />
                 <span>细雨</span>
@@ -1423,7 +1420,7 @@ export default function App() {
                       type="button"
                       className={`atmo-popover-btn ${atmosphereMode === opt.id ? 'active' : ''}`}
                       onClick={() => {
-                        setAtmosphereMode(opt.id)
+                        handleSelectAtmosphere(opt.id)
                         setAtmoPopoverOpen(false)
                       }}
                     >
@@ -1435,7 +1432,7 @@ export default function App() {
                     type="button"
                     className={`atmo-popover-btn ${weather === 'rain' ? 'active' : ''}`}
                     onClick={() => {
-                      setWeather((w) => (w === 'rain' ? 'clear' : 'rain'))
+                      handleToggleWeather()
                       setAtmoPopoverOpen(false)
                     }}
                   >
@@ -1582,6 +1579,7 @@ export default function App() {
             className={`map-button ${isAdmin ? 'admin-active' : ''}`}
             aria-label={isAdmin ? '小屋地图（主人已登录）' : '小屋地图'}
             onClick={() => {
+              playSound('map-unfold')
               setStudioMenuOpen(false)
               setMapOpen(true)
               setSettingsDraft({ ...siteSettings })
@@ -1694,6 +1692,7 @@ export default function App() {
               <button
                 type="button"
                 className="tactile-card-close"
+                data-sound="modal-close"
                 aria-label="起身回到小院全景"
                 onClick={() => setFocusId(null)}
               >
@@ -1721,6 +1720,7 @@ export default function App() {
                 <button
                   type="button"
                   className="tactile-card-close"
+                  data-sound="modal-close"
                   aria-label="合上灵感签"
                   onClick={() => {
                     setStudyQuote(null)
@@ -1742,6 +1742,7 @@ export default function App() {
               <button
                 type="button"
                 className="tactile-card-close"
+                data-sound="modal-close"
                 aria-label="收起桌面寄语匣"
                 onClick={() => setFocusId(null)}
               >
@@ -1851,6 +1852,7 @@ export default function App() {
                 <button
                   type="button"
                   aria-label="上一件作品"
+                  data-sound="paper-card"
                   disabled={busy || galleryIndex <= 0}
                   onClick={() => setGalleryIndex((i) => Math.max(0, i - 1))}
                 >
@@ -1859,6 +1861,7 @@ export default function App() {
                 <button
                   type="button"
                   className="gallery-current"
+                  data-sound="paper-flip"
                   onClick={() => openPublicProject(galleryIndex)}
                   disabled={busy || !activeMobileProject}
                   aria-label={`展开《${activeMobileProject?.title ?? ''}》`}
@@ -1872,6 +1875,7 @@ export default function App() {
                 <button
                   type="button"
                   aria-label="下一件作品"
+                  data-sound="paper-card"
                   disabled={busy || galleryIndex >= publishedProjects.length - 1}
                   onClick={() => setGalleryIndex((i) => Math.min(publishedProjects.length - 1, i + 1))}
                 >
@@ -1884,7 +1888,21 @@ export default function App() {
 
         <nav className={`journey-nav ${place === 'yard' ? 'yard-nav' : ''}`} aria-label="房间导航">
           {place === 'yard' ? (
-            <button key="yard-enter" type="button" className="enter-button" onClick={() => void navigate('hall')} disabled={busy || !ready}>
+            <button
+              key="yard-enter"
+              type="button"
+              className="enter-button"
+              onClick={() => {
+                playSound('door-knock')
+                if (doorKnockTimerRef.current !== null) window.clearTimeout(doorKnockTimerRef.current)
+                doorKnockTimerRef.current = window.setTimeout(() => {
+                  doorKnockTimerRef.current = null
+                  playSound('door-open')
+                }, 220)
+                void navigate('hall', { skipOpenSound: true })
+              }}
+              disabled={busy || !ready}
+            >
               <span>{busy ? '门开了，进来吧…' : '敲敲门，进来坐坐'}</span>
               <Icon name="arrow" />
             </button>
@@ -1930,6 +1948,7 @@ export default function App() {
                   <button
                     type="button"
                     className={`directory-toggle ${directoryOpen ? 'active' : ''}`}
+                    data-sound="drawer-slide"
                     aria-expanded={directoryOpen}
                     aria-controls="room-directory"
                     onClick={() => setDirectoryOpen((v) => !v)}
@@ -2014,10 +2033,25 @@ export default function App() {
           </span>
           <button
             type="button"
+            className={`sfx-button ${sfxEnabled ? 'active' : ''}`}
+            aria-label={sfxEnabled ? '关闭交互音效' : '开启交互音效'}
+            aria-pressed={sfxEnabled}
+            title={sfxEnabled ? '交互触感音效：开启' : '交互触感音效：静音'}
+            onClick={handleToggleSfx}
+          >
+            <Icon name={sfxEnabled ? 'sfxOn' : 'sfxOff'} size={17} />
+          </button>
+          <button
+            type="button"
             className={`ambient-button ${ambient ? 'active' : ''}`}
             aria-label={ambient ? '关闭环境声' : '开启环境声'}
             aria-pressed={ambient}
-            onClick={() => setAmbient(!ambient)}
+            title={ambient ? '环境声与雨声：开启' : '环境声与雨声：关闭'}
+            onClick={() => {
+              const next = !ambient
+              playSound(next ? 'ambient-on' : 'ambient-off')
+              setAmbient(next)
+            }}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
               <path d="M4 9h4l5-4v14l-5-4H4z" />
@@ -2077,6 +2111,7 @@ export default function App() {
                   setSiteSettings(res.siteSettings)
                   setSettingsDraft(res.siteSettings)
                   await refreshCloud()
+                  playSound('success-seal')
                   setNameMessage('小屋名称与外观文字已保存到本机 local-data/。')
                   showToast('小屋名称与外观文字已保存', 'success')
                 } catch (err) {
@@ -2096,6 +2131,7 @@ export default function App() {
             setSiteSettings((prev) => ({ ...prev, homeName: trimmedName }))
             try {
               localStorage.setItem('paper-home:name', trimmedName)
+              playSound('success-seal')
               setNameMessage('小屋的名字记住了。')
               showToast('小屋的名字已记住', 'success')
             } catch {

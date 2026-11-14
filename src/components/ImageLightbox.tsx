@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { playSound } from '../lib/sound'
 import { Icon } from './Icon'
 import { SignedImage } from './SignedImage'
 
@@ -67,17 +68,24 @@ export function ImageLightbox({
       onCancel={(e) => {
         e.preventDefault()
         e.stopPropagation()
+        playSound('modal-close')
         onClose()
       }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (e.target === e.currentTarget) {
+          playSound('modal-close')
+          onClose()
+        }
       }}
     >
       {current && (
         <div
           className="lightbox-shell"
           onClick={(e) => {
-            if (e.target === e.currentTarget) onClose()
+            if (e.target === e.currentTarget) {
+              playSound('modal-close')
+              onClose()
+            }
           }}
         >
           <div className="lightbox-topbar">
@@ -88,6 +96,7 @@ export function ImageLightbox({
             <button
               type="button"
               className="lightbox-close-btn"
+              data-sound="modal-close"
               onClick={onClose}
               aria-label="关闭大图预览"
             >
@@ -99,13 +108,17 @@ export function ImageLightbox({
           <div
             className="lightbox-stage"
             onClick={(e) => {
-              if (e.target === e.currentTarget) onClose()
+              if (e.target === e.currentTarget) {
+                playSound('modal-close')
+                onClose()
+              }
             }}
           >
             {count > 1 && (
               <button
                 type="button"
                 className="lightbox-arrow-btn prev"
+                data-sound="shutter"
                 onClick={() => onIndexChange((safeIndex - 1 + count) % count)}
                 aria-label="上一张图片"
               >
@@ -128,6 +141,7 @@ export function ImageLightbox({
               <button
                 type="button"
                 className="lightbox-arrow-btn next"
+                data-sound="shutter"
                 onClick={() => onIndexChange((safeIndex + 1) % count)}
                 aria-label="下一张图片"
               >
@@ -143,6 +157,7 @@ export function ImageLightbox({
                   key={`${item.assetId}-${idx}`}
                   type="button"
                   role="tab"
+                  data-sound="shutter"
                   aria-selected={idx === safeIndex}
                   aria-label={`查看第 ${idx + 1} 张图片`}
                   className={`lightbox-dot-btn ${idx === safeIndex ? 'active' : ''}`}

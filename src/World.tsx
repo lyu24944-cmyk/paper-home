@@ -5,6 +5,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import gsap from 'gsap'
 import { DEFAULT_NOW_NOTES, getAtmosphereLighting } from './atmosphere'
 import type { Place } from './content'
+import { playSound } from './lib/sound'
 import type { AtmospherePreset, GalleryDisplayItem, WeatherMode } from './types/content'
 import { Builder, makeMaterials, StaticBatch } from './Geometry'
 import { doorStops, gallerySlotX, layout, roomTransform, type FocusSubPoseId, type V3 } from './layout'
@@ -24,7 +25,7 @@ function Plaque({text,sub='',at,size=[1.45,.38],rotation=0}:{text:string;sub?:st
   const texture=useMemo(()=>textMap(text,sub),[text,sub]);useEffect(()=>()=>texture.dispose(),[texture])
   return <group position={at} rotation={[0,rotation,0]}><mesh castShadow receiveShadow><boxGeometry args={[size[0]+.04,size[1]+.04,.045]}/><meshStandardMaterial color="#6f6047" roughness={.75}/></mesh><mesh position={[0,0,.024]}><planeGeometry args={size}/><meshStandardMaterial map={texture} roughness={.85}/></mesh></group>
 }
-function Signage({homeName,plaqueTitle,plaqueSubtitle,materials}:{homeName:string;plaqueTitle:string;plaqueSubtitle:string;materials:ReturnType<typeof makeMaterials>}){
+function Signage({homeName,plaqueTitle,plaqueSubtitle,materials,onTapPlaque}:{homeName:string;plaqueTitle:string;plaqueSubtitle:string;materials:ReturnType<typeof makeMaterials>;onTapPlaque?:()=>void}){
   const signs=useMemo(()=>{
     const labels=[{text:homeName,sub:'',at:[0,2.38,.13] as V3,size:[1.48,.25],r:0},{text:plaqueTitle,sub:plaqueSubtitle,at:[1.075,1.75,-1.45] as V3,size:[.9,.42],r:-Math.PI/2},...doorStops.map(d=>({text:d.name,sub:'',at:[d.side*1.075,2.43,-d.depth] as V3,size:[.88,.22],r:-d.side*Math.PI/2}))]
     const canvas=document.createElement('canvas');canvas.width=canvas.height=2048;const c=canvas.getContext('2d')!,b=new Builder(),geometries:PlaneGeometry[]=[]
@@ -40,7 +41,7 @@ function Signage({homeName,plaqueTitle,plaqueSubtitle,materials}:{homeName:strin
     return {b,geometry:mergeGeometries(geometries,false)!,texture}
   },[homeName,plaqueTitle,plaqueSubtitle])
   useEffect(()=>()=>{signs.geometry.dispose();signs.texture.dispose()},[signs])
-  return <group><StaticBatch builder={signs.b} materials={materials}/><mesh geometry={signs.geometry} receiveShadow><meshStandardMaterial map={signs.texture} roughness={.85}/></mesh></group>
+  return <group onClick={e=>{e.stopPropagation();if(e.delta<8){playSound('bench');onTapPlaque?.()}}} onPointerOver={on} onPointerOut={off}><StaticBatch builder={signs.b} materials={materials}/><mesh geometry={signs.geometry} receiveShadow><meshStandardMaterial map={signs.texture} roughness={.85}/></mesh></group>
 }
 function doorParts(width:number){
   const b=new Builder(),h=layout.doorHeight
@@ -184,7 +185,7 @@ function garden(){
   b.box([.18,.025,.02],[1.7,.89,2.13],'brass',[0,-.18,0],.004)
   return b
 }
-function Plant({pack,at,height=1,tree=false,rotation=0}:{pack:ResourcePack;at:V3;height?:number;tree?:boolean;rotation?:number}){
+function Plant({pack,at,height=1,tree=false,rotation=0,onTap}:{pack:ResourcePack;at:V3;height?:number;tree?:boolean;rotation?:number;onTap?:()=>void}){
   const object=useMemo(()=>{
     const root=(tree?pack.tree:pack.plant).scene.clone(true),bounds=new Box3().setFromObject(root),size=bounds.getSize(new Vector3()),center=bounds.getCenter(new Vector3())
     const scale=height/size.y
@@ -194,7 +195,7 @@ function Plant({pack,at,height=1,tree=false,rotation=0}:{pack:ResourcePack;at:V3
     }})
     return root
   },[pack,tree,height])
-  return <group position={at} rotation={[0,rotation,0]}><primitive object={object}/></group>
+  return <group position={at} rotation={[0,rotation,0]} onClick={e=>{e.stopPropagation();if(e.delta<8){playSound('foliage');onTap?.()}}} onPointerOver={on} onPointerOut={off}><primitive object={object}/></group>
 }
 function Grass(){
   const ref=useRef<InstancedMesh>(null),geometry=useMemo(()=>{const shape=new Shape();shape.moveTo(-.018,0);shape.quadraticCurveTo(-.018,.14,.045,.24);shape.quadraticCurveTo(.018,.1,.018,0);shape.closePath();return new ShapeGeometry(shape,3)},[])
@@ -414,14 +415,14 @@ function Paper({item,index,count,reduced,interact,onCoverExpired}:{item:GalleryD
   },[canvas,texture,item.title,item.coverThumbUrl,item.coverAssetId,onCoverExpired])
   useEffect(()=>()=>texture.dispose(),[texture])
   useFrame(({clock})=>{if(group.current)group.current.rotation.y=reduced?0:Math.sin(clock.elapsedTime*.5+index)*.012})
-  return <group ref={group} position={[gallerySlotX(index,count),1.65,-.85]} onClick={e=>{e.stopPropagation();if(e.delta<8)interact(index)}} onPointerOver={on} onPointerOut={off}>
+  return <group ref={group} position={[gallerySlotX(index,count),1.65,-.85]} onClick={e=>{e.stopPropagation();if(e.delta<8){playSound('paper-flip');interact(index)}}} onPointerOver={on} onPointerOut={off}>
     <mesh position={[0,.71,0]}><cylinderGeometry args={[.002,.002,.38,6]}/><meshStandardMaterial color="#7c7561"/></mesh>
     <mesh castShadow receiveShadow><planeGeometry args={[.91,1.22,20,3]} onUpdate={g=>{const p=g.getAttribute('position');for(let i=0;i<p.count;i++)p.setZ(i,Math.sin((p.getX(i)/.91+.5)*Math.PI)*.035);g.computeVertexNormals()}}/><meshStandardMaterial color="#f9f6e9" side={DoubleSide} roughness={.95}/></mesh>
     <mesh position={[0,.02,.042]} receiveShadow><planeGeometry args={[.74,.806,20,2]} onUpdate={g=>{const p=g.getAttribute('position');for(let i=0;i<p.count;i++)p.setZ(i,Math.sin((p.getX(i)/.91+.5)*Math.PI)*.035);g.computeVertexNormals()}}/><meshStandardMaterial map={texture} roughness={.92} side={DoubleSide}/></mesh>
     <mesh position={[0,.61,.035]} castShadow><boxGeometry args={[.045,.055,.03]}/><meshStandardMaterial color="#8e8a7c" metalness={.8} roughness={.28}/></mesh>
   </group>
 }
-function RoomDecor({id,pack,materials,interact,reduced,exterior,galleryProjects,onCoverExpired,deskLampOn=false,onToggleDeskLamp,onDrawStudyQuote,onSelectBlankTable,nowNotes}:{id:Place;pack:ResourcePack;materials:ReturnType<typeof makeMaterials>;interact:(i:number)=>void;reduced:boolean;exterior:boolean;galleryProjects:GalleryDisplayItem[];onCoverExpired?:(assetId:string)=>void;deskLampOn?:boolean;onToggleDeskLamp?:()=>void;onDrawStudyQuote?:()=>void;onSelectBlankTable?:()=>void;nowNotes?:string[]}){
+function RoomDecor({id,pack,materials,interact,reduced,exterior,galleryProjects,onCoverExpired,deskLampOn=false,onToggleDeskLamp,onDrawStudyQuote,onSelectBlankTable,onTapProp,nowNotes}:{id:Place;pack:ResourcePack;materials:ReturnType<typeof makeMaterials>;interact:(i:number)=>void;reduced:boolean;exterior:boolean;galleryProjects:GalleryDisplayItem[];onCoverExpired?:(assetId:string)=>void;deskLampOn?:boolean;onToggleDeskLamp?:()=>void;onDrawStudyQuote?:()=>void;onSelectBlankTable?:()=>void;onTapProp?:(msg:string)=>void;nowNotes?:string[]}){
   const b=useMemo(()=>roomFurniture(id),[id]),t=roomTransform(id)
   const root=useRef<Group>(null),scratch=useMemo(()=>({forward:new Vector3(),delta:new Vector3()}),[])
   useFrame(({camera})=>{
@@ -436,12 +437,17 @@ function RoomDecor({id,pack,materials,interact,reduced,exterior,galleryProjects,
   return <group ref={root} userData={{skipAO:exterior}} position={[t.x,0,t.z]} rotation={[0,t.rotation,0]}><StaticBatch builder={b} materials={materials} castShadow={!exterior}/>
     {id==='gallery'&&<group name="gallery-papers">{displayed.map((item,i)=><Paper key={item.id} item={item} index={i} count={displayed.length} interact={interact} reduced={reduced} onCoverExpired={onCoverExpired}/>)}</group>}
     {id==='study'&&<>
-      <group position={[-.5,.79,-.85]} rotation={[-Math.PI/2,0,-.08]} onClick={e=>{e.stopPropagation();interact(0)}} onPointerOver={on} onPointerOut={off}><Plaque text="创作手记" sub="翻开，读一会儿" at={[0,0,0]} size={[.32,.24]}/></group>
+      <group position={[-.5,.79,-.85]} rotation={[-Math.PI/2,0,-.08]} onClick={e=>{e.stopPropagation();if(e.delta<8){playSound('paper-flip');interact(0)}}} onPointerOver={on} onPointerOut={off}><Plaque text="创作手记" sub="翻开，读一会儿" at={[0,0,0]} size={[.32,.24]}/></group>
       <StudyInteractiveNodes deskLampOn={deskLampOn} onToggleLamp={onToggleDeskLamp} onDrawQuote={onDrawStudyQuote}/>
     </>}
-    <Plant pack={pack} at={id==='study'?[-2.5,0,-1.35]:id==='gallery'?[2.45,0,-1.5]:[-2.5,0,-1.3]} height={id==='blank'?1.2:.9}/>
+    <Plant pack={pack} at={id==='study'?[-2.5,0,-1.35]:id==='gallery'?[2.45,0,-1.5]:[-2.5,0,-1.3]} height={id==='blank'?1.2:.9} onTap={()=>onTapProp?.('枝叶在房间光线里微微摇晃')}/>
     {id==='blank'&&<>
-      <Plaque text="关于我" sub="认识小屋的主人" at={[1.65,1.75,-2.02]} size={[1.2,.4]}/>
+      <group onClick={e=>{e.stopPropagation();if(e.delta<8){playSound('bench');onTapProp?.('实木铭牌微凉沉稳，推开窗就是小院')}}} onPointerOver={on} onPointerOut={off}>
+        <Plaque text="关于我" sub="认识小屋的主人" at={[1.65,1.75,-2.02]} size={[1.2,.4]}/>
+      </group>
+      <group position={[.42,.52,-.64]} onClick={e=>{e.stopPropagation();if(e.delta<8){playSound('ceramics');onTapProp?.('轻叩手捏素烧陶罐，传出温和清脆的窑音')}}} onPointerOver={on} onPointerOut={off}>
+        <mesh visible={false}><cylinderGeometry args={[.13,.13,.26,12]}/><meshBasicMaterial/></mesh>
+      </group>
       <BlankTabletopCards nowNotes={nowNotes} onSelect={()=>onSelectBlankTable?.()}/>
     </>}
   </group>
@@ -466,6 +472,7 @@ export function World({
   onDrawStudyQuote,
   onSelectFocus,
   onTriggerMailbox,
+  onTapProp,
   nowNotes,
 }:{
   place:Place
@@ -487,6 +494,7 @@ export function World({
   onDrawStudyQuote?:()=>void
   onSelectFocus?:(id:FocusSubPoseId)=>void
   onTriggerMailbox?:()=>void
+  onTapProp?:(msg:string)=>void
   nowNotes?:string[]
 }){
   const materials=useMemo(()=>makeMaterials(pack),[pack]),house=useMemo(shell,[]),yard=useMemo(garden,[]),{scene,gl}=useThree()
@@ -529,7 +537,7 @@ export function World({
     <StaticBatch builder={house} materials={materials}/><StaticBatch builder={yard} materials={materials}/>
     <StaticBatch builder={glass} materials={glassMaterials} castShadow={false}/>
     <Door at={[0,0,.045]} open={outside&&(!!opening||!!destination)} click={()=>navigate('hall')} materials={materials} reduced={reduced}/>
-    <Signage homeName={homeName} plaqueTitle={plaqueTitle} plaqueSubtitle={plaqueSubtitle} materials={materials}/>
+    <Signage homeName={homeName} plaqueTitle={plaqueTitle} plaqueSubtitle={plaqueSubtitle} materials={materials} onTapPlaque={()=>onTapProp?.('轻叩门牌，木纹温润沉稳')}/>
     {/* Yard interactive bench and porch mailbox */}
     <group position={[-5,.42,6.1]} rotation={[0,.1,0]} onClick={e=>{e.stopPropagation();if(e.delta<8&&place==='yard')onSelectFocus?.('yard-bench')}} onPointerOver={on} onPointerOut={off}>
       <mesh visible={false}><boxGeometry args={[1.75,.55,.6]}/><meshBasicMaterial/></mesh>
@@ -553,12 +561,15 @@ export function World({
         onToggleDeskLamp={onToggleDeskLamp}
         onDrawStudyQuote={onDrawStudyQuote}
         onSelectBlankTable={()=>onSelectFocus?.('blank-table')}
+        onTapProp={onTapProp}
         nowNotes={nowNotes}
       />
     </group>)}
-    <Plant pack={pack} at={[-5.5,-.29,5.3]} height={5.7} tree rotation={.5}/>
-    <Plant pack={pack} at={[-1.05,0,1.15]} height={.86}/><Plant pack={pack} at={[1.08,0,1.12]} height={.67}/>
-    <Plant pack={pack} at={[-3.4,-.28,.65]} height={.8}/><Plant pack={pack} at={[3.6,-.28,.65]} height={.9}/>
+    <Plant pack={pack} at={[-5.5,-.29,5.3]} height={5.7} tree rotation={.5} onTap={()=>onTapProp?.('风吹过院子里的老树，叶片沙沙作响')}/>
+    <Plant pack={pack} at={[-1.05,0,1.15]} height={.86} onTap={()=>onTapProp?.('门廊旁的绿植轻轻晃了晃')}/>
+    <Plant pack={pack} at={[1.08,0,1.12]} height={.67} onTap={()=>onTapProp?.('门廊旁的绿植轻轻晃了晃')}/>
+    <Plant pack={pack} at={[-3.4,-.28,.65]} height={.8} onTap={()=>onTapProp?.('窗边花盆的叶片轻轻晃动')}/>
+    <Plant pack={pack} at={[3.6,-.28,.65]} height={.9} onTap={()=>onTapProp?.('窗边花盆的叶片轻轻晃动')}/>
     <Grass/>
   </>
 }

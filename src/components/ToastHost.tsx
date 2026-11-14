@@ -53,6 +53,7 @@ export function ToastHost({
           <button
             type="button"
             className="toast-dismiss"
+            data-sound="ui-tap"
             onClick={() => onDismiss(toast.id)}
             aria-label="关闭提示"
           >

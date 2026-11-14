@@ -39,6 +39,8 @@ export function Icon({ name, size = 22 }: { name: string; size?: number }) {
     stamp: <><path d="M9 6a3 3 0 1 1 6 0c0 1.6-1.2 2.6-1.2 4.2h-3.6C10.2 8.6 9 7.6 9 6z" /><rect x="5" y="13" width="14" height="4" rx="1.2" /><path d="M6 20h12" /></>,
     bench: <><path d="M4 11h16M5 7h14v4H5zM6 11v6m12-6v6M3 14h18" /></>,
     mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6" /></>,
+    sfxOn: <><path d="M12 4a5 5 0 0 0-5 5v3l-1.5 2.5h13L17 12V9a5 5 0 0 0-5-5z" /><path d="M10 18.5a2 2 0 0 0 4 0" /></>,
+    sfxOff: <><path d="M12 4a5 5 0 0 0-5 5v3l-1.5 2.5h13L17 12V9a5 5 0 0 0-5-5z" /><path d="m4 4 16 16" /></>,
   }
   return (
     <svg
