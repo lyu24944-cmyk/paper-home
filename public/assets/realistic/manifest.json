@@ -1,0 +1,514 @@
+{
+  "generated": "2026-11-13T01:12:56.928Z",
+  "records": [
+    {
+      "name": "brick",
+      "id": "red_brick_03",
+      "source": "https://polyhaven.com/a/red_brick_03",
+      "authors": {
+        "Rob Tuytel": "All"
+      },
+      "license": "CC0-1.0",
+      "resolution": "4k",
+      "meters": 1,
+      "assets": [
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/red_brick_03/red_brick_03_diff_4k.jpg",
+          "sourceMD5": "0c257e296a367319d81600490626d0f5",
+          "sha256": "7c6b3e81a20efc8c53fe85b83aa9727d38a2b0fe29fbca4bcf100db711fe8cda",
+          "bytes": 11437615
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/red_brick_03/red_brick_03_nor_gl_4k.jpg",
+          "sourceMD5": "6dada14dc227b6593f4c2b78d16a1a59",
+          "sha256": "5858d90d1b7e333890a61b51040615021660760273a0025b5348c84f436f6dd8",
+          "bytes": 11123969
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/red_brick_03/red_brick_03_rough_4k.jpg",
+          "sourceMD5": "0dcfe460a4a0513795e34cd7e6de1c9b",
+          "sha256": "6f22f26a1ddd593752f524c0c189a8c0f13233e77fd52907b62c2a5bbe4bf7fd",
+          "bytes": 4908970
+        }
+      ]
+    },
+    {
+      "name": "roof",
+      "id": "roof_tiles_14",
+      "source": "https://polyhaven.com/a/roof_tiles_14",
+      "authors": {
+        "Rob Tuytel": "All"
+      },
+      "license": "CC0-1.0",
+      "resolution": "2k",
+      "meters": 1.5,
+      "assets": [
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/roof_tiles_14/roof_tiles_14_diff_2k.jpg",
+          "sourceMD5": "4870e0f07b7b36c421fbf4879563e73d",
+          "sha256": "f96246aee8e86f5938734d7cdf8fbeb848fa56a1ce040106d8c02a21fbf833ae",
+          "bytes": 1389810
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/roof_tiles_14/roof_tiles_14_nor_gl_2k.jpg",
+          "sourceMD5": "24110fa17984d61ff7a2e0a1b490be3a",
+          "sha256": "c1b91e1b1c799ec7ee490d3f28e408d4c0558f59e1cdadfd52312859c54fc529",
+          "bytes": 1673189
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/roof_tiles_14/roof_tiles_14_rough_2k.jpg",
+          "sourceMD5": "e56f7773d86315d3c382e1c182b3fec4",
+          "sha256": "96828b7ba4ca712b9fada671dfb884fc6951bcf56fded0a401c7a3de4afed361",
+          "bytes": 1251599
+        }
+      ]
+    },
+    {
+      "name": "plaster",
+      "id": "plastered_wall_02",
+      "source": "https://polyhaven.com/a/plastered_wall_02",
+      "authors": {
+        "Charlotte Baglioni": "All"
+      },
+      "license": "CC0-1.0",
+      "resolution": "2k",
+      "meters": 2.23,
+      "assets": [
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/plastered_wall_02/plastered_wall_02_diff_2k.jpg",
+          "sourceMD5": "927533b695ab50bbbdfeaf6f0519fa3f",
+          "sha256": "caa72056d9157f08912a4c86c844296f93f323f8b30f418895625b052c837d0c",
+          "bytes": 1713014
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/plastered_wall_02/plastered_wall_02_nor_gl_2k.jpg",
+          "sourceMD5": "86090c056cc823f6e0125be0e05add82",
+          "sha256": "7667573e538a6116892a3139fbecf5acb85728bf10e715111b87080af756cd78",
+          "bytes": 3842550
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/plastered_wall_02/plastered_wall_02_rough_2k.jpg",
+          "sourceMD5": "346ae12db0d37287eb7df2be1848ab0e",
+          "sha256": "01b41c22151f7b3d7d6e78720205a6df9b36ed11ae36bbe6ea35994fba0c1d82",
+          "bytes": 812325
+        }
+      ]
+    },
+    {
+      "name": "wood",
+      "id": "wood_floor",
+      "source": "https://polyhaven.com/a/wood_floor",
+      "authors": {
+        "Dimitrios Savva": "All"
+      },
+      "license": "CC0-1.0",
+      "resolution": "4k",
+      "meters": 1.7,
+      "assets": [
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/wood_floor/wood_floor_diff_4k.jpg",
+          "sourceMD5": "0ec20da4eb478c72f34b73e6421d6a9a",
+          "sha256": "366789dbb28a4d6b6a8d3dad51eb8930444d6aa26dce418624b12b5bf1d0c46b",
+          "bytes": 10771881
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/wood_floor/wood_floor_nor_gl_4k.jpg",
+          "sourceMD5": "c6d7fd4f38f1583e205e852811b33b42",
+          "sha256": "b579e55fa92aaa483775948cf46d27797546dedae2b32f75e9a1acf0ec00b0bb",
+          "bytes": 6964039
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/wood_floor/wood_floor_rough_4k.jpg",
+          "sourceMD5": "2667e84c12fe5bf05312d224175a64e0",
+          "sha256": "686ea805e8a855477b00007341854b0d3cc1709f8add5fc707904f966db42691",
+          "bytes": 8369568
+        }
+      ]
+    },
+    {
+      "name": "stone",
+      "id": "cobblestone_floor_08",
+      "source": "https://polyhaven.com/a/cobblestone_floor_08",
+      "authors": {
+        "Rob Tuytel": "All"
+      },
+      "license": "CC0-1.0",
+      "resolution": "2k",
+      "meters": 2,
+      "assets": [
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/cobblestone_floor_08/cobblestone_floor_08_diff_2k.jpg",
+          "sourceMD5": "56404e8a3cdf04c8697dbbc7f9ddd65c",
+          "sha256": "9aaf7db7f660f03d0c5c129c11e83caa828fb8bca63f8cd5154d450ffc4c340f",
+          "bytes": 2289909
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/cobblestone_floor_08/cobblestone_floor_08_nor_gl_2k.jpg",
+          "sourceMD5": "3d1c34ed083de54949e8375d69033b0b",
+          "sha256": "42dd5fc2da4a858f9c076c9ac5002857a1c064f8f4c4ffb12fafecffb84e96cc",
+          "bytes": 3948187
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/cobblestone_floor_08/cobblestone_floor_08_rough_2k.jpg",
+          "sourceMD5": "caae39f3ea47e2c09ca897d8dffa00ea",
+          "sha256": "3bc645ec45543c704fe1042f7b81f9bad4f88a8567760c4898c82bc2a134e093",
+          "bytes": 1657928
+        }
+      ]
+    },
+    {
+      "name": "grass",
+      "id": "grass_ground",
+      "source": "https://polyhaven.com/a/grass_ground",
+      "authors": {
+        "Charlotte Baglioni": "All"
+      },
+      "license": "CC0-1.0",
+      "resolution": "2k",
+      "meters": 2.51,
+      "assets": [
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grass_ground/grass_ground_diff_2k.jpg",
+          "sourceMD5": "fd97f2402677e6686b2d9159fc3a4256",
+          "sha256": "4272bddc71a7fa659d1deeb13a9df8c42e68a5ac8cde7523187e4a081e028258",
+          "bytes": 3787330
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grass_ground/grass_ground_nor_gl_2k.jpg",
+          "sourceMD5": "c8b2dd95f09868c4aacb91f62c673344",
+          "sha256": "effa95c06af273c974476d9a74a234668a1c9292f60fffb4fa40348d638ee7f3",
+          "bytes": 5968024
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grass_ground/grass_ground_rough_2k.jpg",
+          "sourceMD5": "0685285b42a7110ce0876f676a2f79c2",
+          "sha256": "afaed95537e894b8054db38c81712a6d9504b05b560274526621d91d5a95fbe7",
+          "bytes": 1525000
+        }
+      ]
+    },
+    {
+      "id": "island_tree_01",
+      "source": "https://polyhaven.com/a/island_tree_01",
+      "authors": {
+        "Rob Tuytel": "scanning, processing",
+        "Rico Cilliers": "cleanup, processing"
+      },
+      "license": "CC0-1.0",
+      "originalTriangles": 1599403,
+      "bounds": {
+        "min": [
+          -2.3444457054138184,
+          -0.020327899605035782,
+          -2.583538055419922
+        ],
+        "max": [
+          2.4107038974761963,
+          5.0071187019348145,
+          2.2341415882110596
+        ]
+      },
+      "lod": [
+        {
+          "level": "high",
+          "triangles": 123752,
+          "bytes": 5398940,
+          "sha256": "d820b6b30158530d6908b044bef981ab97ac9622b85f069d4c4737a7195d6776"
+        },
+        {
+          "level": "low",
+          "triangles": 36545,
+          "bytes": 1933320,
+          "sha256": "dc9a1a0c967e067b6863d49eb85d90c8a0579b7f001897dfd9b54bbaa5203667"
+        }
+      ],
+      "assets": [
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/2k/island_tree_01/island_tree_01_2k.gltf",
+          "sourceMD5": "5facbb0c10b6bce8956bba1c179bfdad",
+          "sha256": "6024cf385e9e0add29030925f8b891de264b813948f1cb9fb95633e256f50dc7",
+          "bytes": 8576
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/island_tree_01/island_tree_01_arm_2k.jpg",
+          "sourceMD5": "d6429928be150750d4cb51ef2bc4232f",
+          "sha256": "c9754d0a62cb6d97eb9bf0f82effbdd81cfba613ba451a27054438e2eba8188f",
+          "bytes": 2460274
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/island_tree_01/island_tree_01_diff_2k.jpg",
+          "sourceMD5": "06808aa5ccbfbc2a7e2f99a23f412c17",
+          "sha256": "08df798e0cadae17359d480bfda1dba59f757a7b1d03e288d3360c289dd28f78",
+          "bytes": 2954942
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/island_tree_01/island_tree_01_nor_gl_2k.jpg",
+          "sourceMD5": "1a4aa5c3c599fa9e69d27636680d03f1",
+          "sha256": "d93014f038fc2dfab942ec89cfc1679345bad2a279a0be63fbe58ef0817900b5",
+          "bytes": 4527774
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/island_tree_01/island_tree_01_leaves_diff_2k.jpg",
+          "sourceMD5": "9898a7bf79fe6214f7ca8c3b139c4116",
+          "sha256": "e5c56ca13525aed76572852da5f69ae87cbee9e15abe2e1eff23adf92975f14a",
+          "bytes": 661175
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/island_tree_01/island_tree_01_leaves_nor_gl_2k.jpg",
+          "sourceMD5": "b7d1e6306288a64119e1d17dae3c272d",
+          "sha256": "efa74b8b59a7466a295bf210505560002990183817b6c33663f3ec0dd438dd73",
+          "bytes": 1378585
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/island_tree_01/island_tree_01_leaves_arm_2k.jpg",
+          "sourceMD5": "a03c8dd6852becfbc0fbec70a4f0b30f",
+          "sha256": "cf4d604711d955d74a13b656bdbf840015ac38a71e24821849efade730634cc6",
+          "bytes": 1645169
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/island_tree_01/island_tree_01_branches_diff_2k.jpg",
+          "sourceMD5": "3210126439a8423b3caba28de0f3c25f",
+          "sha256": "52cb2c660983836249e3f31ad286ca1bab8033e93070569b23e1867e3ae70b4d",
+          "bytes": 1476655
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/island_tree_01/island_tree_01_branches_arm_2k.jpg",
+          "sourceMD5": "969af8206d91a37edfefaf65a668470e",
+          "sha256": "a39d8291ba54adf1ca42f15abe2f622d0ac59fb13c87087a0fabc755b91dfee8",
+          "bytes": 1523257
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/island_tree_01/island_tree_01_branches_nor_gl_2k.jpg",
+          "sourceMD5": "0b598c975ce1515ea0d51fb0d5696ea3",
+          "sha256": "e4cac77b4f35ad47ba4fcdb9061f91acf3318d9889dd259cb5e6e132b0ab60c7",
+          "bytes": 2437750
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/island_tree_01/island_tree_01.bin",
+          "sourceMD5": "8271f2d12c2727bd647ce0c242acdcec",
+          "sha256": "1faa817b46e24ed6fc90d3ec72188a0dc5ac75e82c89b3dd3c5fdaecf7cc005c",
+          "bytes": 60709812
+        }
+      ]
+    },
+    {
+      "id": "potted_plant_02",
+      "source": "https://polyhaven.com/a/potted_plant_02",
+      "authors": {
+        "Rico Cilliers": "All"
+      },
+      "license": "CC0-1.0",
+      "originalTriangles": 69806,
+      "bounds": {
+        "min": [
+          -0.3966600392013788,
+          0.00005296462768455967,
+          -0.42031260282965377
+        ],
+        "max": [
+          0.3044969942420721,
+          0.8412317037582397,
+          0.23707397282123566
+        ]
+      },
+      "lod": [
+        {
+          "level": "high",
+          "triangles": 21992,
+          "bytes": 1643500,
+          "sha256": "6b96ede1bd191cb171019c7a40c2dc417c1d3a52c93eb34eb1ba9d734a3e998f"
+        },
+        {
+          "level": "low",
+          "triangles": 6992,
+          "bytes": 478956,
+          "sha256": "3913070f106ebf031860817b429c6cd0b90980912c2d9b2622a4dfa6f12a6eb7"
+        }
+      ],
+      "assets": [
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/2k/potted_plant_02/potted_plant_02_2k.gltf",
+          "sourceMD5": "9161f84da94065f5b3888347c0f275ce",
+          "sha256": "80ab49cb61737244f50b805ddde3dd64e461b2a244817f8882e95a97c916d158",
+          "bytes": 6653
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/potted_plant_02/potted_plant_02_leaves_nor_gl_2k.jpg",
+          "sourceMD5": "c187345d2875a28be93e61db4dd61558",
+          "sha256": "2ae648b12ea457fb720f9adc6f8dc9feb8d5409e43f3b9f2ce7f089b3eef12f6",
+          "bytes": 481780
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/potted_plant_02/potted_plant_02_leaves_diff_2k.jpg",
+          "sourceMD5": "96aa3bba976e762eedced66d9832c2a5",
+          "sha256": "f70de9a4b735b740e79d4e7720a47eae5e2bb4a289880cdae5905d156223bd7d",
+          "bytes": 584084
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/potted_plant_02/potted_plant_02_pot_diff_2k.jpg",
+          "sourceMD5": "d7c6055680866af21f73e14a57bbd7d3",
+          "sha256": "21672040b5de49e7dae07452431b4fe5cf401494f5ab5157b5f54a146cc68383",
+          "bytes": 596006
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/potted_plant_02/potted_plant_02_leaves_rough_2k.jpg",
+          "sourceMD5": "0b1e1d0c38da3a5d73dc1274fc739fa0",
+          "sha256": "399e61a82069b3e344cece76c128f84a664dd44719331450877b671906e01e27",
+          "bytes": 435284
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/potted_plant_02/potted_plant_02_pot_nor_gl_2k.jpg",
+          "sourceMD5": "0b333cfc921defac311dc9232f2f01b9",
+          "sha256": "8e8c2e96de90e793712a9db8a6cea7a38f7fd5ec489b8134b586a42ebbbfcb11",
+          "bytes": 494387
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/potted_plant_02/potted_plant_02.bin",
+          "sourceMD5": "cdbd4619b2596c9c469ad34676085fa8",
+          "sha256": "9c9812482c78a59789ed32fa842b4cbd9365e09c900c31ebb998e5efe627fe97",
+          "bytes": 1852244
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/potted_plant_02/potted_plant_02_pot_rough_2k.jpg",
+          "sourceMD5": "08a89ef59d4fd0b19a925cc4d2c512af",
+          "sha256": "c1f341bfa5e610dab2fd31aad4068fa20cf957b098912da5949bca996d7649bf",
+          "bytes": 426559
+        }
+      ]
+    },
+    {
+      "id": "kloofendal_48d_partly_cloudy_puresky",
+      "source": "https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky",
+      "authors": {
+        "Greg Zaal": "Original",
+        "Jarod Guest": "Sky edits"
+      },
+      "license": "CC0-1.0",
+      "assets": [
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloofendal_48d_partly_cloudy_puresky_1k.hdr",
+          "sourceMD5": "c69498687e876bf68d2a8b8a62234eb9",
+          "sha256": "fd94c84997b8a3c353b62c2125a9b44e19509956986a126e472684432a02d798",
+          "bytes": 1435119
+        }
+      ]
+    }
+  ],
+  "served": [
+    {
+      "filename": "brick-color.webp",
+      "bytes": 5839180,
+      "sha256": "05cb14b222ed2737c5b0cdc52cc32aacf268d2481b5f31bf9a643f9b9a15ca51"
+    },
+    {
+      "filename": "brick-normal.webp",
+      "bytes": 3953868,
+      "sha256": "1d212260dc5cd10a301d06b180c473969c5de0bc7cda0153b85cb0ce9cc874a3"
+    },
+    {
+      "filename": "brick-roughness.webp",
+      "bytes": 1936042,
+      "sha256": "ef1b19a0f977c82be09d915075fb16f2e0a6093c7d7005b8505c67ae3c03eb5a"
+    },
+    {
+      "filename": "daylight.hdr",
+      "bytes": 1435119,
+      "sha256": "fd94c84997b8a3c353b62c2125a9b44e19509956986a126e472684432a02d798"
+    },
+    {
+      "filename": "grass-color.webp",
+      "bytes": 1195294,
+      "sha256": "c3613c7ce11595505e56b56a14bb925bb6c38c48e3777a2c90dd32df13e44bff"
+    },
+    {
+      "filename": "grass-normal.webp",
+      "bytes": 2299402,
+      "sha256": "8f1080045aae3d2efbc3d8876b4b506328e5a3f28ce11cadb2076b3c2908d93d"
+    },
+    {
+      "filename": "grass-roughness.webp",
+      "bytes": 46444,
+      "sha256": "52159f8a76b33f113cfb923fbf9d695e5ef742aaa3f26b0dac1744a5b793ee87"
+    },
+    {
+      "filename": "island_tree_01-high.glb",
+      "bytes": 5398940,
+      "sha256": "d820b6b30158530d6908b044bef981ab97ac9622b85f069d4c4737a7195d6776"
+    },
+    {
+      "filename": "island_tree_01-low.glb",
+      "bytes": 1933320,
+      "sha256": "dc9a1a0c967e067b6863d49eb85d90c8a0579b7f001897dfd9b54bbaa5203667"
+    },
+    {
+      "filename": "plaster-color.webp",
+      "bytes": 154848,
+      "sha256": "6d35e6d08c433e89815e7c1907d1a5897d819f06cc53d12a5808179dfbd75318"
+    },
+    {
+      "filename": "plaster-normal.webp",
+      "bytes": 1120112,
+      "sha256": "9dd43ffb274a74eb9028e9b52b0de0b8d07a133bc335dd97f2366f39dab9782b"
+    },
+    {
+      "filename": "plaster-roughness.webp",
+      "bytes": 7722,
+      "sha256": "745f184e92bd9866800a1cd1f7c833857233d514c6d443d52d7a3f5e64137aed"
+    },
+    {
+      "filename": "potted_plant_02-high.glb",
+      "bytes": 1643500,
+      "sha256": "6b96ede1bd191cb171019c7a40c2dc417c1d3a52c93eb34eb1ba9d734a3e998f"
+    },
+    {
+      "filename": "potted_plant_02-low.glb",
+      "bytes": 478956,
+      "sha256": "3913070f106ebf031860817b429c6cd0b90980912c2d9b2622a4dfa6f12a6eb7"
+    },
+    {
+      "filename": "roof-color.webp",
+      "bytes": 385600,
+      "sha256": "f796c3e1313fc0b5d0ba7f82da80e27ebdcd173853474190b60a9b1e3e350d1f"
+    },
+    {
+      "filename": "roof-normal.webp",
+      "bytes": 437680,
+      "sha256": "42f9e09f906198f29ddc9d5367c28c13b72164d904df39fd65ae917b88a1721a"
+    },
+    {
+      "filename": "roof-roughness.webp",
+      "bytes": 381274,
+      "sha256": "341a42942516192773496922d4c04c0d17b718bd03eec5529d9095c6bc5b0fe7"
+    },
+    {
+      "filename": "stone-color.webp",
+      "bytes": 1136556,
+      "sha256": "a8ff681c06c5a354abc0748f286f17a2d672394ffa609e53a3be71a928304282"
+    },
+    {
+      "filename": "stone-normal.webp",
+      "bytes": 1426408,
+      "sha256": "5ab9b28220ccf025710d9baa5fc92b35d9f8d8d40ba343e31bbd6ae730980291"
+    },
+    {
+      "filename": "stone-roughness.webp",
+      "bytes": 889016,
+      "sha256": "8b5b224dc96897cb92f6c98a3fb20b5e77aef01fd9f69c7faeda6f13eac3f01c"
+    },
+    {
+      "filename": "wood-color.webp",
+      "bytes": 2376458,
+      "sha256": "93b481d39b7b54c81ce4ddafe67a4c1a27650ad46fb161e11dfaadf07f3e6ecb"
+    },
+    {
+      "filename": "wood-normal.webp",
+      "bytes": 794926,
+      "sha256": "5d41ccbb79d976810fa3f13096421ca429274b692af6f47b135d971f09df0778"
+    },
+    {
+      "filename": "wood-roughness.webp",
+      "bytes": 2077470,
+      "sha256": "36c5702278c38094c27f8baf2603e03208e7366ff1c152d7dc26d6e58731527d"
+    }
+  ]
+}

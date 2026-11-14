@@ -1,0 +1,8 @@
+{
+  "mode": "experience",
+  "authority": "User-approved realistic 11 by 15 metre cottage and courtyard reconstruction; natural daylight, residential scale, desktop-first local preview",
+  "colors": { "paper": "#f4f4ed", "ink": "#29362e", "secondary": "#536154", "action": "#365840", "primaryControl": "#3f5543" },
+  "fonts": { "display": "HomeHand", "interface": "Microsoft YaHei, PingFang SC, sans-serif" },
+  "surface": "A full-viewport, navigable realistic three-dimensional cottage with complete pitched roof, courtyard and lit interior",
+  "signature": "Walk along the solid paving into the porch, cross a real wooden doorway, explore the left-right-left room sequence and return through the same thresholds using quaternion camera poses"
+}

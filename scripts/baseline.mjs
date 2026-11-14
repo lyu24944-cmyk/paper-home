@@ -1,0 +1,10 @@
+import { chromium } from '@playwright/test';
+const browser = await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true,args:['--enable-webgl','--ignore-gpu-blocklist']});
+const page=await browser.newPage({viewport:{width:1440,height:900},deviceScaleFactor:1});
+await page.goto('http://127.0.0.1:4317/');
+await page.waitForTimeout(4500);
+await page.screenshot({path:'.qa/realistic/before-yard.png'});
+await page.getByRole('button',{name:'敲敲门，进来坐坐'}).click();
+await page.waitForTimeout(3600);
+await page.screenshot({path:'.qa/realistic/before-hall.png'});
+await browser.close();

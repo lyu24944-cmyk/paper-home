@@ -1,0 +1,22 @@
+import {chromium} from '@playwright/test';
+import fs from 'node:fs/promises';
+const browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true,args:['--enable-webgl','--ignore-gpu-blocklist','--enable-gpu-rasterization']});
+const page=await browser.newPage({viewport:{width:1440,height:900},deviceScaleFactor:1});
+const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+await page.goto('http://127.0.0.1:4318/?qa');
+await page.getByRole('button',{name:'敲敲门，进来坐坐'}).waitFor();
+await page.waitForFunction(()=>!document.querySelector('.enter-button')?.disabled,{timeout:120000});
+await page.waitForTimeout(3000);
+await page.screenshot({path:'.qa/realistic/yard-first.png'});
+console.log('yard',await page.evaluate(()=>window.__HOME_QA__));
+await page.getByRole('button',{name:'敲敲门，进来坐坐'}).click();
+await page.waitForFunction(()=>location.hash==='#hall'&&!document.querySelector('.traveling'),{timeout:40000});
+await page.screenshot({path:'.qa/realistic/hall-first.png'});
+await page.getByRole('button',{name:'小屋地图'}).click();
+await page.getByRole('button',{name:/收藏展廊/}).click();
+await page.waitForFunction(()=>location.hash==='#gallery'&&!document.querySelector('.traveling'),{timeout:40000});
+await page.screenshot({path:'.qa/realistic/gallery-first.png'});
+console.log('gallery',await page.evaluate(()=>window.__HOME_QA__));
+await fs.writeFile('.qa/realistic/first-errors.json',JSON.stringify(errors,null,2));console.log('errors',errors);
+await browser.close();
+

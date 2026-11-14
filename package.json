@@ -1,0 +1,43 @@
+{
+  "name": "paper-home",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "assets:prepare": "node scripts/assets.mjs",
+    "assets:verify": "node scripts/check-assets.mjs",
+    "prebuild": "node scripts/check-assets.mjs",
+    "check:camera": "node scripts/camera-check.mjs",
+    "check:polish": "node scripts/polish-check.mjs",
+    "check:window-performance": "node scripts/window-performance.mjs after",
+    "check:interactions": "node scripts/verify.mjs",
+    "check:edge-cases": "node scripts/edge-cases.mjs",
+    "qa:report": "node scripts/polish-report.mjs",
+    "dev": "vite --host 127.0.0.1 --port 4318 --strictPort",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4319 --strictPort"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.0",
+    "@react-three/fiber": "^9.7.0",
+    "gsap": "^3.14.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "three": "^0.185.0"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
+    "@playwright/test": "^1.65.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/three": "^0.185.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "meshoptimizer": "^1.3.0",
+    "sharp": "^0.35.5",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.0"
+  }
+}
+

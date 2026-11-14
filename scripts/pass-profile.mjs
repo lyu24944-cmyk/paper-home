@@ -1,0 +1,12 @@
+import {chromium} from '@playwright/test';
+import fs from 'node:fs/promises';
+const browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:false,args:['--enable-webgl','--ignore-gpu-blocklist']});
+const page=await browser.newPage({viewport:{width:2560,height:1440},deviceScaleFactor:1,reducedMotion:'reduce'});
+await page.goto('http://127.0.0.1:4319/?qa&gpu#hall');await page.waitForFunction(()=>!document.querySelector('.loading-note'),{timeout:120000});
+await page.waitForTimeout(2000);await page.evaluate(()=>{Object.values(window.__HOME_QA__.gpu).forEach(v=>{v.length=0});window.__HOME_QA__.start()});
+await page.evaluate(()=>{const el=document.querySelector('.home-app'),start=performance.now(),max=el.scrollHeight-el.clientHeight;const tick=()=>{const t=(performance.now()-start)/12000;el.scrollTop=(.5-.5*Math.cos(t*Math.PI*2))*max;if(t<1)requestAnimationFrame(tick)};tick()});
+await page.waitForTimeout(12500);
+const result=await page.evaluate(()=>({metrics:window.__HOME_QA__.stop(),qa:window.__HOME_QA__}));
+await fs.writeFile('.qa/polish/after/pass-profile.json',JSON.stringify(result,null,2));
+const summary=Object.fromEntries(Object.entries(result.qa.gpu).map(([name,values])=>{values.sort((a,b)=>a-b);return [name,{samples:values.length,p50:values[Math.floor(values.length*.5)],p95:values[Math.floor(values.length*.95)],max:values.at(-1)}]}));
+console.log(JSON.stringify({gpu:summary,metrics:result.metrics},null,2));await browser.close();
