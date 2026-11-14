@@ -1,0 +1,32 @@
+project_id = "paper-home"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:4318"
+enable_signup = false
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[functions.public-content]
+verify_jwt = false
+
+[functions.admin-content]
+verify_jwt = false
+
+[functions.admin-mutate]
+verify_jwt = false
+
+[functions.media-sign]
+verify_jwt = false
+
+[functions.media-cleanup]
+verify_jwt = false

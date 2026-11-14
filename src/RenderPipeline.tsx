@@ -95,7 +95,8 @@ export function RenderPipeline({quality,transition,prepare,onPreparing,onReady}:
       if(start-diagnosticAt.current>250){diagnosticAt.current=start;let triangles=0,objects=0
         scene.traverseVisible(o=>{if(o instanceof Mesh){const g=o.geometry;if(g){triangles+=(g.index?g.index.count:g.getAttribute('position')?.count||0)/3*('count'in o?Number(o.count):1);objects++}}})
         const context=gl.getContext(),debug=context.getExtension('WEBGL_debug_renderer_info')
-        Object.assign(api,{sceneTriangles:triangles,objects,renderer:debug?context.getParameter(debug.UNMASKED_RENDERER_WEBGL):context.getParameter(context.RENDERER)})
+        const galleryGroup=scene.getObjectByName('gallery-papers')
+        Object.assign(api,{sceneTriangles:triangles,objects,galleryPaperXs:galleryGroup?galleryGroup.children.map(c=>Number(c.position.x.toFixed(3))):[],renderer:debug?context.getParameter(debug.UNMASKED_RENDERER_WEBGL):context.getParameter(context.RENDERER)})
       }
       if(recording.current){if(previous.current)frames.current.push(start-previous.current);previous.current=start}
     }

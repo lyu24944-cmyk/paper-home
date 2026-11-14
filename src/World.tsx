@@ -3,10 +3,10 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { Box3, CanvasTexture, DoubleSide, ExtrudeGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshDepthMaterial, MeshPhysicalMaterial, PlaneGeometry, Quaternion, RGBADepthPacking, Shape, ShapeGeometry, SRGBColorSpace, Vector3 } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import gsap from 'gsap'
-import { artworks, type Place } from './content'
-import { artTexture } from './sketch'
+import type { Place } from './content'
+import type { GalleryDisplayItem } from './types/content'
 import { Builder, makeMaterials, StaticBatch } from './Geometry'
-import { doorStops, layout, roomTransform, type V3 } from './layout'
+import { doorStops, gallerySlotX, layout, roomTransform, type V3 } from './layout'
 import type { ResourcePack } from './resources'
 export { CameraController, type CameraHandle } from './Camera'
 export { doorStops, hallPose } from './layout'
@@ -240,17 +240,56 @@ function roomFurniture(id:Place){
   }
   return b
 }
-function Paper({index,reduced,interact}:{index:number;reduced:boolean;interact:(i:number)=>void}){
-  const art=artworks[index],group=useRef<Group>(null)
+function drawGallerySheet(canvas:HTMLCanvasElement,title:string,img?:HTMLImageElement|null){
+  const w=canvas.width,h=canvas.height,c=canvas.getContext('2d')!
+  c.fillStyle='#eee8d9';c.fillRect(0,0,w,h)
+  c.strokeStyle='rgba(72,77,65,.22)';c.lineWidth=3;c.strokeRect(18,18,w-36,h-36)
+  if(img&&img.naturalWidth>0&&img.naturalHeight>0){
+    const padX=34,padTop=38,areaW=w-padX*2,areaH=h-185
+    const scale=Math.min(areaW/img.naturalWidth,areaH/img.naturalHeight)
+    const dw=img.naturalWidth*scale,dh=img.naturalHeight*scale
+    const dx=padX+(areaW-dw)/2,dy=padTop+(areaH-dh)/2
+    c.fillStyle='#faf7ee';c.fillRect(dx-6,dy-6,dw+12,dh+12)
+    c.drawImage(img,dx,dy,dw,dh)
+    c.fillStyle='#2f3830';c.textAlign='center';c.textBaseline='middle'
+    c.font='38px HomeHand, KaiTi, STKaiti, "Microsoft YaHei", serif'
+    c.fillText(title,w/2,h-84,w-84)
+  }else{
+    c.fillStyle='#2f3830';c.textAlign='center';c.textBaseline='middle'
+    c.font='44px HomeHand, KaiTi, STKaiti, "Microsoft YaHei", serif'
+    c.fillText(title,w/2,h/2,w-96)
+  }
+}
+function Paper({item,index,count,reduced,interact,onCoverExpired}:{item:GalleryDisplayItem;index:number;count:number;reduced:boolean;interact:(i:number)=>void;onCoverExpired?:(assetId:string)=>void}){
+  const group=useRef<Group>(null)
+  const {canvas,texture}=useMemo(()=>{
+    const cvs=document.createElement('canvas');cvs.width=720;cvs.height=900
+    drawGallerySheet(cvs,item.title)
+    const tex=new CanvasTexture(cvs);tex.colorSpace=SRGBColorSpace;tex.anisotropy=4
+    return {canvas:cvs,texture:tex}
+  },[])
+  useEffect(()=>{
+    drawGallerySheet(canvas,item.title)
+    texture.needsUpdate=true
+    if(!item.coverThumbUrl)return
+    let active=true
+    const img=new Image()
+    img.crossOrigin='anonymous'
+    img.onload=()=>{if(!active)return;drawGallerySheet(canvas,item.title,img);texture.needsUpdate=true}
+    img.onerror=()=>{if(active&&item.coverAssetId)onCoverExpired?.(item.coverAssetId)}
+    img.src=item.coverThumbUrl
+    return()=>{active=false}
+  },[canvas,texture,item.title,item.coverThumbUrl,item.coverAssetId,onCoverExpired])
+  useEffect(()=>()=>texture.dispose(),[texture])
   useFrame(({clock})=>{if(group.current)group.current.rotation.y=reduced?0:Math.sin(clock.elapsedTime*.5+index)*.012})
-  return <group ref={group} position={[(index-1)*1.32,1.65,-.85]} onClick={e=>{e.stopPropagation();if(e.delta<8)interact(index)}} onPointerOver={on} onPointerOut={off}>
+  return <group ref={group} position={[gallerySlotX(index,count),1.65,-.85]} onClick={e=>{e.stopPropagation();if(e.delta<8)interact(index)}} onPointerOver={on} onPointerOut={off}>
     <mesh position={[0,.71,0]}><cylinderGeometry args={[.002,.002,.38,6]}/><meshStandardMaterial color="#7c7561"/></mesh>
     <mesh castShadow receiveShadow><planeGeometry args={[.91,1.22,20,3]} onUpdate={g=>{const p=g.getAttribute('position');for(let i=0;i<p.count;i++)p.setZ(i,Math.sin((p.getX(i)/.91+.5)*Math.PI)*.035);g.computeVertexNormals()}}/><meshStandardMaterial color="#f9f6e9" side={DoubleSide} roughness={.95}/></mesh>
-    <mesh position={[0,.02,.042]} receiveShadow><planeGeometry args={[.74,.806,20,2]} onUpdate={g=>{const p=g.getAttribute('position');for(let i=0;i<p.count;i++)p.setZ(i,Math.sin((p.getX(i)/.91+.5)*Math.PI)*.035);g.computeVertexNormals()}}/><meshStandardMaterial map={artTexture(art.kind)} roughness={.92} side={DoubleSide}/></mesh>
+    <mesh position={[0,.02,.042]} receiveShadow><planeGeometry args={[.74,.806,20,2]} onUpdate={g=>{const p=g.getAttribute('position');for(let i=0;i<p.count;i++)p.setZ(i,Math.sin((p.getX(i)/.91+.5)*Math.PI)*.035);g.computeVertexNormals()}}/><meshStandardMaterial map={texture} roughness={.92} side={DoubleSide}/></mesh>
     <mesh position={[0,.61,.035]} castShadow><boxGeometry args={[.045,.055,.03]}/><meshStandardMaterial color="#8e8a7c" metalness={.8} roughness={.28}/></mesh>
   </group>
 }
-function RoomDecor({id,pack,materials,interact,reduced,exterior}:{id:Place;pack:ResourcePack;materials:ReturnType<typeof makeMaterials>;interact:(i:number)=>void;reduced:boolean;exterior:boolean}){
+function RoomDecor({id,pack,materials,interact,reduced,exterior,galleryProjects,onCoverExpired}:{id:Place;pack:ResourcePack;materials:ReturnType<typeof makeMaterials>;interact:(i:number)=>void;reduced:boolean;exterior:boolean;galleryProjects:GalleryDisplayItem[];onCoverExpired?:(assetId:string)=>void}){
   const b=useMemo(()=>roomFurniture(id),[id]),t=roomTransform(id)
   const root=useRef<Group>(null),scratch=useMemo(()=>({forward:new Vector3(),delta:new Vector3()}),[])
   useFrame(({camera})=>{
@@ -261,14 +300,15 @@ function RoomDecor({id,pack,materials,interact,reduced,exterior}:{id:Place;pack:
     const visible=exterior||inside||(close&&scratch.delta.dot(scratch.forward)>.2)
     root.current.visible=visible
   })
+  const displayed=galleryProjects.slice(0,3)
   return <group ref={root} userData={{skipAO:exterior}} position={[t.x,0,t.z]} rotation={[0,t.rotation,0]}><StaticBatch builder={b} materials={materials} castShadow={!exterior}/>
-    {id==='gallery'&&artworks.map((_,i)=><Paper key={i} index={i} interact={interact} reduced={reduced}/>)}
-    {id==='study'&&<group position={[-.5,.79,-.85]} rotation={[-Math.PI/2,0,-.08]} onClick={e=>{e.stopPropagation();interact(0)}} onPointerOver={on} onPointerOut={off}><Plaque text="小屋随笔" sub="翻开，读一会儿" at={[0,0,0]} size={[.32,.24]}/></group>}
+    {id==='gallery'&&<group name="gallery-papers">{displayed.map((item,i)=><Paper key={item.id} item={item} index={i} count={displayed.length} interact={interact} reduced={reduced} onCoverExpired={onCoverExpired}/>)}</group>}
+    {id==='study'&&<group position={[-.5,.79,-.85]} rotation={[-Math.PI/2,0,-.08]} onClick={e=>{e.stopPropagation();interact(0)}} onPointerOver={on} onPointerOut={off}><Plaque text="创作手记" sub="翻开，读一会儿" at={[0,0,0]} size={[.32,.24]}/></group>}
     <Plant pack={pack} at={id==='study'?[-2.5,0,-1.35]:id==='gallery'?[2.45,0,-1.5]:[-2.5,0,-1.3]} height={id==='blank'?1.2:.9}/>
-    {id==='blank'&&<Plaque text="留一点空白" sub="下一段故事，由你决定" at={[1.65,1.75,-2.02]} size={[1.2,.4]}/>}
+    {id==='blank'&&<Plaque text="关于我" sub="认识小屋的主人" at={[1.65,1.75,-2.02]} size={[1.2,.4]}/>}
   </group>
 }
-export function World({place,opening,destination,navigate,interact,homeName,reduced,pack}:{place:Place;opening:Place|null;destination:Place|null;navigate:(p:Place)=>void;interact:(i:number)=>void;homeName:string;reduced:boolean;pack:ResourcePack}){
+export function World({place,opening,destination,navigate,interact,homeName,reduced,pack,galleryProjects,onCoverExpired}:{place:Place;opening:Place|null;destination:Place|null;navigate:(p:Place)=>void;interact:(i:number)=>void;homeName:string;reduced:boolean;pack:ResourcePack;galleryProjects:GalleryDisplayItem[];onCoverExpired?:(assetId:string)=>void}){
   const materials=useMemo(()=>makeMaterials(pack),[pack]),house=useMemo(shell,[]),yard=useMemo(garden,[]),{scene}=useThree()
   const glass=useMemo(()=>{const b=new Builder();for(const w of windows)b.add(new PlaneGeometry(w.w-.08,w.h-.08),w.at,'glass',[0,w.r,0]);return b},[])
   // Thin architectural glazing: direct clear view plus dielectric environment reflection.
@@ -290,7 +330,7 @@ export function World({place,opening,destination,navigate,interact,homeName,redu
     <Signage homeName={homeName} materials={materials}/>
     {doorStops.map(d=><group key={d.id}>
       <Door at={[d.side*1.08,0,-d.depth]} rotation={-d.side*Math.PI/2} open={place===d.id||opening===d.id||destination===d.id} click={()=>navigate(d.id)} materials={materials} reduced={reduced}/>
-      <RoomDecor id={d.id} pack={pack} materials={materials} interact={interact} reduced={reduced} exterior={outside}/>
+      <RoomDecor id={d.id} pack={pack} materials={materials} interact={interact} reduced={reduced} exterior={outside} galleryProjects={galleryProjects} onCoverExpired={onCoverExpired}/>
     </group>)}
     <Plant pack={pack} at={[-5.5,-.29,5.3]} height={5.7} tree rotation={.5}/>
     <Plant pack={pack} at={[-1.05,0,1.15]} height={.86}/><Plant pack={pack} at={[1.08,0,1.12]} height={.67}/>

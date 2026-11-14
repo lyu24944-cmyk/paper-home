@@ -12,6 +12,7 @@
     "check:window-performance": "node scripts/window-performance.mjs after",
     "check:interactions": "node scripts/verify.mjs",
     "check:edge-cases": "node scripts/edge-cases.mjs",
+    "check:cms": "node scripts/cms-verify.mjs",
     "qa:report": "node scripts/polish-report.mjs",
     "dev": "vite --host 127.0.0.1 --port 4318 --strictPort",
     "build": "tsc -b && vite build",
@@ -20,10 +21,12 @@
   "dependencies": {
     "@react-three/drei": "^10.7.0",
     "@react-three/fiber": "^9.7.0",
+    "@supabase/supabase-js": "^2.119.0",
     "gsap": "^3.14.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "three": "^0.185.0"
+    "three": "^0.185.0",
+    "tus-js-client": "^4.3.1"
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.5.1",
@@ -40,4 +43,3 @@
     "vite": "^7.2.0"
   }
 }
-

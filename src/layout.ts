@@ -6,9 +6,9 @@ export type CameraPose = { position: Vector3; orientation: Quaternion; fov: numb
 export type TransitionState = { from: Place; to: Place; phase: 'loading' | 'approach' | 'threshold' | 'settling' | 'complete' | 'failed'; progress: number }
 export const layout = { width: 11, length: 15, wallHeight: 2.9, hallWidth: 2.2, hallLength: 13.5, walkLength: 12.5, stepDistance:1.1, eyeHeight: 1.65, doorWidth: 1.02, doorHeight: 2.2, front: 0, back: -15 }
 export const doorStops = [
-  { id: 'gallery' as Place, name: '收藏展廊', depth: 3.2, side: -1, width: 5.7 },
-  { id: 'study' as Place, name: '书房', depth: 7, side: 1, width: 7 },
-  { id: 'blank' as Place, name: '空白房间', depth: 10.8, side: -1, width: 7.4 },
+  { id: 'gallery' as Place, name: '作品室', depth: 3.2, side: -1, width: 5.7 },
+  { id: 'study' as Place, name: '创作手记', depth: 7, side: 1, width: 7 },
+  { id: 'blank' as Place, name: '关于我', depth: 10.8, side: -1, width: 7.4 },
 ]
 const up = new Vector3(0, 1, 0)
 export const stopProgress = (depth: number) => (depth - 1.45) / layout.walkLength
@@ -35,14 +35,21 @@ export function hallPose(progress: number, aspect = 1.6): CameraPose {
   }
   return pose([0,layout.eyeHeight,-depth],[Math.sin(yaw)*4,1.58,-depth-Math.cos(yaw)*4],aspect<.8?78:62)
 }
-export function roomPose(id: Place, aspect: number) {
-  if(id==='gallery'&&aspect<=.8)return galleryPose(1)
+export function gallerySlotX(index: number, count: number): number {
+  if (count <= 1) return 0
+  if (count === 2) return (index - 0.5) * 1.4
+  return (index - 1) * 1.32
+}
+export function roomPose(id: Place, aspect: number, galleryIndex = 1, galleryCount = 3) {
+  if(id==='gallery'&&aspect<=.8)return galleryPose(galleryIndex,galleryCount)
   const distance=id==='gallery'?(aspect<.8?2.02:1.8):1.35
   const fov=id==='gallery'?Math.max(62,Math.min(116,2*Math.atan(3.9/(2*(distance+.85)*aspect))*180/Math.PI)):aspect<.8?86:62
   return pose(roomPoint(id,[0,1.65,distance]),roomPoint(id,[0,1.35,-1.65]),fov)
 }
-export function galleryPose(index: number) {
-  const x=(index-1)*1.32
+export function galleryPose(index: number, count = 3) {
+  const safeCount = Math.max(1, Math.min(3, count))
+  const safeIndex = Math.max(0, Math.min(safeCount - 1, index))
+  const x = gallerySlotX(safeIndex, safeCount)
   return pose(roomPoint('gallery',[x,1.65,1.32]),roomPoint('gallery',[x,1.58,-.85]),54)
 }
 export const yardBounds = new Box3(new Vector3(-9.3,-.35,-15.6),new Vector3(7.8,5.8,10.2))
@@ -67,11 +74,11 @@ export function yardPose(aspect: number): CameraPose {
   }
   return at(far*1.045)
 }
-export function stablePose(place: Place, progress: number, aspect: number) {
-  return place==='yard'?yardPose(aspect):place==='hall'?hallPose(progress,aspect):roomPose(place,aspect)
+export function stablePose(place: Place, progress: number, aspect: number, galleryIndex = 1, galleryCount = 3) {
+  return place==='yard'?yardPose(aspect):place==='hall'?hallPose(progress,aspect):roomPose(place,aspect,galleryIndex,galleryCount)
 }
 export type RoutePoint = { pose: CameraPose; phase: TransitionState['phase']; duration: number }
-export function makeRoute(from: Place, to: Place, progress: number, aspect: number): RoutePoint[] {
+export function makeRoute(from: Place, to: Place, progress: number, aspect: number, galleryIndex = 1, galleryCount = 3): RoutePoint[] {
   const route:RoutePoint[]=[]
   const add=(p:CameraPose,phase:RoutePoint['phase']='approach',duration=.8)=>route.push({pose:p,phase,duration})
   const insideFov=aspect<.8?78:62
@@ -100,7 +107,7 @@ export function makeRoute(from: Place, to: Place, progress: number, aspect: numb
     add(pose([0,1.65,-d.depth],[0,1.6,-d.depth-4],insideFov),'approach',1.2)
     add(pose([0,1.65,-d.depth],[d.side*4,1.45,-d.depth],insideFov),'approach',.6)
     add(pose([d.side*1.5,1.65,-d.depth],[d.side*4,1.45,-d.depth],insideFov),'threshold',.8)
-    add(roomPose(to,aspect),'settling',.8)
+    add(roomPose(to,aspect,galleryIndex,galleryCount),'settling',.8)
   }
   return route
 }

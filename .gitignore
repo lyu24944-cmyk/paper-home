@@ -3,3 +3,6 @@ dist/
 *.tsbuildinfo
 .taste-skill/inspect/
 .qa/
+.env
+.env.local
+.env.*.local

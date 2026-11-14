@@ -6,13 +6,14 @@ import type { Place } from './content'
 import { galleryPose, hallPose, makeRoute, stablePose, type CameraPose, type TransitionState } from './layout'
 
 export type CameraHandle = { travel: (target: Place, reduced: boolean, commit: () => void) => Promise<void> }
-export const CameraController = forwardRef<CameraHandle,{place:Place;busy:boolean;reduced:boolean;galleryIndex:number;progress:React.MutableRefObject<number>;onTransition:(state:TransitionState|null)=>void}>(({place,busy,reduced,galleryIndex,progress,onTransition},ref)=>{
+export const CameraController = forwardRef<CameraHandle,{place:Place;busy:boolean;reduced:boolean;galleryIndex:number;galleryCount:number;progress:React.MutableRefObject<number>;onTransition:(state:TransitionState|null)=>void}>(({place,busy,reduced,galleryIndex,galleryCount,progress,onTransition},ref)=>{
   const {camera:baseCamera,size}=useThree(),camera=baseCamera as PerspectiveCamera
   const active=useRef(false),smooth=useRef(progress.current),tween=useRef<gsap.core.Tween|null>(null),finishSegment=useRef<(()=>void)|null>(null),reducedRef=useRef(reduced)
-  const dimensions=useRef(size);dimensions.current=size;reducedRef.current=reduced
+  const dimensions=useRef(size),galleryRef=useRef({index:galleryIndex,count:galleryCount})
+  dimensions.current=size;reducedRef.current=reduced;galleryRef.current={index:galleryIndex,count:galleryCount}
   const apply=(p:CameraPose)=>{camera.position.copy(p.position);camera.quaternion.copy(p.orientation);camera.fov=p.fov;camera.updateProjectionMatrix()}
   const aspect=()=>dimensions.current.width/dimensions.current.height
-  useLayoutEffect(()=>{if(!active.current)apply(stablePose(place,progress.current,aspect()))},[place,size.width,size.height])
+  useLayoutEffect(()=>{if(!active.current)apply(stablePose(place,progress.current,aspect(),galleryRef.current.index,galleryRef.current.count))},[place,size.width,size.height])
   useEffect(()=>{if(reduced&&active.current)finishSegment.current?.()},[reduced])
   useEffect(()=>{
     const visibility=()=>{if(document.hidden)finishSegment.current?.()}
@@ -21,7 +22,7 @@ export const CameraController = forwardRef<CameraHandle,{place:Place;busy:boolea
   },[])
   useImperativeHandle(ref,()=>({travel:async(target,quiet,commit)=>{
     active.current=true
-    const from=place,points=makeRoute(from,target,progress.current,aspect())
+    const from=place,points=makeRoute(from,target,progress.current,aspect(),galleryRef.current.index,galleryRef.current.count)
     try{
       for(let i=0;i<points.length;i++){
         const point=points[i]
@@ -42,7 +43,7 @@ export const CameraController = forwardRef<CameraHandle,{place:Place;busy:boolea
         })
       }
       // Resize, reduced motion and background recovery share one deterministic endpoint.
-      apply(stablePose(target,progress.current,aspect()));smooth.current=progress.current
+      apply(stablePose(target,progress.current,aspect(),galleryRef.current.index,galleryRef.current.count));smooth.current=progress.current
       onTransition({from,to:target,phase:'complete',progress:1});commit()
     }finally{active.current=false;onTransition(null)}
   }}),[place])
@@ -52,7 +53,7 @@ export const CameraController = forwardRef<CameraHandle,{place:Place;busy:boolea
       apply(hallPose(smooth.current,aspect()))
     }
     if(!active.current&&!busy&&place==='gallery'&&aspect()<=.8){
-      const target=galleryPose(galleryIndex),alpha=reduced?1:1-Math.exp(-Math.min(dt,.1)*12)
+      const target=galleryPose(galleryIndex,galleryCount),alpha=reduced?1:1-Math.exp(-Math.min(dt,.1)*12)
       camera.position.lerp(target.position,alpha);camera.quaternion.slerp(target.orientation,alpha)
       camera.fov=target.fov;camera.updateProjectionMatrix()
     }

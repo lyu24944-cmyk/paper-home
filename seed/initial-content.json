@@ -1,0 +1,149 @@
+{
+  "assets": [
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "key": "yard",
+      "kind": "image",
+      "mimeType": "image/webp",
+      "width": 1440,
+      "height": 900,
+      "durationSec": null,
+      "originalFilename": "yard-1440x900.webp",
+      "displayFile": ".qa/seed/yard-1440x900-display.webp",
+      "thumbFile": ".qa/seed/yard-1440x900-thumb.webp"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000002",
+      "key": "hall",
+      "kind": "image",
+      "mimeType": "image/webp",
+      "width": 1440,
+      "height": 900,
+      "durationSec": null,
+      "originalFilename": "hall-1440x900.webp",
+      "displayFile": ".qa/seed/hall-1440x900-display.webp",
+      "thumbFile": ".qa/seed/hall-1440x900-thumb.webp"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000003",
+      "key": "gallery",
+      "kind": "image",
+      "mimeType": "image/webp",
+      "width": 1440,
+      "height": 900,
+      "durationSec": null,
+      "originalFilename": "gallery-1440x900.webp",
+      "displayFile": ".qa/seed/gallery-1440x900-display.webp",
+      "thumbFile": ".qa/seed/gallery-1440x900-thumb.webp"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000004",
+      "key": "study",
+      "kind": "image",
+      "mimeType": "image/webp",
+      "width": 1440,
+      "height": 900,
+      "durationSec": null,
+      "originalFilename": "study-1440x900.webp",
+      "displayFile": ".qa/seed/study-1440x900-display.webp",
+      "thumbFile": ".qa/seed/study-1440x900-thumb.webp"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000005",
+      "key": "blank",
+      "kind": "image",
+      "mimeType": "image/webp",
+      "width": 1440,
+      "height": 900,
+      "durationSec": null,
+      "originalFilename": "blank-1440x900.webp",
+      "displayFile": ".qa/seed/blank-1440x900-display.webp",
+      "thumbFile": ".qa/seed/blank-1440x900-thumb.webp"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000006",
+      "key": "mobileGallery",
+      "kind": "image",
+      "mimeType": "image/webp",
+      "width": 390,
+      "height": 844,
+      "durationSec": null,
+      "originalFilename": "gallery-390x844.webp",
+      "displayFile": ".qa/seed/gallery-390x844-display.webp",
+      "thumbFile": ".qa/seed/gallery-390x844-thumb.webp"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000007",
+      "key": "demoVideo",
+      "kind": "video",
+      "mimeType": "video/mp4",
+      "width": 1280,
+      "height": 800,
+      "durationSec": 35.0,
+      "originalFilename": "cottage-demo.mp4",
+      "displayFile": ".qa/seed/cottage-demo.mp4",
+      "thumbFile": null
+    }
+  ],
+  "projects": [
+    {
+      "id": "20000000-0000-4000-8000-000000000001",
+      "slug": "interactive-cottage-website",
+      "sortOrder": 0,
+      "title": "我的小屋 · 交互式个人网站",
+      "summary": "一座基于 React、Three.js 与 Vite 搭建的可进入个人主页，把小院、走廊与三个房间整理为可线上长期维护的内容空间。",
+      "demoUrl": "",
+      "coverAssetId": "10000000-0000-4000-8000-000000000001",
+      "galleryAssetIds": [
+        "10000000-0000-4000-8000-000000000002",
+        "10000000-0000-4000-8000-000000000003",
+        "10000000-0000-4000-8000-000000000004",
+        "10000000-0000-4000-8000-000000000005",
+        "10000000-0000-4000-8000-000000000006"
+      ],
+      "videoAssetId": "10000000-0000-4000-8000-000000000007",
+      "body": "这个项目想解决一件很简单但常见的问题：个人主页如果只有几张静态卡片，很难让人留下真正「走进一个地方」的记忆；但如果三维场景本身只有固定的示例文章和插画，每次想补充近况都得改源码、重新打包，很快就会闲置。\n\n因此在完成视觉与空间雏形后，小屋进一步升级为可持续维护的个人站点。庭院保留白昼手绘纸面质感，推开大门沿走廊向前滑动可以依次经过「创作手记」「作品室」和「关于我」三扇门。只有一件正式作品时，作品室墙面会将其居中悬挂展示，不用重复素材凑数；后续发布更多作品后，三维空间最多按手动顺序展示前三件，全部内容均可在目录或手机逐件视图中顺畅浏览。\n\n在线维护能力按单主人架构设计：登录后可在对应房间新增、预览草稿、发布更新、撤回、排序或删除。所有图片和演示视频统一存于私有存储桶，仅当内容处于已发布状态时才由服务端接口签发短期访问链接；演示视频经过裁剪与体积压缩，默认仅在打开作品详情并主动点击播放时加载，不会拖慢首页与三维漫游。"
+    }
+  ],
+  "notes": [
+    {
+      "id": "30000000-0000-4000-8000-000000000001",
+      "slug": "space-and-navigation-route",
+      "sortOrder": 0,
+      "title": "空间与浏览路线",
+      "projectId": "20000000-0000-4000-8000-000000000001",
+      "imageAssetIds": [
+        "10000000-0000-4000-8000-000000000001",
+        "10000000-0000-4000-8000-000000000002"
+      ],
+      "videoAssetId": null,
+      "body": "小屋从一开始就按「庭院 → 走廊 → 三个独立房间」组织空间节奏。庭院作为开场锚点，把完整的屋顶、窗框、树木与小径放在同一取景框内；点击敲门进入后，浏览器切换为纵向漫游走廊，将滚轮与触控上滑直接映射为走廊深度 progress（从 0.85 m 延伸到整段 walkLength）。\n\n为了避免在狭长走廊里需要频繁拖拽视角，相机在靠近房门位置（距门口深度约 0.6 m 前后 ±1.05 m 范围内）会以余弦权重柔和偏转朝向对应门洞，并亮起「进入对应房间」的按钮。进门前记录的走廊进度会在退出房间返回走廊时精确恢复，让连续浏览几间房时的方向感保持连贯。\n\n路线过渡通过 layout.ts 中的 makeRoute 与 camera-check 校验脚本约束：跨 6 组常见桌面与手机视口、120 对起止路线与 75,144 个采样姿态核对位置、四元数与穿门轨迹，确保不会穿墙、翻滚或视角丢失。随着内容系统接入，作品室的画框排布也调整为随已发布数量自适应：1 件居中、2 件双联、3 件三联，更多作品收拢进目录中。"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000002",
+      "slug": "doors-windows-and-lighting-polish",
+      "sortOrder": 1,
+      "title": "门窗和室内光照精修",
+      "projectId": "20000000-0000-4000-8000-000000000001",
+      "imageAssetIds": [
+        "10000000-0000-4000-8000-000000000004",
+        "10000000-0000-4000-8000-000000000003"
+      ],
+      "videoAssetId": null,
+      "body": "建筑立面与室内质感最容易出现两极问题：窗户如果使用带体积折射的 MeshPhysicalMaterial transmission 通道，不仅容易在薄玻璃片上产生夸张扭曲，还会触发一次完整的全场景折射离屏渲染；如果干脆做成全透明无反光玻璃，白天看外墙又缺少层次。\n\n最终采用了贴近 6 mm 平直建筑窗玻的折中方案：在 World.tsx 中将玻璃材质保持为 transmission = 0、thickness = 0.006、ior = 1.5、opacity = 0.14、forceSinglePass = true，并关闭深度写入（depthWrite = false），既保留天空环境反射的高光与微弱青绿通透感，又不进入法线／AO 通道，避免了额外一遍全场景渲染。\n\n室内外明暗则靠四组固定结构的光源协同控制：庭院主日光使用 -8, 13, 9 位置的暖调平行光（intensity = 3.3），高画质下配 2048×2048 阴影贴图（兼容档为 1024×1024），配合半球光（intensity = 0.32）与微量环境填充光（0.06）；走廊顶部布置三盏温暖点光源（intensity = 2.4，distance = 4.5）；三间房外侧窗位统一使用 rectAreaLight（intensity = 3.8）模拟天光漫射入室。这样既能让书桌手记与作品纸张受光清楚，又保持各房间切换时着色器与光源数量稳定。"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000003",
+      "slug": "stutter-diagnosis-and-performance-tuning",
+      "sortOrder": 2,
+      "title": "卡顿定位与性能调整",
+      "projectId": "20000000-0000-4000-8000-000000000001",
+      "imageAssetIds": [
+        "10000000-0000-4000-8000-000000000005",
+        "10000000-0000-4000-8000-000000000006"
+      ],
+      "videoAssetId": null,
+      "body": "本篇仅记录已实际测得的结果与排查方法，不外推未测试设备或渲染管线行为。\n\n测试日期：2026-11-13。\n测试硬件与环境：AMD Radeon 780M Graphics / ANGLE Direct3D 11（2880×1800 桌面），Chrome 157，生产构建（deviceScaleFactor = 1），在 2560×1440（细致画质，未做降分辨率缩放）及 1920×1080 下通过 Playwright 驱动真实有窗口 Chrome 完成超过一分钟的完整浏览路线。\n测量方法：路线涵盖庭院静止、进门、24 秒走廊双向连续行走、首次进入三个房间、回院及重复进房；基于 requestAnimationFrame 时间戳统计帧间隔，按 nearest-rank 计算 P95 / P99，并统计严格大于 33.3 ms、50 ms 和 100 ms 的长帧。\n\n主要定位到的两类问题：\n1. 首次进房秒级停顿：原版在进入房间时动态挂载目的地陈设且光源数量随房间变化，导致首次入房出现约 1.5～3.1 秒与绘制提交同帧的长任务。\n2. 连续行走持续耗时高：经 WebGL GPU 计时诊断，持续行走主要受 GPU 像素着色与后处理成本影响，而 CPU 提交通常只需数毫秒。\n\n调整策略：\n- 所有房间常驻挂载（按空间与视线裁剪可见性）、固定全局光源类型与数量，并在入口前完成资源上传与着色器预编译。\n- 平窗改用单一通道薄玻璃近似，关闭整场景传输重绘。\n- HDR 渲染目标关闭 MSAA 并改为 FXAA，细致画质下 AO 采用 40% 线性分辨率与 6 个去噪样本；庭院外景阶段略去窗后远处陈设的 AO 与阴影，入室后恢复完整家具 AO 与阴影；DPR 统一封顶 1.5。\n\n实测变化（同一硬件、同一脚本、同一路线）：\n- 2560×1440 细致档调整前：完整路线平均 15.5 FPS，P95 83.3 ms，P99 116.6 ms，最慢单帧 3099.9 ms，>50 ms 共 1041 帧，>100 ms 共 17 帧；行走段平均 16.8 FPS（315 帧 >50 ms）。\n- 2560×1440 细致档调整后：平均提升至 30.9 FPS，P95 66.7 ms，P99 75.2 ms，最慢单帧降至 99.9 ms，>50 ms 降至 267 帧，>100 ms 降至 0 帧；行走段平均 31.5 FPS（93 帧 >50 ms）。\n- 1920×1080 细致档调整后：平均 48.5 FPS，P95 33.5 ms，P99 50.1 ms，最慢 66.7 ms，>50 ms 为 54 帧，>100 ms 为 0 帧；行走段平均 47.8 FPS（20 帧 >50 ms）。\n- 资源预算与加载：1440p 首屏预热耗时 12,302.6 ms（页面准备 13.33 s）；运行峰值绘制调用为 191 次（低于 200 次预算），场景三角面峰值为 311,760 面（低于 500,000 面预算）。\n\n需要注意的边界：秒级首次进房卡顿已经消除，但在 2560×1440 下仍存在可感知慢帧，不能宣称为稳定 60 FPS；若当前设备负载较高，可切换右上角的「兼容画质」或开启「轻柔模式」进一步减少压力。"
+    }
+  ]
+}

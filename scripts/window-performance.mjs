@@ -32,7 +32,7 @@ async function idle(place) { await page.waitForFunction(p => location.hash === '
 async function go(target, name) {
   await phase(name);
   await page.getByRole('button', { name: '小屋地图', exact: true }).click();
-  await page.getByRole('button', { name: new RegExp('^' + { yard: '小院', hall: '走廊', gallery: '收藏展廊', study: '书房', blank: '空白房间' }[target]) }).click();
+  await page.getByRole('button', { name: new RegExp('^' + { yard: '小院', hall: '走廊', gallery: '作品室', study: '创作手记', blank: '关于我' }[target]) }).click();
   await idle(target);
 }
 await page.waitForTimeout(4000);
