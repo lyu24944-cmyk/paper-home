@@ -11,7 +11,7 @@ import type { TransitionState } from './layout'
 import type { Quality } from './resources'
 import { performanceEvents, qaEnabled, recordEvent } from './diagnostics'
 
-export function RenderPipeline({quality,transition,prepare,onPreparing,onReady}:{quality:Quality;transition:React.MutableRefObject<TransitionState|null>;prepare:React.MutableRefObject<(()=>Promise<void>)|null>;onPreparing:(message:string)=>void;onReady:()=>void}){
+export function RenderPipeline({quality,transition,prepare,capture,onPreparing,onReady}:{quality:Quality;transition:React.MutableRefObject<TransitionState|null>;prepare:React.MutableRefObject<(()=>Promise<void>)|null>;capture?:React.MutableRefObject<(()=>string|null)|null>;onPreparing:(message:string)=>void;onReady:()=>void}){
   const {gl,scene,camera,size,viewport}=useThree(),recording=useRef(false),frames=useRef<number[]>([]),previous=useRef(0),diagnosticAt=useRef(0),warmed=useRef(false)
   const pipeline=useMemo(()=>{
     const target=new WebGLRenderTarget(1,1,{type:HalfFloatType,samples:0}),composer=new EffectComposer(gl,target)
@@ -76,6 +76,15 @@ export function RenderPipeline({quality,transition,prepare,onPreparing,onReady}:
     void warm.then(()=>{if(mounted)onReady()})
     return()=>{mounted=false;prepare.current=null;pipeline.composer.passes.forEach(p=>p.dispose());pipeline.composer.dispose()}
   },[pipeline])
+  useEffect(()=>{
+    if(!capture)return
+    capture.current=()=>{
+      if(!warmed.current)return null
+      pipeline.composer.render(0)
+      return gl.domElement.toDataURL('image/png')
+    }
+    return()=>{capture.current=null}
+  },[pipeline,capture,gl])
   useFrame((_,dt)=>{
     if(!warmed.current){gl.setClearColor('#cbdde2',1);gl.clear();return}
     const start=performance.now(),shadowUpdate=gl.shadowMap.needsUpdate;gl.info.autoReset=false;gl.info.reset()

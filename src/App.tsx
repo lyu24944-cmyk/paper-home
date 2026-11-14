@@ -26,6 +26,7 @@ import {
   signOutAdmin,
 } from './lib/api'
 import { isLocalOwnerActive, resolveBackendHealth } from './lib/backend'
+import { buildDeepLinkHash, buildDeepLinkUrl, parseDeepLinkHash } from './lib/deeplink'
 import { evictSignedUrl, getCachedUrl, refreshSignedUrl, seedSignedUrls } from './lib/media'
 import {
   installGlobalClickSoundDelegator,
@@ -62,6 +63,7 @@ import { ProjectDetailModal, type LinkedNoteRef } from './components/ProjectDeta
 import { NoteDetailModal, type LinkedProjectRef } from './components/NoteDetailModal'
 import { ProjectEditorModal, type SaveActionKind } from './components/ProjectEditorModal'
 import { NoteEditorModal } from './components/NoteEditorModal'
+import { PostcardModal } from './components/PostcardModal'
 import { ProfileEditorModal } from './components/ProfileEditorModal'
 import { ConflictDialog, type ConflictContext } from './components/ConflictDialog'
 import { ToastHost, type ToastItem } from './components/ToastHost'
@@ -108,9 +110,8 @@ function savedName() {
 }
 
 function initialAtmosphereMode(): AtmosphereMode {
-  const params = new URLSearchParams(window.location.search)
-  const qAt = params.get('at')
-  if (isValidAtmosphereMode(qAt)) return qAt
+  const dl = parseDeepLinkHash()
+  if (dl.at) return dl.at
   try {
     const saved = localStorage.getItem('paper-home:atmosphere')
     if (isValidAtmosphereMode(saved)) return saved
@@ -121,9 +122,8 @@ function initialAtmosphereMode(): AtmosphereMode {
 }
 
 function initialWeatherMode(): WeatherMode {
-  const params = new URLSearchParams(window.location.search)
-  const qWeather = params.get('weather')
-  if (isValidWeatherMode(qWeather)) return qWeather
+  const dl = parseDeepLinkHash()
+  if (dl.weather) return dl.weather
   try {
     const saved = localStorage.getItem('paper-home:weather')
     if (isValidWeatherMode(saved)) return saved
@@ -167,17 +167,13 @@ const ATMO_SOUND_MAP: Record<AtmosphereMode, SoundEffectId> = {
 }
 
 function startingPlace(): Place {
-  const hash = window.location.hash.slice(1)
-  if (rooms.some((r) => r.id === hash)) return hash as Place
-  if (hash.includes('=')) {
-    const hp = new URLSearchParams(hash)
-    const roomParam = hp.get('room')
-    if (roomParam && rooms.some((r) => r.id === roomParam)) return roomParam as Place
-  }
-  return 'yard'
+  return parseDeepLinkHash().room
 }
 
 export default function App() {
+  const initialDeepLink = useMemo(() => parseDeepLinkHash(), [])
+  const richHashActiveRef = useRef(initialDeepLink.isRich)
+  const pendingDeepLinkItemRef = useRef<string | null>(initialDeepLink.item)
   const [place, setPlace] = useState<Place>(startingPlace)
   const [opening, setOpening] = useState<Place | null>(null)
   const [busy, setBusy] = useState(false)
@@ -196,6 +192,7 @@ export default function App() {
   const [retry, setRetry] = useState(0)
   const transition = useRef<TransitionState | null>(null)
   const prepare = useRef<(() => Promise<void>) | null>(null)
+  const captureCanvas = useRef<(() => string | null) | null>(null)
 
   const [mapOpen, setMapOpen] = useState(false)
   const [galleryIndex, setGalleryIndex] = useState(0)
@@ -217,16 +214,16 @@ export default function App() {
   const [atmosphereMode, setAtmosphereMode] = useState<AtmosphereMode>(initialAtmosphereMode)
   const [weather, setWeather] = useState<WeatherMode>(initialWeatherMode)
   const [autoClockTick, setAutoClockTick] = useState(0)
-  const userTouchedAtmoRef = useRef(false)
+  const userTouchedAtmoRef = useRef(Boolean(initialDeepLink.at || initialDeepLink.weather))
   const atmospherePreset = useMemo(
     () => resolveAtmospherePreset(atmosphereMode, new Date()),
     [atmosphereMode, autoClockTick],
   )
   const [deskLampOn, setDeskLampOn] = useState<boolean>(
-    () => atmospherePreset === 'golden' || atmospherePreset === 'night' || weather === 'rain',
+    () => initialDeepLink.lamp ?? (atmospherePreset === 'golden' || atmospherePreset === 'night' || weather === 'rain'),
   )
-  const userTouchedLampRef = useRef(false)
-  const [focusId, setFocusId] = useState<FocusSubPoseId | null>(null)
+  const userTouchedLampRef = useRef(initialDeepLink.lamp !== null)
+  const [focusId, setFocusId] = useState<FocusSubPoseId | null>(initialDeepLink.focus)
   const [studyQuote, setStudyQuote] = useState<string | null>(null)
   const [quoteIdx, setQuoteIdx] = useState(0)
   const [guestStamps, setGuestStamps] = useState<GuestStampEntry[]>(loadGuestStamps)
@@ -285,11 +282,15 @@ export default function App() {
   const [noteEditorOpen, setNoteEditorOpen] = useState(false)
   const [editingNote, setEditingNote] = useState<AdminNote | null>(null)
   const [profileEditorOpen, setProfileEditorOpen] = useState(false)
+  const [postcardOpen, setPostcardOpen] = useState(false)
+  const [postcardSnapshot, setPostcardSnapshot] = useState<string | null>(null)
+  const [postcardSeedItem, setPostcardSeedItem] = useState<{ slug?: string | null; title: string } | null>(null)
   const [conflict, setConflict] = useState<ConflictContext | null>(null)
 
   const isAdmin = Boolean(adminEmail && adminData)
   const anyModalOpen =
     mapOpen ||
+    postcardOpen ||
     viewingProject !== null ||
     viewingNote !== null ||
     projectEditorOpen ||
@@ -476,8 +477,65 @@ export default function App() {
 
   useEffect(() => {
     document.title = `${homeName} · ${rooms.find((r) => r.id === place)?.name}`
-    history.replaceState(null, '', `#${place}`)
+    if (!richHashActiveRef.current) {
+      history.replaceState(null, '', `#${place}`)
+    }
   }, [homeName, place])
+
+  useEffect(() => {
+    if (!ready || cloudLoading || !pendingDeepLinkItemRef.current) return
+    const targetItem = pendingDeepLinkItemRef.current
+    pendingDeepLinkItemRef.current = null
+    if (place === 'gallery') {
+      const idx = publicData.projects.findIndex((p) => p.slug === targetItem || p.id === targetItem)
+      if (idx >= 0) openPublicProject(idx)
+    } else if (place === 'study') {
+      const idx = publicData.notes.findIndex((n) => n.slug === targetItem || n.id === targetItem)
+      if (idx >= 0) openPublicNote(idx)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, cloudLoading, place, publicData.projects, publicData.notes])
+
+  const applyHashDeepLinkRef = useRef<(dl: ReturnType<typeof parseDeepLinkHash>) => void>(() => {})
+  applyHashDeepLinkRef.current = (dl) => {
+    if (dl.at) {
+      userTouchedAtmoRef.current = true
+      setAtmosphereMode(dl.at)
+    }
+    if (dl.weather) {
+      userTouchedAtmoRef.current = true
+      setWeather(dl.weather)
+    }
+    if (dl.lamp !== null) {
+      userTouchedLampRef.current = true
+      setDeskLampOn(dl.lamp)
+    }
+    if (dl.room !== placeRef.current) {
+      richHashActiveRef.current = dl.isRich
+      pendingFocusAfterNavRef.current = dl.focus
+      pendingDeepLinkItemRef.current = dl.item
+      void navigate(dl.room, { preserveRichHash: dl.isRich, skipOpenSound: true })
+      return
+    }
+    setFocusId(dl.focus)
+    if (dl.item) {
+      if (dl.room === 'gallery') {
+        const idx = publicData.projects.findIndex((p) => p.slug === dl.item || p.id === dl.item)
+        if (idx >= 0) openPublicProject(idx)
+      } else if (dl.room === 'study') {
+        const idx = publicData.notes.findIndex((n) => n.slug === dl.item || n.id === dl.item)
+        if (idx >= 0) openPublicNote(idx)
+      }
+    }
+  }
+
+  useEffect(() => {
+    const onHashChange = () => {
+      applyHashDeepLinkRef.current(parseDeepLinkHash())
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
 
   useEffect(() => {
     const media = matchMedia('(prefers-reduced-motion: reduce)')
@@ -771,13 +829,15 @@ export default function App() {
     }
   }
 
-  async function navigate(target: Place, opts?: { skipOpenSound?: boolean }) {
+  async function navigate(target: Place, opts?: { skipOpenSound?: boolean; preserveRichHash?: boolean }) {
     if (busyRef.current || !ready) return
+    richHashActiveRef.current = Boolean(opts?.preserveRichHash)
     setStudioMenuOpen(false)
     setAtmoPopoverOpen(false)
     setFocusId(null)
     setStudyQuote(null)
     setMapOpen(false)
+    setPostcardOpen(false)
     setViewingProject(null)
     setViewingNote(null)
     setProjectEditorOpen(false)
@@ -1253,6 +1313,88 @@ export default function App() {
     showToast(`已盖下「${moodItem.id}」访客印章`, 'success')
   }, [selectedStampMood, guestNoteInput, showToast])
 
+  const activeDeepLinkItemSlug = useMemo(() => {
+    if (postcardSeedItem?.slug) return postcardSeedItem.slug
+    if (viewingProject?.scope === 'public') {
+      const pub = publicData.projects.find((p) => p.id === viewingProject.project.id)
+      return pub?.slug || viewingProject.project.id
+    }
+    if (viewingNote?.scope === 'public') {
+      const pub = publicData.notes.find((n) => n.id === viewingNote.note.id)
+      return pub?.slug || viewingNote.note.id
+    }
+    return null
+  }, [postcardSeedItem, viewingProject, viewingNote, publicData.projects, publicData.notes])
+
+  const activeDeepLinkOptions = useMemo(
+    () => ({
+      room: place,
+      item: activeDeepLinkItemSlug,
+      at: atmosphereMode,
+      weather,
+      focus: focusId,
+      lamp: place === 'study' ? deskLampOn : undefined,
+    }),
+    [place, activeDeepLinkItemSlug, atmosphereMode, weather, focusId, deskLampOn],
+  )
+
+  const activeDeepLinkHash = useMemo(() => buildDeepLinkHash(activeDeepLinkOptions), [activeDeepLinkOptions])
+  const activeDeepLinkUrl = useMemo(() => buildDeepLinkUrl(activeDeepLinkOptions), [activeDeepLinkOptions])
+
+  const copyTextToClipboard = useCallback(async (text: string): Promise<boolean> => {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      try {
+        const ta = document.createElement('textarea')
+        ta.value = text
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        const ok = document.execCommand('copy')
+        ta.remove()
+        return ok
+      } catch {
+        return false
+      }
+    }
+  }, [])
+
+  const handleCopyDeepLink = useCallback(
+    (overrideOpts?: Partial<Parameters<typeof buildDeepLinkUrl>[0]>) => {
+      const opts = { ...activeDeepLinkOptions, ...overrideOpts }
+      const url = buildDeepLinkUrl(opts)
+      void copyTextToClipboard(url).then((ok) => {
+        if (ok) {
+          playSound('success-seal')
+          showToast('已复制直达深链，打开即可回到此刻房间与天色', 'success')
+        } else {
+          showToast(`深链地址：${buildDeepLinkHash(opts)}`, 'info')
+        }
+      })
+    },
+    [activeDeepLinkOptions, copyTextToClipboard, showToast],
+  )
+
+  const handleOpenPostcard = useCallback(
+    (seed?: { slug?: string | null; title: string } | null) => {
+      if (busyRef.current || !ready) return
+      const snap = captureCanvas.current?.() ?? null
+      playSound('shutter')
+      setViewingProject(null)
+      setViewingNote(null)
+      setMapOpen(false)
+      setStudioMenuOpen(false)
+      setAtmoPopoverOpen(false)
+      setPostcardSeedItem(seed ?? null)
+      setPostcardSnapshot(snap)
+      setPostcardOpen(true)
+    },
+    [ready],
+  )
+
   const activeAtmoMeta =
     ATMOSPHERE_OPTIONS.find((o) => o.id === atmospherePreset) ?? ATMOSPHERE_OPTIONS[1]
 
@@ -1331,6 +1473,7 @@ export default function App() {
                 quality={pack.quality}
                 transition={transition}
                 prepare={prepare}
+                capture={captureCanvas}
                 onPreparing={setPreparing}
                 onReady={() => setReady(true)}
               />
@@ -2033,6 +2176,18 @@ export default function App() {
           </span>
           <button
             type="button"
+            className="postcard-button"
+            data-sound="shutter"
+            aria-label="拍一张纸质明信片"
+            title="生成纸质明信片与此刻深链"
+            disabled={busy || !ready}
+            onClick={() => handleOpenPostcard()}
+          >
+            <Icon name="postcard" size={16} />
+            <span>拍明信片</span>
+          </button>
+          <button
+            type="button"
             className={`sfx-button ${sfxEnabled ? 'active' : ''}`}
             aria-label={sfxEnabled ? '关闭交互音效' : '开启交互音效'}
             aria-pressed={sfxEnabled}
@@ -2394,6 +2549,25 @@ export default function App() {
             if (pubIdx >= 0) openPublicNote(pubIdx)
           }
         }}
+        onCopyDeepLink={
+          viewingProject?.scope === 'public'
+            ? () => {
+                const pub = publicData.projects.find((p) => p.id === viewingProject.project.id)
+                handleCopyDeepLink({ room: 'gallery', item: pub?.slug || viewingProject.project.id })
+              }
+            : undefined
+        }
+        onOpenPostcard={
+          viewingProject?.scope === 'public'
+            ? () => {
+                const pub = publicData.projects.find((p) => p.id === viewingProject.project.id)
+                handleOpenPostcard({
+                  slug: pub?.slug || viewingProject.project.id,
+                  title: viewingProject.project.title || '作品',
+                })
+              }
+            : undefined
+        }
         onEdit={
           isAdmin && viewingProject && !projectEditorOpen
             ? () => {
@@ -2438,6 +2612,25 @@ export default function App() {
             if (pubIdx >= 0) openPublicProject(pubIdx)
           }
         }}
+        onCopyDeepLink={
+          viewingNote?.scope === 'public'
+            ? () => {
+                const pub = publicData.notes.find((n) => n.id === viewingNote.note.id)
+                handleCopyDeepLink({ room: 'study', item: pub?.slug || viewingNote.note.id })
+              }
+            : undefined
+        }
+        onOpenPostcard={
+          viewingNote?.scope === 'public'
+            ? () => {
+                const pub = publicData.notes.find((n) => n.id === viewingNote.note.id)
+                handleOpenPostcard({
+                  slug: pub?.slug || viewingNote.note.id,
+                  title: viewingNote.note.title || '手记',
+                })
+              }
+            : undefined
+        }
         onEdit={
           isAdmin && viewingNote && !noteEditorOpen
             ? () => {
@@ -2454,6 +2647,27 @@ export default function App() {
             : undefined
         }
         onClose={() => setViewingNote(null)}
+      />
+
+      <PostcardModal
+        open={postcardOpen}
+        snapshotDataUrl={postcardSnapshot}
+        homeName={homeName}
+        plaqueTitle={siteSettings.plaqueTitle}
+        room={place}
+        roomName={room.name}
+        atmospherePreset={atmospherePreset}
+        weather={weather}
+        itemLabel={postcardSeedItem?.title ?? null}
+        nowNote={activeNowNotes[0] ?? null}
+        deepLinkUrl={activeDeepLinkUrl}
+        deepLinkHash={activeDeepLinkHash}
+        onCopyDeepLink={() => handleCopyDeepLink()}
+        onNotify={showToast}
+        onClose={() => {
+          setPostcardOpen(false)
+          setPostcardSeedItem(null)
+        }}
       />
 
       <ConflictDialog conflict={conflict} onClose={() => setConflict(null)} />

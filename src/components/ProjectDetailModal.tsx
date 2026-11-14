@@ -30,6 +30,8 @@ export function ProjectDetailModal({
   currentIndex = 0,
   onStep,
   onOpenNote,
+  onCopyDeepLink,
+  onOpenPostcard,
   onEdit,
   onClose,
 }: {
@@ -42,6 +44,8 @@ export function ProjectDetailModal({
   currentIndex?: number
   onStep?: (delta: -1 | 1) => void
   onOpenNote?: (noteId: string) => void
+  onCopyDeepLink?: () => void
+  onOpenPostcard?: () => void
   onEdit?: () => void
   onClose: () => void
 }) {
@@ -267,12 +271,36 @@ export function ProjectDetailModal({
                 <span />
               )}
 
-              {onEdit && (
-                <button type="button" className="cms-primary-btn" onClick={onEdit}>
-                  <Icon name="pencil" size={15} />
-                  <span>编辑作品</span>
-                </button>
-              )}
+              <div className="detail-footer-actions">
+                {onCopyDeepLink && (
+                  <button
+                    type="button"
+                    className="cms-ghost-btn"
+                    data-sound="paper-card"
+                    onClick={onCopyDeepLink}
+                  >
+                    <Icon name="copy" size={15} />
+                    <span>复制深链</span>
+                  </button>
+                )}
+                {onOpenPostcard && (
+                  <button
+                    type="button"
+                    className="cms-ghost-btn"
+                    data-sound="shutter"
+                    onClick={onOpenPostcard}
+                  >
+                    <Icon name="postcard" size={15} />
+                    <span>拍明信片</span>
+                  </button>
+                )}
+                {onEdit && (
+                  <button type="button" className="cms-primary-btn" onClick={onEdit}>
+                    <Icon name="pencil" size={15} />
+                    <span>编辑作品</span>
+                  </button>
+                )}
+              </div>
             </div>
           </>
         )}
