@@ -1,4 +1,3 @@
-import { Upload } from 'tus-js-client'
 import { getSupabaseClient, supabaseAnonKey, supabaseUrl } from './supabase'
 import { getBackendMode, getLocalHeaders } from './backend'
 import { registerMediaAssetApi, signMediaUrlsApi } from './api'
@@ -272,7 +271,7 @@ export async function processAndUploadImage(file: File): Promise<{ asset: MediaA
     throw new Error('当前为只读展示模式，无法上传图片。')
   }
 
-  const client = getSupabaseClient()
+  const client = await getSupabaseClient()
   const [upDisplay, upThumb] = await Promise.all([
     client.storage.from(BUCKET_NAME).upload(displayPath, display.blob, {
       contentType: display.mimeType,
@@ -496,7 +495,7 @@ export async function createResumableVideoUpload(
   if (mode !== 'cloud') {
     throw new Error('当前为只读展示模式，无法上传视频。')
   }
-  const client = getSupabaseClient()
+  const client = await getSupabaseClient()
   const { data: sessionData, error: sessionErr } = await client.auth.getSession()
   const token = sessionData.session?.access_token
   if (sessionErr || !token) {
@@ -536,6 +535,7 @@ export async function createResumableVideoUpload(
   persistPending()
   let cancelled = false
 
+  const { Upload } = await import('tus-js-client')
   const upload = new Upload(file, {
     endpoint: `${supabaseUrl}/storage/v1/upload/resumable`,
     retryDelays: [0, 1500, 3000, 6000],

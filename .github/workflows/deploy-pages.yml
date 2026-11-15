@@ -2,6 +2,12 @@ name: Deploy Paper Home to GitHub Pages
 
 on:
   workflow_dispatch:
+    inputs:
+      allow_sample_fallback:
+        description: "Allow seeding starter sample content if local-data/cottage.json is missing"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -27,6 +33,18 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Verify snapshot data source
+        run: |
+          if [ ! -f "local-data/cottage.json" ]; then
+            if [ "${{ inputs.allow_sample_fallback }}" = "true" ]; then
+              echo "local-data/cottage.json missing; seeding neutral starter sample via init:sample"
+              npm run init:sample
+            else
+              echo "::error::Missing local-data/cottage.json. Publish and stage local-data/ first, or re-run with allow_sample_fallback=true for a demo build."
+              exit 1
+            fi
+          fi
 
       - name: Build static cottage snapshot
         run: npm run build:local

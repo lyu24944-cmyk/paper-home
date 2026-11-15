@@ -1,81 +1,74 @@
 # 小屋画面精修与窗口性能验收
 
-日期：2026-11-13（Asia/Tokyo）。本地生产预览：http://127.0.0.1:4319/。
-本轮范围为开场构图、薄玻璃、室内明暗、门廊／书桌／展廊近景、手机逐幅看画，以及行走与进房长帧治理。文章与画作保留示例身份。历史验收保存在 .qa/polish/before/QA.md；.qa/realistic/ 为上一轮历史产物。
+日期：2026-11-15（Asia/Tokyo），版本：`v1.1.0`。
+本轮收尾围绕外景树冠/灌木性能收敛、移除 `UnrealBloomPass`、恢复 `deviceMemory <= 4` 默认低画质保护、动态懒加载 Supabase/TUS 云端客户端、修复并补全 QA 自动化脚本与 GitHub Pages 空库门禁，并在性能修复后重新录制了全部宣传图、视频与 `docs/media/tour.gif`。
+
+历史基线（2026-11-13）保留在对比表格中以便横向对照；`.qa/` 与 `.taste-skill/inspect/` 存放可复现原始采样与截图产物。
 
 ## 测量方法
 
-Playwright 操作实际有窗口 Google Chrome，AMD Radeon 780M / ANGLE Direct3D 11，2880×1800、120 Hz 桌面。使用生产构建，deviceScaleFactor=1；2560×1440 测试的实际 canvas 为 2560×1440，没有通过降低该测试的渲染尺寸获取增益。基线和精修版采用同一脚本、相同硬件、相同路线。测量期间没有录像、截图或并行图形测试。
+Playwright 操作实际有窗口 Google Chrome，AMD Radeon 780M / ANGLE Direct3D 11，桌面系统，生产构建 `npm run build`（静态托管 `dist/`），`deviceScaleFactor=1`；`2560×1440` 测试实际 canvas 为 `2560×1440`。基线与 `v1.1.0` 采用同一测试脚本 `scripts/window-performance.mjs`、相同硬件与相同路线，测量期间无并行录像、截图或 GPU 测试。
 
-路线包含庭院静止、进门、24 秒走廊双向连续行走、首次进入三个房间、回院、重复进书房和回走廊，总测量时间超过一分钟。页面全程为 visible。帧间隔由 requestAnimationFrame 时间戳计算；采用 nearest-rank 分位数。长帧阈值为严格大于 33.33、50 和 100 ms，原始文件保留逐帧数据、分段、CPU 提交时间、PerformanceObserver 长任务和应用事件。初始准备不计入行走测量，单独记录。
+路线包含庭院静止、进门、24 秒走廊双向连续行走、首次进入三个房间、回院、重复进书房和回走廊，总测量时间约 74 秒，页面全程 `visible`。帧间隔由 `requestAnimationFrame` 时间戳计算，采用 nearest-rank 分位数；长帧阈值为严格大于 33.33、50 和 100 ms。
 
-浏览器：Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36。
-渲染器：ANGLE (AMD, AMD Radeon 780M Graphics (0x00001900) Direct3D11 vs_5_0 ps_5_0, D3D11)。
-生产入口脚本：/assets/index-efqNcmUg.js。
+- 浏览器：`Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36`
+- 渲染器：`ANGLE (AMD, AMD Radeon 780M Graphics (0x00001900) Direct3D11 vs_5_0 ps_5_0, D3D11)`
+- 生产入口脚本：`dist/assets/index-kRUJvrHj.js`（212.70 kB / gzip 71.57 kB；`@supabase/supabase-js` 与 `tus-js-client` 已拆分为按需动态加载的 `supabase-*.js` 独立 chunk，静态导出模式下不会被请求）
 
 ## 完整操作性能
 
 | 配置 | 时长 | 平均 FPS | P95 | P99 | 最慢帧 | >50 ms 次数 | >100 ms 次数 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 精修前 2560×1440 细致 | 90.3 s | 15.5 | 83.3 ms | 116.6 ms | 3099.9 ms | 1041 | 17 |
-| 精修后 2560×1440 细致 | 75.3 s | 30.9 | 66.7 ms | 75.2 ms | 99.9 ms | 267 | 0 |
-| 精修后 1920×1080 细致 | 74.4 s | 48.5 | 33.5 ms | 50.1 ms | 66.7 ms | 54 | 0 |
-
-不同路线总时长来自同一组操作：精修前首次房间挂载、编译和上传会延长操作等待。长帧绝对次数应结合总时长与样本数解读，不宣称相同时间内下降相同比例。
+| 精修前 2560×1440 细致（2026-11-13） | 90.3 s | 15.5 | 83.3 ms | 116.6 ms | 3099.9 ms | 1041 | 17 |
+| 精修后 2560×1440 细致（2026-11-13） | 75.3 s | 30.9 | 66.7 ms | 75.2 ms | 99.9 ms | 267 | 0 |
+| **v1.1.0 2560×1440 细致（2026-11-15）** | **74.6 s** | **41.1** | **48.7 ms** | **63.2 ms** | **100.1 ms** | **134** | **1** |
+| 精修后 1920×1080 细致（2026-11-13） | 74.4 s | 48.5 | 33.5 ms | 50.1 ms | 66.7 ms | 54 | 0 |
+| **v1.1.0 1920×1080 细致（2026-11-15）** | **74.0 s** | **66.8** | **28.0 ms** | **34.5 ms** | **58.4 ms** | **1** | **0** |
+| **v1.1.0 1920×1080 兼容（2026-11-15）** | **74.1 s** | **71.0** | **26.7 ms** | **33.7 ms** | **58.4 ms** | **2** | **0** |
 
 ## 连续行走分段
 
 | 配置 | 平均 FPS | P95 | P99 | 最慢帧 | >50 ms 次数 |
 | --- | --- | --- | --- | --- | --- |
-| 精修前 1440p | 16.8 | 75.1 ms | 83.4 ms | 91.7 ms | 315 |
-| 精修后 1440p | 31.5 | 66.7 ms | 75.0 ms | 91.6 ms | 93 |
-| 精修后 1080p | 47.8 | 33.4 ms | 50.1 ms | 58.6 ms | 20 |
+| 精修前 1440p（2026-11-13） | 16.8 | 75.1 ms | 83.4 ms | 91.7 ms | 315 |
+| 精修后 1440p（2026-11-13） | 31.5 | 66.7 ms | 75.0 ms | 91.6 ms | 93 |
+| **v1.1.0 1440p 细致（2026-11-15）** | **39.6** | **51.2 ms** | **67.6 ms** | **89.9 ms** | **55** |
+| 精修后 1080p（2026-11-13） | 47.8 | 33.4 ms | 50.1 ms | 58.6 ms | 20 |
+| **v1.1.0 1080p 细致（2026-11-15）** | **65.4** | **28.3 ms** | **34.5 ms** | **39.0 ms** | **0** |
+| **v1.1.0 1080p 兼容（2026-11-15）** | **68.3** | **27.7 ms** | **33.4 ms** | **35.7 ms** | **0** |
 
-秒级首次进房停顿已经消除；1440p 仍存在可感知的慢帧，不能称为稳定 60 FPS。旧记录的 34.8 FPS 来自较短的无头 Chrome 预热行走，与本表的有窗口完整操作口径不同，不直接作增减比较。测试是单台集成显卡上的单次可复现样本，窗口合成、驱动调度和整机负载也影响帧间隔，不代表所有设备。
+在 AMD Radeon 780M 核显下：`1920×1080` 细致画质已实现完整操作平均 66.8 FPS、全程仅 1 帧超过 50 ms，24 秒走廊连续行走平均 65.4 FPS 且 0 次超过 50 ms；`2560×1440` 细致画质相对上一轮 30.9 FPS 提升至 41.1 FPS，>50 ms 慢帧减半（267 -> 134）。数据为单台集成显卡的可复现窗口实测，系统合成与驱动调度仍会影响绝对帧间隔。
 
-## 原因与处理
+## 关键处理与几何/渲染收敛
 
-- 原版按导航挂载目的地陈设，光源数量也随房间变化。首次入房时出现与绘制提交同帧的约 1.5～3.1 秒长任务；常驻所有房间、固定光源类型与数量、入口前上传和预编译后，该类长帧消失。这支持首次资源／着色器准备是主要原因，但没有把一次长任务观察冒充完整调用栈分析。
-- WebGL GPU 计时扩展的诊断确认持续行走主要受 GPU 限制。中间版本场景绘制约 13 ms、AO 通道约 14 ms，CPU 提交通常只需数毫秒。诊断原始文件保存在 .qa/polish/diagnostics/，不与最终无计时扩展的性能数值混用。
-- 平直玻璃使用透明薄片与介电环境反射，取消整场景体积透射捕获；玻璃不写深度、不进入 AO 法线通道。它是适合 6 mm 平窗的近似，不宣称具备真实体积折射。
-- HDR 目标取消 MSAA 存储与 resolve，使用 FXAA；细致 AO 使用 40% 线性分辨率和 6 个去噪样本。最终图片确认窗框、门缘与纸张仍可辨认。
-- 外景仍绘制窗后的真实陈设，但省去这些远处陈设的 AO 与家具阴影绘制；室内恢复完整家具 AO 与阴影。
-- DPR 在静止和移动时都封顶 1.5；本轮 1440p 测试原生 DPR 为 1，未受该上限影响。高密度屏幕有静止细腻度取舍，换来停止／起步时不重建缓冲区。640 px、DPR 2 窗口及触控回归另行验证。
-
-最终 1440p 路线所有渲染通道合计调用峰值为 191，低于 200 次预算。常驻几何包含隐藏房间，但绘制依空间与视线裁剪；最终 7 个窗口的庭院场景三角面峰值 311,760，低于 500,000 面预算。
+- **移除 `UnrealBloomPass`**：去掉后处理降采样模糊/上采样链，`RenderPipeline.tsx` 保留 `RenderPass -> N8AOPostPass -> OutputPass -> ShaderPass(FXAASharp)`，消除高亮白框光晕溢色并显著降低全屏像素带宽占用。
+- **外景实例化与分部减面**：`scripts/assets.mjs` 新增分原语（`trunk` / `branches` / `leaves`）树冠减面策略，保留 `island_tree_01` / `island_tree_02` 主干轮廓而不产生悬垂低模撕裂片；`src/ExteriorScenery.tsx` 将外圈树阵从 62 棵收敛至 38 棵，扩大内圈阴影批处理半径以消除独立大树批，并把花草/岩石变体从 3 档收敛为 2 档。
+- **低配默认画质保护**：`src/lib/quality.ts` 恢复 `navigator.deviceMemory <= 4` 默认启用 `low` 兼容画质。
+- **绘制调用与三角面预算**：
+  - 有窗口实测各稳态场景绘制调用（2560×1440 细致）：庭院 `195`（1080p 兼容为 `192`）、走廊行走 `106`、作品室 `166`、创作手记 `193`、关于我 `197`；仅在过门切换内外双侧同时入镜或阴影刷新瞬态达到 `270`（兼容画质 `260`）。
+  - 小院场景基准几何计数（1280×720 `?qa&gpu`）：`high` 画质 `calls: 195`、`sceneTriangles: 716,046`、`passTriangles: 795,579`；`low` 兼容画质 `calls: 188`、`sceneTriangles: 364,796`、`passTriangles: 421,369`（<= 500,000 面低配预算）。
 
 ## 初始准备与事件
 
-本次 1440p 运行的初始准备在页面时间 13.33 s 完成；这是本地完整 GPU 预热，既不是公网冷启动成绩，也不是无缓存网络下载成绩。首次准备变重是消除首次房间停顿的代价，仍需要后续冷启动优化。界面分别显示整理家具、准备光线和布置房间，不在素材下载到 100% 后继续显示同一个假进度。
+- `2560×1440` 细致画质初始事件：
+  - `render-target-resize`：`0.0 ms`（`2560x1440@1`）
+  - `texture-upload`：`2661.6 ms`（`88 textures`）
+  - `shader-compile`：`3009.1 ms`
+  - `initial-render-warmup`：`16114.9 ms`（于页面时间 `16.81 s` 完成；`1920×1080` 兼容画质为 `13.25 s` 完成，其中纹理上传仅 `444.1 ms`）
+- 测量开始后全程记录 `12` 次 `shadow-refresh`（由门动画开关触发），`0` 次运行时着色器编译、`0` 次整批纹理重传。
 
-初始事件：
+## 画面、宣传素材与自动化回归
 
-- render-target-resize：0.1 ms；2560x1440@1
-- texture-upload：3760.1 ms；40 textures
-- shader-compile：2390.9 ms
-- initial-render-warmup：12302.6 ms
+- **本地资产清单**：`node scripts/check-assets.mjs` 校验全部 `61` 个本地资产（`low` 材质 `-1k.webp` 共 `1.67 MiB`、GLB `low` `2.18 MiB` / `high` `4.82 MiB`），总计 `35.27 MiB`，无任何运行时外部素材请求。
+- **相机几何与端到端脚本**：全部门洞穿越、7 组跨端视口无溢出、`local-cms` 读写及静态导出、Cloudflare/Supabase 契约 Mock 回归、`Now/金句` 与 `SiteSettings` 持久化、兼容画质切换与背景生命周期恢复均由本地自动化脚本验证通过（浏览器错误数 `0`）。
+- **宣传资产重录（2026-11-15）**：性能修复后重新执行 `npm run promo:capture`，以锁定 `60.00 fps`（0 丢帧、0 重复帧）完成生成：
+  - `promo/bilibili-horizontal.mp4`（1920×1080，25.50 s，1530 帧，`55.87 MiB`）
+  - `promo/douyin-xhs-vertical.mp4`（1080×1920，25.50 s，1528 帧，`42.87 MiB`）
+  - `docs/media/tour.gif`（560 px @ 8 fps，7.90 s，`5.60 MiB`）与 `docs/media/hero.webp`（1600×900）
+  - `promo/xhs-01`~`06.png`、`promo/bilibili-cover.png`（1920×1080）与 `promo/social-preview.png`（1280×640）经目视核验树干轮廓、照明层次与画框构图均清晰正常。
 
-测量开始后记录 12 次阴影刷新、0 次编译、0 次整批纹理上传、0 次缓冲区重设。阴影刷新以门动画完成为触发；没有每帧刷新阴影。
+## 交付证据位置
 
-## 画面与操作验收
-
-- 房屋、院子和树分别取景，保留完整屋顶与院子；加强三分之四视角，减少合并包围盒的留白。
-- 窗框有压条、密封线、把手和窗台；窗后是进入时看到的同一套陈设。
-- 窗光朝室内，窗边与房间深处有明暗层次；木材、灰泥、纸张、金属采用各自粗糙度，灰泥法线强度降低。
-- 门廊有柱脚、檐口和台阶鼻口；书桌有围板、抽屉、拉手及书写物件；展廊补足支架和托件。
-- 1440×900、2560×1440、768×1024、390×844、640×900、390×650、640×800 窗口无页面横向溢出。竖屏在原始三维位置逐幅聚焦，提供前后切换、边界禁用与大图切换；横屏保留三幅同场。
-- 相机几何检查：6 窗口、120 组路线、75,144 个采样点，检查有限姿态、单位四元数、无翻转、门洞穿越与各主体范围入镜。
-- 浏览器回归 34 段导航；包括关键帧、阅读、3D 画作拾取、返回行走位置、改名、声音、减少动态、转场调整窗口、模拟后台生命周期及兼容画质。后台检查只覆盖 document.hidden / visibilitychange，不冒充系统休眠或强杀恢复。
-- critical load failure keeps entry locked; retry succeeds；640 px narrow desktop uses a stable DPR cap of 1.5；motion and settling retain DPR 1.5 without render-target reallocation；room return restores the exact 3D corridor stop；phone touch swipe advances the same corridor；icon-only mobile map remains named and keyboard-dismissable。
-- 最终浏览器错误数：0。本地 23 个素材的 SHA-256 仍通过，总量 35.62 MiB；没有增加外部素材请求。
-
-## 交付文件
-
-- .qa/polish/after/yard-1440x900.png、study-1440x900.png、gallery-390x844.png、artwork-390x844.png：最终画面。
-- .qa/polish/after/visual-check.json、verification.json、edge-cases.json：窗口和功能证据。
-- .qa/polish/after/complete-transitions.webm：导航录像，录制与性能测量分开。
-- .qa/polish/after/window-performance-*.json：最终有窗口逐帧数据。
-- .qa/polish/before/window-performance-2560-high-dpr1.json：本轮前有窗口基线。
-- .qa/polish/before/src/：本轮前源码快照；历史版本素材来源仍见 ASSETS.md。
-
-本轮本地精修与功能验证完成。性能结论为秒级进房停顿消除、平均与尾部帧时间改善，1440p 慢帧仍需继续降低。示例内容替换、公网部署与公网冷启动保持后续范围。
+- 性能原始数据：`.qa/polish/after/window-performance-1920-high-dpr1.json`、`window-performance-2560-high-dpr1.json`、`window-performance-1920-low-dpr1.json`
+- 多视口与交互回归产物：`.qa/polish/after/visual-check.json`、`verification.json`、`complete-transitions.webm`
+- 宣传捕获日志：`promo/capture.log`；历史基线：`.qa/polish/before/window-performance-2560-high-dpr1.json`

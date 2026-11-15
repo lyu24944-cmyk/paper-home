@@ -96,14 +96,18 @@ export interface AtmosphereLighting {
   deskLampRecommended: boolean
   glassOpacity: number
   glassEnvIntensity: number
+  pathBollardEmissive: number
+  pathBollardColor: string
+  pathBollardLightIntensity: number
+  wetness: number
 }
 
 const BASE_PRESETS: Record<AtmospherePreset, Omit<AtmosphereLighting, 'preset' | 'weather'>> = {
   dawn: {
-    clearColor: '#cfdce0',
-    fogColor: '#cfdce0',
-    fogNear: 28,
-    fogFar: 78,
+    clearColor: '#8697a6',
+    fogColor: '#8697a6',
+    fogNear: 38,
+    fogFar: 145,
     backgroundIntensity: 0.52,
     environmentIntensity: 0.28,
     hemiSkyColor: '#d8e6ee',
@@ -124,13 +128,16 @@ const BASE_PRESETS: Record<AtmospherePreset, Omit<AtmosphereLighting, 'preset' |
     deskLampRecommended: false,
     glassOpacity: 0.16,
     glassEnvIntensity: 0.85,
+    pathBollardEmissive: 0.42,
+    pathBollardColor: '#ffcb80',
+    pathBollardLightIntensity: 0.55,
+    wetness: 0,
   },
   daylight: {
-    // Exact baseline match with original World.tsx constants
-    clearColor: '#cbdde2',
-    fogColor: '#cbdde2',
-    fogNear: 55,
-    fogFar: 110,
+    clearColor: '#abc0cc',
+    fogColor: '#abc0cc',
+    fogNear: 46,
+    fogFar: 170,
     backgroundIntensity: 0.8,
     environmentIntensity: 0.4,
     hemiSkyColor: '#e8f1f4',
@@ -151,12 +158,16 @@ const BASE_PRESETS: Record<AtmospherePreset, Omit<AtmosphereLighting, 'preset' |
     deskLampRecommended: false,
     glassOpacity: 0.14,
     glassEnvIntensity: 0.8,
+    pathBollardEmissive: 0,
+    pathBollardColor: '#ffe0a8',
+    pathBollardLightIntensity: 0,
+    wetness: 0,
   },
   golden: {
-    clearColor: '#e3c7ab',
-    fogColor: '#dfbfa2',
-    fogNear: 38,
-    fogFar: 92,
+    clearColor: '#96877c',
+    fogColor: '#96877c',
+    fogNear: 40,
+    fogFar: 152,
     backgroundIntensity: 0.62,
     environmentIntensity: 0.34,
     hemiSkyColor: '#ffd9b3',
@@ -177,12 +188,16 @@ const BASE_PRESETS: Record<AtmospherePreset, Omit<AtmosphereLighting, 'preset' |
     deskLampRecommended: true,
     glassOpacity: 0.17,
     glassEnvIntensity: 0.95,
+    pathBollardEmissive: 0.48,
+    pathBollardColor: '#ffc273',
+    pathBollardLightIntensity: 0.65,
+    wetness: 0,
   },
   night: {
     clearColor: '#1b2530',
     fogColor: '#1b2530',
     fogNear: 24,
-    fogFar: 70,
+    fogFar: 92,
     backgroundIntensity: 0.11,
     environmentIntensity: 0.12,
     hemiSkyColor: '#48627a',
@@ -203,6 +218,10 @@ const BASE_PRESETS: Record<AtmospherePreset, Omit<AtmosphereLighting, 'preset' |
     deskLampRecommended: true,
     glassOpacity: 0.21,
     glassEnvIntensity: 1.08,
+    pathBollardEmissive: 1.65,
+    pathBollardColor: '#ffc470',
+    pathBollardLightIntensity: 1.75,
+    wetness: 0,
   },
 }
 
@@ -219,12 +238,19 @@ export function getAtmosphereLighting(
     }
   }
   const isNight = preset === 'night'
+  const rainHorizon = isNight
+    ? '#17212b'
+    : preset === 'golden'
+      ? '#7c736d'
+      : preset === 'dawn'
+        ? '#72828f'
+        : '#8ea0ab'
   return {
     preset,
     weather,
     ...base,
-    fogColor: isNight ? '#17212b' : preset === 'golden' ? '#b8aba1' : '#b7c7cc',
-    clearColor: isNight ? '#17212b' : preset === 'golden' ? '#b8aba1' : '#b7c7cc',
+    fogColor: rainHorizon,
+    clearColor: rainHorizon,
     fogNear: Math.round(base.fogNear * 0.72),
     fogFar: Math.round(base.fogFar * 0.78),
     backgroundIntensity: Number((base.backgroundIntensity * 0.72).toFixed(2)),
@@ -234,6 +260,9 @@ export function getAtmosphereLighting(
     roomWarmFillIntensity: Math.max(1.5, base.roomWarmFillIntensity),
     deskLampRecommended: true,
     glassOpacity: Math.min(0.24, base.glassOpacity + 0.03),
+    pathBollardEmissive: isNight ? Math.max(1.85, base.pathBollardEmissive) : Math.max(0.65, base.pathBollardEmissive),
+    pathBollardLightIntensity: isNight ? Math.max(1.95, base.pathBollardLightIntensity) : Math.max(0.75, base.pathBollardLightIntensity),
+    wetness: 1,
   }
 }
 

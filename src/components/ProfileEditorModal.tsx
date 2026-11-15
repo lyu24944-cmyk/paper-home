@@ -163,6 +163,11 @@ export function ProfileEditorModal({
       setSaveError(err.message)
       return
     }
+    const cleanNow = nowNotes.map((n) => n.trim()).filter(Boolean)
+    const cleanQuotes = quotesText
+      .split(/\r?\n/)
+      .map((q) => q.trim())
+      .filter(Boolean)
     onConflict({
       title: '关于我',
       localCopyText: [
@@ -170,6 +175,8 @@ export function ProfileEditorModal({
         `关注方向：${focusAreas}`,
         `公开联系邮箱：${contactEmail}`,
         ...contactLinks.map((l) => `${l.label}: ${l.url}`),
+        ...(cleanNow.length ? ['', '近况便签：', ...cleanNow] : []),
+        ...(cleanQuotes.length ? ['', '书桌灵感签：', ...cleanQuotes] : []),
         '',
         bio,
       ].join('\n'),

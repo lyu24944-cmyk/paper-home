@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { HalfFloatType, Mesh, Object3D, PerspectiveCamera, Texture, WebGLRenderTarget } from 'three'
+import { HalfFloatType, Mesh, Object3D, PerspectiveCamera, Texture, Vector2, WebGLRenderTarget } from 'three'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js'
@@ -108,6 +108,7 @@ export function RenderPipeline({
         })
       }
     }
+    const passNames = ['scene', 'ambient-occlusion', 'output', 'FXAA']
     composer.addPass(ao)
     // Tone mapping + linear-to-sRGB must run before FXAA, which expects sRGB luma input.
     composer.addPass(new OutputPass())
@@ -124,7 +125,7 @@ export function RenderPipeline({
     if (timer) {
       composer.passes.forEach((pass, index) => {
         const render = pass.render.bind(pass)
-        const name = ['scene', 'ambient-occlusion', 'output', 'FXAA'][index] ?? `pass-${index}`
+        const name = passNames[index] ?? `pass-${index}`
         let count = 0
         gpu[name] = []
         pass.render = (...args) => {

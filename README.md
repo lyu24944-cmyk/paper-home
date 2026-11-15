@@ -135,7 +135,7 @@ Open the extracted folder in **Antigravity, Cursor, or Trae** and paste any of t
 | `npm run preview` | Preview `dist/` locally at `http://127.0.0.1:4319/` |
 | `npm run assets:1k` | Generate 18 `1024×1024` `-1k.webp` mobile textures and update `manifest.json` |
 | `npm run assets:prepare` | Re-download and process all Poly Haven assets + 1K variants |
-| `npm run assets:verify` | Verify SHA-256 checksums of all 41 local assets in `manifest.json` |
+| `npm run assets:verify` | Verify SHA-256 checksums of all 61 local assets (`35.27 MiB`) in `manifest.json` |
 | `npm run check:camera` | Verify 75,144 camera trajectory samples across 120 routes & 6 viewports |
 | `npm run check:sound` | Playwright verification of WebAudio synthesis & tactile SFX |
 | `npm run check:phase1` | Playwright verification of atmospheres, rain & room props |
@@ -153,6 +153,6 @@ Open the extracted folder in **Antigravity, Cursor, or Trae** and paste any of t
 
 ### Optional Cloud CMS Mode (Supabase + Cloudflare Pages)
 
-For multi-device online editing with magic-link auth, see [DEPLOY.md](./DEPLOY.md) (in Chinese) and run `npm run sync:supabase` when ready. QA measurements are documented in [QA.md](./QA.md).
+For multi-device online editing with admin email & password auth, see [DEPLOY.md](./DEPLOY.md) (in Chinese) and run `npm run sync:supabase` when ready. QA measurements are documented in [QA.md](./QA.md).
 
 </details>

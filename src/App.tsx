@@ -558,7 +558,7 @@ export default function App() {
         return
       }
 
-      const client = getSupabaseClient()
+      const client = await getSupabaseClient()
       const { data: sess } = await client.auth.getSession()
       if (seq !== adminSeqRef.current) return
       if (!sess.session?.access_token) {
@@ -601,7 +601,7 @@ export default function App() {
       return
     }
     if (health.mode === 'cloud') {
-      const client = getSupabaseClient()
+      const client = await getSupabaseClient()
       const { data } = await client.auth.getSession()
       if (data.session?.access_token) {
         await loadAdmin()
@@ -614,7 +614,7 @@ export default function App() {
     let active = true
     let unsubscribe: (() => void) | null = null
 
-    void resolveBackendHealth().then((health) => {
+    void resolveBackendHealth().then(async (health) => {
       if (!active) return
       setBackendHealth(health)
       if (health.mode === 'local-studio') {
@@ -625,7 +625,8 @@ export default function App() {
         return
       }
       if (health.mode !== 'cloud') return
-      const client = getSupabaseClient()
+      const client = await getSupabaseClient()
+      if (!active) return
       void client.auth.getSession().then(({ data }) => {
         if (active && data.session?.access_token) {
           setAdminEmail(data.session.user?.email ?? '主人')
@@ -1762,9 +1763,12 @@ export default function App() {
   )
 
   const handleSelectQuality = useCallback((next: Quality) => {
+    if (next === quality) return
     saveQualityPreference(next)
+    setReady(false)
+    setPreparing('')
     setQuality(next)
-  }, [])
+  }, [quality])
 
   const handleRecoverContextLoss = useCallback(() => {
     const stalePack = prevPackRef.current
@@ -2015,7 +2019,7 @@ export default function App() {
               type="button"
               className={`quality-option ${quality === 'high' ? 'active' : ''}`}
               aria-pressed={quality === 'high'}
-              disabled={busy}
+              disabled={busy || !ready}
               onClick={() => handleSelectQuality('high')}
             >
               <span className="quality-label-full">细致画质</span>
@@ -2025,7 +2029,7 @@ export default function App() {
               type="button"
               className={`quality-option ${quality === 'low' ? 'active' : ''}`}
               aria-pressed={quality === 'low'}
-              disabled={busy}
+              disabled={busy || !ready}
               onClick={() => handleSelectQuality('low')}
             >
               <span className="quality-label-full">兼容画质</span>

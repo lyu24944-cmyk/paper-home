@@ -48,6 +48,8 @@ function toProfileSnapshotRow(pub) {
     avatar_asset_id: pub.avatarAssetId ?? null,
     contact_email: pub.contactEmail || '',
     contact_links: Array.isArray(pub.contactLinks) ? pub.contactLinks : [],
+    now_notes: Array.isArray(pub.nowNotes) ? pub.nowNotes : [],
+    quotes: Array.isArray(pub.quotes) ? pub.quotes : [],
     published_at: pub.publishedAt ?? new Date().toISOString(),
   }
 }
@@ -151,12 +153,33 @@ async function main() {
         draft_avatar_asset_id: p.draft.avatarAssetId ?? null,
         draft_contact_email: p.draft.contactEmail || '',
         draft_contact_links: p.draft.contactLinks ?? [],
+        draft_now_notes: Array.isArray(p.draft.nowNotes) ? p.draft.nowNotes : [],
+        draft_quotes: Array.isArray(p.draft.quotes) ? p.draft.quotes : [],
         published_snapshot: publishProfile ? toProfileSnapshotRow(p.published) : null,
       },
       { onConflict: 'id' },
     )
     if (error) throw error
     console.log(`Synced owner profile [${publishProfile ? 'published' : 'draft'}]`)
+  }
+
+  if (db.siteSettings) {
+    const s = db.siteSettings
+    const { error } = await supabase.from('site_settings').upsert(
+      {
+        id: 'main',
+        home_name: s.homeName || '我的小屋',
+        plaque_title: s.plaqueTitle || '欢迎回家',
+        plaque_subtitle: s.plaqueSubtitle ?? '',
+        yard_heading: s.yardHeading || '来家里坐坐。',
+        yard_subtitle: s.yardSubtitle ?? '',
+        default_atmosphere: s.defaultAtmosphere || 'daylight',
+        default_weather: s.defaultWeather || 'clear',
+      },
+      { onConflict: 'id' },
+    )
+    if (error) throw error
+    console.log(`Synced site settings (${s.homeName})`)
   }
 
   console.log('\n[sync:supabase] Done!')

@@ -240,7 +240,32 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
       },
       projects: Array.isArray(raw?.projects) ? raw.projects : [],
       notes: Array.isArray(raw?.notes) ? raw.notes : [],
-      profile: raw?.profile && typeof raw.profile === 'object' ? { ...base.profile, ...raw.profile } : base.profile,
+      profile:
+        raw?.profile && typeof raw.profile === 'object'
+          ? {
+              ...base.profile,
+              ...raw.profile,
+              draft: {
+                ...base.profile.draft,
+                ...(raw.profile.draft && typeof raw.profile.draft === 'object' ? raw.profile.draft : {}),
+                contactLinks: Array.isArray(raw.profile.draft?.contactLinks) ? raw.profile.draft.contactLinks : [],
+                nowNotes: Array.isArray(raw.profile.draft?.nowNotes) ? raw.profile.draft.nowNotes : [],
+                quotes: Array.isArray(raw.profile.draft?.quotes) ? raw.profile.draft.quotes : [],
+              },
+              published:
+                raw.profile.published && typeof raw.profile.published === 'object'
+                  ? {
+                      ...base.profile.draft,
+                      ...raw.profile.published,
+                      contactLinks: Array.isArray(raw.profile.published.contactLinks)
+                        ? raw.profile.published.contactLinks
+                        : [],
+                      nowNotes: Array.isArray(raw.profile.published.nowNotes) ? raw.profile.published.nowNotes : [],
+                      quotes: Array.isArray(raw.profile.published.quotes) ? raw.profile.published.quotes : [],
+                    }
+                  : null,
+            }
+          : base.profile,
       assets: raw?.assets && typeof raw.assets === 'object' ? raw.assets : {},
     }
   }

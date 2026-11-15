@@ -3,9 +3,11 @@ import { execFileSync } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import http from 'node:http'
+import net from 'node:net'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from '@playwright/test'
+import sharp from 'sharp'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
@@ -13,8 +15,20 @@ const distDir = path.join(rootDir, '.qa', 'cms-dist')
 const qaOutDir = path.join(rootDir, '.qa', 'cms-verify')
 fs.mkdirSync(qaOutDir, { recursive: true })
 
-const MOCK_PORT = 4325
-const SITE_PORT = 4326
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer()
+    srv.once('error', reject)
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address()
+      const port = typeof addr === 'object' && addr ? addr.port : 0
+      srv.close((err) => (err ? reject(err) : resolve(port)))
+    })
+  })
+}
+
+const MOCK_PORT = await getFreePort()
+const SITE_PORT = await getFreePort()
 const ADMIN_EMAIL = 'owner@example.com'
 const ADMIN_PASS = 'Secret123!'
 const ADMIN_UID = '11111111-1111-4111-8111-111111111111'
@@ -64,9 +78,21 @@ function createMockSupabase() {
         avatarAssetId: null,
         contactEmail: '',
         contactLinks: [],
+        nowNotes: [],
+        quotes: [],
       },
       published: null,
     },
+    siteSettings: {
+      homeName: '我的小屋',
+      plaqueTitle: '欢迎回家',
+      plaqueSubtitle: '留一点时间，慢慢逛',
+      yardHeading: '来家里坐坐。',
+      yardSubtitle: '推开门，里面是我的作品、过程记录与自我介绍。',
+      defaultAtmosphere: 'daylight',
+      defaultWeather: 'clear',
+    },
+    siteSettingsVersion: 1,
     orderVersions: { projects: 1, notes: 1 },
     cleanupQueue: new Map(), // assetId -> paths[]
     failNextTusPatch: false,
@@ -391,7 +417,7 @@ function createMockSupabase() {
           signedUrls[id] = buildSignEntry(asset)
         }
       }
-      return sendJson(res, 200, { projects, notes, profile, signedUrls })
+      return sendJson(res, 200, { projects, notes, profile, siteSettings: db.siteSettings, signedUrls })
     }
 
     // Edge Function: media-sign
@@ -438,6 +464,8 @@ function createMockSupabase() {
         projects: [...db.projects].sort((a, b) => a.sortOrder - b.sortOrder),
         notes: [...db.notes].sort((a, b) => a.sortOrder - b.sortOrder),
         profile: db.profile,
+        siteSettings: db.siteSettings,
+        siteSettingsVersion: db.siteSettingsVersion,
         orderVersions: { ...db.orderVersions },
         assets: assetsObj,
         signedUrls,
@@ -690,12 +718,41 @@ function createMockSupabase() {
           avatarAssetId: payload.avatarAssetId ?? null,
           contactEmail: String(payload.contactEmail ?? ''),
           contactLinks: Array.isArray(payload.contactLinks) ? payload.contactLinks : [],
+          nowNotes: Array.isArray(payload.nowNotes) ? payload.nowNotes.map((v) => String(v).trim()).filter(Boolean).slice(0, 3) : [],
+          quotes: Array.isArray(payload.quotes) ? payload.quotes.map((v) => String(v).trim()).filter(Boolean).slice(0, 8) : [],
         }
         db.profile.hasUnpublishedChanges = true
         db.profile.version += 1
         enqueueIfUnreferenced([oldAvatar])
         flushCleanup()
         return sendJson(res, 200, { ok: true, profile: db.profile, pendingCleanupCount: db.cleanupQueue.size })
+      }
+
+      if (action === 'settings.save') {
+        if (db.siteSettingsVersion !== payload.expectedVersion) {
+          return sendJson(res, 409, {
+            ok: false,
+            code: 'CONFLICT',
+            error: '小屋设置在另一标签页已有更新，请刷新后再保存。',
+            latest: { siteSettings: db.siteSettings, siteSettingsVersion: db.siteSettingsVersion },
+          })
+        }
+        db.siteSettings = {
+          homeName: String(payload.homeName || '').trim().slice(0, 12) || '我的小屋',
+          plaqueTitle: String(payload.plaqueTitle || '').trim().slice(0, 12) || '欢迎回家',
+          plaqueSubtitle: payload.plaqueSubtitle !== undefined ? String(payload.plaqueSubtitle).trim().slice(0, 24) : db.siteSettings.plaqueSubtitle,
+          yardHeading: String(payload.yardHeading || '').trim().slice(0, 24) || '来家里坐坐。',
+          yardSubtitle: payload.yardSubtitle !== undefined ? String(payload.yardSubtitle).trim().slice(0, 80) : db.siteSettings.yardSubtitle,
+          defaultAtmosphere: payload.defaultAtmosphere || 'daylight',
+          defaultWeather: payload.defaultWeather || 'clear',
+        }
+        db.siteSettingsVersion += 1
+        return sendJson(res, 200, {
+          ok: true,
+          siteSettings: db.siteSettings,
+          siteSettingsVersion: db.siteSettingsVersion,
+          pendingCleanupCount: db.cleanupQueue.size,
+        })
       }
 
       if (action === 'profile.publish') {
@@ -758,12 +815,11 @@ function createStaticServer(dir) {
 
 console.log('1. Building test production bundle with mock Supabase URL -> .qa/cms-dist ...')
 execFileSync(
-  process.platform === 'win32' ? 'npx.cmd' : 'npx',
-  ['vite', 'build', '--outDir', '.qa/cms-dist'],
+  process.execPath,
+  [path.join(rootDir, 'node_modules', 'vite', 'bin', 'vite.js'), 'build', '--outDir', '.qa/cms-dist'],
   {
     cwd: rootDir,
     stdio: 'inherit',
-    shell: process.platform === 'win32',
     env: {
       ...process.env,
       VITE_SUPABASE_URL: `http://127.0.0.1:${MOCK_PORT}`,
@@ -870,8 +926,11 @@ try {
   assert.equal(await openEd.getByLabel('作品标题（发布必填）').inputValue(), '我的小屋 · 交互式个人网站')
   results.checks.push('oversize image (>10 MB) & video (>50 MB) blocked pre-upload with inputs preserved')
 
-  // Upload real PNG screenshot -> canvas WebP resize & upload
-  const coverPngPath = path.join(rootDir, '.qa', 'polish', 'after', 'yard-1440x900.png')
+  // Upload generated deterministic PNG -> canvas WebP resize & upload
+  const coverPngPath = path.join(qaOutDir, 'test-cover.png')
+  await sharp({
+    create: { width: 1200, height: 750, channels: 3, background: { r: 235, g: 232, b: 214 } },
+  }).png().toFile(coverPngPath)
   await coverInput.setInputFiles(coverPngPath)
   await openEd.getByText(/已上传 1 张图片/).waitFor({ timeout: 15000 })
 
@@ -1008,11 +1067,23 @@ try {
   await openEd.locator('.dialog-close').click()
   results.checks.push('409 version conflict preserves edits, shows cloud diff summary, and refreshes cleanly')
 
-  // Check 7: "关于我" profile blank fields omitted & admin email never leaked
+  // Check 7: Site settings + "关于我" profile (with nowNotes & quotes) & admin email never leaked
+  await page.getByRole('button', { name: /小屋地图/ }).click()
+  await page.getByLabel(/给小屋起个名字/).fill('云端小屋')
+  await page.getByRole('button', { name: '自定义门牌与小院迎客语' }).click()
+  await page.getByLabel('小院欢迎大标题').fill('云端同步测试欢迎。')
+  await page.getByRole('button', { name: '保存设置' }).click()
+  await page.getByText('小屋名称与外观文字已保存到云端。').waitFor()
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(200)
+  results.checks.push('cloud siteSettings save persists homeName and yardHeading')
+
   await goRoom('blank')
   await page.getByRole('button', { name: '编辑介绍' }).click()
   await openEd.getByLabel('称呼 / 名字（可留空）').fill('小屋建造者')
   await openEd.getByLabel('关注方向（可留空）').fill('三维网页与个人工具')
+  await openEd.locator('.now-notes-edit-list input').nth(0).fill('正在验证云端近况便签')
+  await openEd.getByLabel(/书房书架灵感签/).fill('慢慢打磨细节。\n把光影留在窗边。')
   await openEd.getByRole('button', { name: '发布介绍' }).click()
   await openEd.getByText('“关于我”公开内容已更新。').waitFor()
   await openEd.locator('.dialog-close').click()
@@ -1061,7 +1132,7 @@ try {
   const xsBackTo1 = await page.evaluate(() => window.__HOME_QA__?.galleryPaperXs)
   assert.deepEqual(xsBackTo1, [0])
 
-  // Check Logout restores pure visitor view & blank profile fields are omitted
+  // Check Logout restores pure visitor view, keeps siteSettings/nowNotes, & blank profile fields omitted
   await page.getByRole('button', { name: /小屋地图/ }).click()
   await page.getByRole('button', { name: '退出登录' }).click()
   await page.getByText('已退出管理模式').waitFor()
@@ -1070,7 +1141,11 @@ try {
   await goRoom('blank')
   assert(await page.getByText('小屋建造者').isVisible())
   assert.equal(await page.getByText(ADMIN_EMAIL).count(), 0)
-  results.checks.push('deletion cleans unused storage blobs and logout restores strict visitor view')
+  await page.getByRole('button', { name: /桌面近况与寄语匣/ }).click()
+  assert(await page.locator('.guestbox-card').getByText('正在验证云端近况便签').isVisible())
+  await goRoom('yard')
+  assert(await page.getByRole('heading', { name: '云端同步测试欢迎。' }).isVisible())
+  results.checks.push('deletion cleans unused storage blobs, logout restores visitor view, and siteSettings + nowNotes remain public')
 
   // Also test bidirectional link click in visitor mode (Study -> Gallery Project -> Study Note)
   await goRoom('study')

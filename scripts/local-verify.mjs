@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import http from 'node:http'
+import net from 'node:net'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from '@playwright/test'
@@ -12,8 +13,20 @@ const rootDir = path.resolve(__dirname, '..')
 const qaOutDir = path.join(rootDir, '.qa', 'local-verify')
 const localDataDir = path.join(qaOutDir, 'local-data')
 const exportDistDir = path.join(qaOutDir, 'export-dist')
-const DEV_PORT = 4328
-const STATIC_PORT = 4329
+let DEV_PORT = 4328
+let STATIC_PORT = 4329
+
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer()
+    srv.once('error', reject)
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address()
+      const port = typeof addr === 'object' && addr ? addr.port : 0
+      srv.close((err) => (err ? reject(err) : resolve(port)))
+    })
+  })
+}
 
 fs.rmSync(qaOutDir, { recursive: true, force: true })
 fs.mkdirSync(localDataDir, { recursive: true })
@@ -127,6 +140,7 @@ async function goRoom(page, place) {
 
 async function run() {
   const results = { checks: [], consoleErrors: [], pageErrors: [], failedRequests: [] }
+  DEV_PORT = await getFreePort()
 
   // Prepare deterministic test PNG cover
   const testPng = await sharp({
@@ -325,7 +339,9 @@ async function run() {
     assert.equal(snapshotJson.notes.length, 1)
     assert.equal(snapshotJson.siteSettings.homeName, '松果小屋')
 
-    staticServer = await createStaticServer(exportDistDir, STATIC_PORT)
+    staticServer = await createStaticServer(exportDistDir, 0)
+    const staticAddr = staticServer.address()
+    STATIC_PORT = typeof staticAddr === 'object' && staticAddr ? staticAddr.port : STATIC_PORT
     const snapPage = await browser.newPage({ viewport: { width: 1280, height: 800 } })
     await snapPage.emulateMedia({ reducedMotion: 'reduce' })
     await snapPage.goto(`http://127.0.0.1:${STATIC_PORT}/?qa`)

@@ -20,7 +20,17 @@ export type Surface = 'brick' | 'roof' | 'plaster' | 'wood' | 'stone' | 'grass'
 export type ResourcePack = {
   textures: Record<Surface, { map: Texture; normalMap: Texture; roughnessMap: Texture }>
   tree: GLTF
+  treeBroad: GLTF
   plant: GLTF
+  treeSmall: GLTF
+  shrub: GLTF
+  shrubThree: GLTF
+  shrubFour: GLTF
+  fern: GLTF
+  wildflower: GLTF
+  periwinkle: GLTF
+  grassClump: GLTF
+  rocks: GLTF
   environment: Texture
   quality: Quality
 }
@@ -59,8 +69,22 @@ export function disposeResourcePack(pack: ResourcePack | null | undefined): void
     group.roughnessMap.dispose()
   }
   pack.environment.dispose()
-  disposeObjectTree(pack.tree.scene)
-  disposeObjectTree(pack.plant.scene)
+  for (const model of [
+    pack.tree,
+    pack.treeBroad,
+    pack.plant,
+    pack.treeSmall,
+    pack.shrub,
+    pack.shrubThree,
+    pack.shrubFour,
+    pack.fern,
+    pack.wildflower,
+    pack.periwinkle,
+    pack.grassClump,
+    pack.rocks,
+  ]) {
+    disposeObjectTree(model.scene)
+  }
 }
 
 export function clearResourcePacks(): void {
@@ -70,7 +94,7 @@ export function clearResourcePacks(): void {
 export function loadResources(quality: Quality, onProgress?: (v: number) => void): Promise<ResourcePack> {
   if (packs.has(quality)) return packs.get(quality)!
   let done = 0
-  const tick = () => onProgress?.(++done / 21)
+  const tick = () => onProgress?.(++done / 31)
   const textureSuffix = quality === 'low' ? '-1k.webp' : '.webp'
   const promise = (async () => {
     const loader = new TextureLoader()
@@ -91,22 +115,61 @@ export function loadResources(quality: Quality, onProgress?: (v: number) => void
         textures[kind] = { map, normalMap, roughnessMap }
       }),
     )
-    const [tree, plant, environment] = await Promise.all([
-      gltf.loadAsync(`${base}island_tree_01-${quality}.glb`).then((v) => {
+    const loadGltf = (name: string) =>
+      gltf.loadAsync(`${base}${name}-${quality}.glb`).then((v) => {
         tick()
         return v
-      }),
-      gltf.loadAsync(`${base}potted_plant_02-${quality}.glb`).then((v) => {
-        tick()
-        return v
-      }),
+      })
+    const [
+      tree,
+      treeBroad,
+      plant,
+      treeSmall,
+      shrub,
+      shrubThree,
+      shrubFour,
+      fern,
+      wildflower,
+      periwinkle,
+      grassClump,
+      rocks,
+      environment,
+    ] = await Promise.all([
+      loadGltf('island_tree_01'),
+      loadGltf('island_tree_02'),
+      loadGltf('potted_plant_02'),
+      loadGltf('tree_small_02'),
+      loadGltf('shrub_sorrel_01'),
+      loadGltf('shrub_03'),
+      loadGltf('shrub_04'),
+      loadGltf('fern_02'),
+      loadGltf('celandine_01'),
+      loadGltf('periwinkle_plant'),
+      loadGltf('grass_medium_02'),
+      loadGltf('rock_moss_set_02'),
       new RGBELoader().loadAsync(`${base}daylight.hdr`).then((v) => {
         v.mapping = EquirectangularReflectionMapping
         tick()
         return v
       }),
     ])
-    return { textures, tree, plant, environment, quality }
+    return {
+      textures,
+      tree,
+      treeBroad,
+      plant,
+      treeSmall,
+      shrub,
+      shrubThree,
+      shrubFour,
+      fern,
+      wildflower,
+      periwinkle,
+      grassClump,
+      rocks,
+      environment,
+      quality,
+    }
   })().catch((e) => {
     packs.delete(quality)
     throw e

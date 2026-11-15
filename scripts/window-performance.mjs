@@ -1,16 +1,45 @@
 import { chromium } from '@playwright/test';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
+import http from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.resolve(__dirname, '..');
 const label = process.argv[2] || 'after';
 const width = Number(process.env.QA_WIDTH || 2560), height = Number(process.env.QA_HEIGHT || 1440);
 const dpr = Number(process.env.QA_DPR || 1), quality = process.env.QA_QUALITY || 'high';
-const dir = `.qa/polish/${label}`;
+const dir = path.join(rootDir, '.qa', 'polish', label);
 await fs.mkdir(dir, { recursive: true });
+
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.webp': 'image/webp', '.png': 'image/png', '.svg': 'image/svg+xml', '.ttf': 'font/ttf', '.woff2': 'font/woff2', '.hdr': 'application/octet-stream', '.glb': 'model/gltf-binary', '.bin': 'application/octet-stream' };
+let staticSrv = null;
+let targetUrl = process.env.QA_URL || `http://127.0.0.1:4319/?qa&quality=${quality}`;
+if (!process.env.QA_URL) {
+  let reachable = false;
+  try { const r = await fetch('http://127.0.0.1:4319/', { signal: AbortSignal.timeout(800) }); reachable = r.ok; } catch {}
+  if (!reachable) {
+    const distDir = path.join(rootDir, 'dist');
+    staticSrv = http.createServer((req, res) => {
+      const cleanUrl = (req.url || '/').split('?')[0];
+      let filePath = path.join(distDir, cleanUrl === '/' ? 'index.html' : decodeURIComponent(cleanUrl));
+      if (!fsSync.existsSync(filePath) || fsSync.statSync(filePath).isDirectory()) filePath = path.join(distDir, 'index.html');
+      res.setHeader('Content-Type', MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream');
+      res.end(fsSync.readFileSync(filePath));
+    });
+    await new Promise((r) => staticSrv.listen(0, '127.0.0.1', r));
+    const addr = staticSrv.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 4319;
+    targetUrl = `http://127.0.0.1:${port}/?qa&quality=${quality}`;
+  }
+}
+
 const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: false, args: ['--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization', `--window-size=${Math.min(width + 30, 2560)},${Math.min(height + 100, 1530)}`] });
 const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: dpr });
 const errors = [];
 page.on('pageerror', error => errors.push(error.message));
-await page.goto(`http://127.0.0.1:4319/?qa&quality=${quality}`);
+await page.goto(targetUrl);
 await page.waitForFunction(() => !document.querySelector('.enter-button')?.disabled, { timeout: 120000 });
 await page.waitForTimeout(1500);
 await page.evaluate(() => {
@@ -69,3 +98,4 @@ Object.assign(result, { headed: true, width, height, deviceScaleFactor: dpr, qua
 await fs.writeFile(`${dir}/window-performance-${width}-${quality}-dpr${dpr}.json`, JSON.stringify(result, null, 2));
 console.log(JSON.stringify({ label, width, height, dpr, quality, summary: result.summary, phases: result.phases, renderer: result.snapshot.renderer, errors }, null, 2));
 await browser.close();
+staticSrv?.close();

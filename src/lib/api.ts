@@ -152,7 +152,7 @@ export function normalizeAdminProfile(row: Record<string, unknown>): AdminProfil
 }
 
 async function getAccessToken(): Promise<string> {
-  const client = getSupabaseClient()
+  const client = await getSupabaseClient()
   const { data, error } = await client.auth.getSession()
   if (error || !data.session?.access_token) {
     throw new ApiError(401, '未登录或登录状态已过期，请先登录主人账号。', 'UNAUTHORIZED')
@@ -279,7 +279,7 @@ async function callFunction<T>(
 }
 
 export async function signInAdmin(email: string, password: string) {
-  const client = getSupabaseClient()
+  const client = await getSupabaseClient()
   const { data, error } = await client.auth.signInWithPassword({ email: email.trim(), password })
   if (error || !data.session) {
     throw new ApiError(401, error?.message || '邮箱或密码不正确，请重试。', 'AUTH_FAILED')
@@ -306,7 +306,7 @@ export async function signOutAdmin() {
     return
   }
   if (!isCloudConfigured) return
-  const client = getSupabaseClient()
+  const client = await getSupabaseClient()
   await client.auth.signOut()
 }
 

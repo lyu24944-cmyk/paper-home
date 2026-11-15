@@ -191,6 +191,6 @@
 
 ### 进阶：多设备云端在线编辑（Supabase + Cloudflare Pages）
 
-如果你不仅想在本机编辑，还希望随时在手机或另一台电脑上通过邮箱验证登录后台更新内容，可以查看 [DEPLOY.md](./DEPLOY.md)（含 Supabase SQL 迁移、Edge Functions 部署与 Cloudflare Pages 接入指南），并在本地完成后执行 `npm run sync:supabase` 一键把 `local-data/` 迁入云端。渲染与性能测量手记见 [QA.md](./QA.md)。
+如果你不仅想在本机编辑，还希望随时在手机或另一台电脑上通过管理员邮箱与密码登录后台更新内容，可以查看 [DEPLOY.md](./DEPLOY.md)（含 Supabase SQL 迁移、Edge Functions 部署与 Cloudflare Pages 接入指南），并在本地完成后执行 `npm run sync:supabase` 一键把 `local-data/` 迁入云端。渲染与性能测量手记见 [QA.md](./QA.md)。
 
 </details>

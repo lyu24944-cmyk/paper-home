@@ -57,7 +57,7 @@ export const yardBounds = new Box3(new Vector3(-9.3,-.35,-15.6),new Vector3(7.8,
 // Fit the actual subjects separately: the empty corners of a union box are not scenery.
 export const yardSubjects = [
   new Box3(new Vector3(-6.12,-.3,-15.6),new Vector3(6.12,5.58,.65)),
-  new Box3(new Vector3(-7.5,-.35,1.5),new Vector3(7.5,.65,10.3)),
+  new Box3(new Vector3(-7.5,-.35,1.5),new Vector3(7.5,.85,10.3)),
   new Box3(new Vector3(-8.25,-.3,2.65),new Vector3(-2.75,5.45,7.95)),
 ]
 export function yardPose(aspect: number): CameraPose {

@@ -80,7 +80,7 @@ npx supabase functions deploy media-sign --no-verify-jwt
 npx supabase functions deploy media-cleanup --no-verify-jwt
 ```
 
-> 若未安装 Docker 也不影响 `db push` 与 `functions deploy`；若不方便用 CLI，也可以直接在 Supabase Dashboard SQL Editor 运行 `supabase/migrations/202611140001_cottage_cms.sql` 全文，再手动在 Edge Functions 面板创建这 5 个函数。
+> 若未安装 Docker 也不影响 `db push` 与 `functions deploy`；若不方便用 CLI，也可以直接在 Supabase Dashboard SQL Editor 按顺序依次运行 `supabase/migrations/202611140001_cottage_cms.sql`、`202611140002_hardening.sql` 与 `202611140003_site_settings_now_quotes_and_hardening.sql` 全文，再手动在 Edge Functions 面板创建这 5 个函数。
 
 ---
 

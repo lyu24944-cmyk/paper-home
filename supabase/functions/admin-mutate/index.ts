@@ -75,8 +75,11 @@ async function handleMediaRegister(
   const byteSize = typeof payload.byteSize === 'number' ? payload.byteSize : 0
   const maxKindBytes = kind === 'image' ? MAX_IMAGE_BYTES : MAX_BYTES
 
-  if (!isValidUuid(assetId) || !kind || !displayPath || byteSize <= 0 || byteSize > MAX_BYTES) {
-    throw new HttpError(400, '媒体参数不合法或文件超出 50 MB 限制')
+  if (!isValidUuid(assetId) || !kind || !displayPath || byteSize <= 0 || byteSize > maxKindBytes) {
+    throw new HttpError(
+      400,
+      kind === 'image' ? '媒体参数不合法或图片超出 10 MB 限制' : '媒体参数不合法或文件超出 50 MB 限制',
+    )
   }
   const expectedPrefix = `${kind}s/${assetId}/`
   if (!displayPath.startsWith(expectedPrefix) || (thumbPath && !thumbPath.startsWith(expectedPrefix))) {

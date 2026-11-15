@@ -1,14 +1,15 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { Box3, CanvasTexture, CylinderGeometry, DirectionalLight, DoubleSide, Euler, ExtrudeGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshDepthMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PlaneGeometry, Quaternion, RGBADepthPacking, Shape, ShapeGeometry, SRGBColorSpace, Vector3 } from 'three'
+import { Box3, CanvasTexture, CylinderGeometry, DirectionalLight, DoubleSide, Euler, ExtrudeGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshDepthMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PlaneGeometry, Quaternion, RGBADepthPacking, Shape, SRGBColorSpace, Vector3 } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import gsap from 'gsap'
 import { DEFAULT_NOW_NOTES, getAtmosphereLighting } from './atmosphere'
+import { ExteriorScenery } from './ExteriorScenery'
 import type { Place } from './content'
 import { playSound } from './lib/sound'
 import type { AtmospherePreset, GalleryDisplayItem, WeatherMode } from './types/content'
-import { Builder, makeMaterials, StaticBatch } from './Geometry'
-import { doorStops, gallerySlotX, layout, roomTransform, type FocusSubPoseId, type V3 } from './layout'
+import { Builder, makeMaterials, StaticBatch, updateOutdoorWetness } from './Geometry'
+import { doorStops, gallerySlotX, layout, roomPoint, roomTransform, type FocusSubPoseId, type V3 } from './layout'
 import type { ResourcePack } from './resources'
 export { CameraController, type CameraHandle } from './Camera'
 export { doorStops, hallPose } from './layout'
@@ -155,23 +156,101 @@ function shell(){
     b.box([.15,.08,.15],[side*1.35,.02,1.38],'dark',[0,0,0],.006)
     b.box([.18,.04,.18],[side*1.35,-.025,1.38],'stone',[0,0,0],.006)
   }
+  // 0.42m gravel drip apron around house plinth + dark crisp edging strip
+  for(const side of [-1,1]){
+    b.box([.42,.032,16.1],[side*5.86,-.324,-7.5],'stone')
+    b.box([.035,.04,16.14],[side*6.08,-.32,-7.5],'dark')
+    b.box([4.45,.032,.42],[side*3.845,-.324,.36],'stone')
+    b.box([4.48,.04,.035],[side*3.845,-.32,.58],'dark')
+  }
+  b.box([12.14,.032,.42],[0,-.324,-15.36],'stone')
+  b.box([12.2,.04,.035],[0,-.32,-15.58],'dark')
+  // Front facade wooden flower boxes beneath left and right windows (below sill y=0.875)
+  for(const side of [-1,1]){
+    const wx=side*3.25
+    b.box([1.72,.21,.28],[wx,.71,.2],'wood',[0,0,0],.012)
+    b.box([1.62,.04,.2],[wx,.805,.2],'soil')
+    for(const bx of [-.62,.62]){
+      b.box([.045,.24,.3],[wx+bx,.705,.19],'dark',[0,0,0],.005)
+      b.box([.045,.12,.06],[wx+bx,.56,.11],'dark')
+    }
+  }
+  // Right-rear brick chimney & terracotta chimney pots (top <= 5.5m within house bounds)
+  b.box([.78,1.5,.78],[2.65,4.48,-10.4],'brick')
+  b.box([.84,.06,.84],[2.65,4.28,-10.4],'dark',[0,0,0],.008)
+  b.box([.88,.12,.88],[2.65,5.18,-10.4],'brick',[0,0,0],.01)
+  b.box([.94,.08,.94],[2.65,5.26,-10.4],'stone',[0,0,0],.012)
+  for(const ox of [-.16,.16])b.cylinder(.102,.124,.2,[2.65+ox,5.39,-10.4],'terracotta',[0,0,0],14)
   return b
 }
 function garden(){
   const b=new Builder()
-  b.box([1000,.25,1000],[0,-.46,-10],'grass')
-  for(let i=0;i<10;i++)b.box([1.12+(i%3)*.09,.105,.69],[Math.sin(i*.7)*.16,-.23,2.55+i*.79],'stone',[0,(i%2?.045:-.045),0],.035)
+  for(let i=0;i<10;i++){
+    const sx=Math.sin(i*.7)*.16,sz=2.55+i*.79
+    b.box([1.12+(i%3)*.09,.105,.69],[sx,-.23,sz],'stone',[0,(i%2?.045:-.045),0],.035)
+    const side=i%2===0?-1:1
+    b.cylinder(.082,.102,.058,[sx+side*.72,-.31,sz-.14],'stone',[.08,i*.6,.05],8)
+    b.cylinder(.062,.078,.048,[sx+side*.86,-.315,sz+.16],'stone',[-.05,i*1.1,.07],7)
+  }
   for(const side of [-1,1]){
-    b.box([.16,.18,16.6],[side*7.35,-.22,2.3],'stone')
-    b.box([5.1,.22,.13],[side*4.45,-.21,10.1],'stone')
-    for(const z of [4.1,6.4,8.6]){
-      b.cylinder(.035,.035,.9,[side*6.4,.1,z],'dark')
-      b.box([.16,.05,.16],[side*6.4,.56,z],'dark',[0,0,0],.015)
-      b.box([.12,.14,.12],[side*6.4,.46,z],'linen',[0,0,0],.01)
+    // Side stone plinth runs cleanly from rear cap (-6.50) to front stone wall outer face (+10.18) with matching top height (-0.10)
+    b.box([.16,.22,16.68],[side*7.35,-.21,1.84],'stone')
+    b.box([.26,.26,.26],[side*7.35,-.19,-6.5],'stone',[0,0,0],.01)
+    b.box([.3,.05,.3],[side*7.35,-.035,-6.5],'stone',[0,0,0],.012)
+    b.box([5.8,.22,.16],[side*4.38,-.21,10.1],'stone')
+    b.box([5.2,.22,.16],[side*4.75,-.21,2.3],'stone')
+    // Low stone-capped courtyard gate piers flanking central entry path + mounted brass-dark lanterns
+    b.box([.44,.16,.44],[side*1.32,-.24,10.1],'stone',[0,0,0],.01)
+    b.box([.36,.62,.36],[side*1.32,.15,10.1],'stone',[0,0,0],.012)
+    b.box([.44,.09,.44],[side*1.32,.505,10.1],'stone',[0,0,0],.015)
+    b.box([.24,.05,.24],[side*1.32,.575,10.1],'stone',[0,0,0],.01)
+    b.box([.18,.028,.18],[side*1.32,.614,10.1],'dark',[0,0,0],.006)
+    for(const mx of [-.052,.052])for(const mz of [-.052,.052])b.box([.014,.12,.014],[side*1.32+mx,.688,10.1+mz],'dark')
+    b.box([.2,.036,.2],[side*1.32,.766,10.1],'dark',[0,0,0],.01)
+    b.box([.06,.028,.06],[side*1.32,.798,10.1],'brass',[0,0,0],.006)
+    // Four low path bollards flanking the central stepping-stone walkway (clear of flowerbed & fences)
+    for(const z of [4.2,7.2]){
+      b.cylinder(.062,.072,.035,[side*1.12,-.318,z],'stone',[0,0,0],12)
+      b.cylinder(.026,.03,.38,[side*1.12,-.11,z],'dark')
+      b.box([.13,.022,.13],[side*1.12,.09,z],'dark',[0,0,0],.006)
+      for(const mx of [-.048,.048])for(const mz of [-.048,.048])b.box([.013,.11,.013],[side*1.12+mx,.155,z+mz],'dark')
+      b.box([.145,.032,.145],[side*1.12,.222,z],'dark',[0,0,0],.01)
     }
-    for(const z of [2.3,10.15])b.box([5.1,.055,.12],[side*4.6,.35,z],'wood')
-    for(const z of [3,4.2,5.4,6.6,7.8,9])b.box([.085,.85,.085],[side*7.35,.13,z],'wood',[0,0,0],.006)
-    b.box([.09,.09,7.7],[side*7.35,.47,6.15],'wood')
+    // Unified front (z=10.15), rear (z=2.3) & side (x=+-7.35) fences: top rail y=0.39, bottom rail y=0.14, posts top=0.48
+    b.box([5.87,.055,.1],[side*4.415,.39,10.15],'wood')
+    b.box([5.87,.045,.08],[side*4.415,.14,10.15],'wood')
+    for(const x of [1.9,3.0,4.1,5.2,6.3,7.35])b.box([.085,.72,.085],[side*x,.12,10.15],'wood',[0,0,0],.006)
+    b.box([5.2,.055,.1],[side*4.75,.39,2.3],'wood')
+    b.box([5.2,.045,.08],[side*4.75,.14,2.3],'wood')
+    for(const x of [2.15,3.19,4.23,5.27,6.31,7.35])b.box([.085,.72,.085],[side*x,.12,2.3],'wood',[0,0,0],.006)
+    for(const z of [3.6,4.9,6.2,7.5,8.8])b.box([.085,.72,.085],[side*7.35,.12,z],'wood',[0,0,0],.006)
+    b.box([.1,.055,7.85],[side*7.35,.39,6.225],'wood')
+    b.box([.08,.045,7.85],[side*7.35,.14,6.225],'wood')
+  }
+  // Right courtyard L-shaped stone flowerbed + slatted timber plant stand (all height <= 0.85m)
+  b.box([3.95,.28,.16],[4.42,-.15,3.3],'stone',[0,0,0],.01)
+  b.box([3.12,.28,.16],[4.01,-.15,4.26],'stone',[0,0,0],.01)
+  b.box([.16,.28,.96],[2.52,-.15,3.78],'stone',[0,0,0],.01)
+  b.box([.16,.28,5.15],[6.32,-.15,5.88],'stone',[0,0,0],.01)
+  b.box([.16,.28,4.25],[5.48,-.15,6.35],'stone',[0,0,0],.01)
+  b.box([.96,.28,.16],[5.9,-.15,8.4],'stone',[0,0,0],.01)
+  b.box([3.65,.22,.82],[4.4,-.17,3.78],'soil')
+  b.box([.72,.22,4.15],[5.9,-.17,6.26],'soil')
+  {
+    const stand=new Builder()
+    for(const lx of [-.52,.52])for(const lz of [-.2,.2])stand.box([.055,.88,.055],[lx,.12,lz],'wood',[0,0,0],.005)
+    for(const zOff of [-.14,0,.14]){
+      stand.box([1.14,.032,.09],[0,.16,zOff],'wood',[0,0,0],.004)
+      stand.box([1.14,.032,.09],[0,.48,zOff],'wood',[0,0,0],.004)
+    }
+    stand.cylinder(.12,.095,.22,[-.31,.605,-.02],'terracotta',[0,0,0],14)
+    stand.cylinder(.1,.08,.18,[.02,.585,.04],'terracotta',[0,0,0],14)
+    stand.cylinder(.08,.075,.17,[.34,.58,-.02],'brass',[0,0,0],14)
+    stand.box([.025,.025,.18],[.44,.6,-.02],'brass',[0,0,.45])
+    stand.box([.025,.12,.025],[.23,.59,-.02],'brass')
+    stand.cylinder(.13,.11,.14,[-.28,.245,0],'white',[0,0,0],14)
+    const m=new Matrix4().makeRotationY(-.22);m.setPosition(3.45,0,5.35)
+    for(const p of stand.parts){p.geometry.applyMatrix4(m);b.parts.push(p)}
   }
   b.box([1.65,.075,.43],[-5,.25,6.1],'wood',[0,.1,0],.015)
   for(const x of [-5.6,-4.4])b.box([.065,.5,.36],[x,-.01,6.1],'dark')
@@ -184,6 +263,27 @@ function garden(){
   b.box([.32,.24,.42],[1.72,.84,1.92],'wood',[0,-.18,0],.018)
   b.box([.35,.045,.45],[1.72,.97,1.92],'roof',[0,-.18,0],.01)
   b.box([.18,.025,.02],[1.7,.89,2.13],'brass',[0,-.18,0],.004)
+  // Left-rear cottage firewood rack & vintage rain barrel tucked between rear side window & back corner
+  b.box([.38,.06,1.18],[-5.84,-.28,-13.4],'stone',[0,0,0],.008)
+  for(const z of [-13.94,-12.86])b.box([.32,.78,.05],[-5.84,.12,z],'wood',[0,0,0],.005)
+  b.box([.44,.05,1.26],[-5.84,.54,-13.4],'roof',[0,0,-.12],.008)
+  for(let row=0;row<4;row++){
+    for(let col=0;col<5;col++){
+      const lz=-13.84+col*.22+(row%2)*.05
+      const ly=-.18+row*.14
+      b.cylinder(.055,.06,.34,[-5.83,ly,lz],[ 'wood','terracotta','soil' ][(row+col)%3],[0,0,Math.PI/2],8)
+    }
+  }
+  b.cylinder(.22,.2,.64,[-5.84,.01,-12.15],'wood',[0,0,0],16)
+  for(const y of [-.18,.18])b.cylinder(.228,.228,.028,[-5.84,y,-12.15],'dark',[0,0,0],16)
+  b.cylinder(.2,.2,.015,[-5.84,.332,-12.15],'dark',[0,0,0],16)
+  // Right exterior wall brick plinths & terracotta planters in clear bays between windows
+  for(const [pz,scale] of [[-1.35,1],[-5.1,.88],[-12.6,1.06]] as [number,number][]){
+    b.box([.44,.14,.56],[5.85,-.24,pz],'brick',[0,0,0],.01)
+    b.box([.48,.045,.6],[5.85,-.15,pz],'stone',[0,0,0],.008)
+    b.cylinder(.15*scale,.115*scale,.28*scale,[5.85,-.12+.14*scale,pz],'terracotta',[0,0,0],14)
+    b.cylinder(.132*scale,.132*scale,.02,[5.85,-.12+.27*scale,pz],'soil',[0,0,0],14)
+  }
   return b
 }
 function Plant({pack,at,height=1,tree=false,rotation=0,interactive=true,onTap}:{pack:ResourcePack;at:V3;height?:number;tree?:boolean;rotation?:number;interactive?:boolean;onTap?:()=>void}){
@@ -200,13 +300,7 @@ function Plant({pack,at,height=1,tree=false,rotation=0,interactive=true,onTap}:{
   useEffect(()=>()=>{depthMaterials.forEach(m=>m.dispose())},[depthMaterials])
   return <group position={at} rotation={[0,rotation,0]} onClick={interactive?e=>{e.stopPropagation();if(e.delta<8){playSound('foliage');onTap?.()}}:undefined} onPointerOver={interactive?on:undefined} onPointerOut={off}><primitive object={object}/></group>
 }
-function Grass(){
-  const ref=useRef<InstancedMesh>(null),geometry=useMemo(()=>{const shape=new Shape();shape.moveTo(-.018,0);shape.quadraticCurveTo(-.018,.14,.045,.24);shape.quadraticCurveTo(.018,.1,.018,0);shape.closePath();return new ShapeGeometry(shape,3)},[])
-  useEffect(()=>()=>{geometry.dispose()},[geometry])
-  useEffect(()=>{if(!ref.current)return;const m=new Matrix4(),p=new Vector3(),q=new Quaternion(),s=new Vector3();for(let i=0;i<420;i++){const x=Math.sin(i*127.1)*6.8,z=2.4+((i*7.31)%7.7);p.set(Math.abs(x)<.9?x+1.8:x,-.32,z);q.setFromAxisAngle(new Vector3(0,1,0),i*2.4);s.setScalar(.65+(i%6)*.18);m.compose(p,q,s);ref.current.setMatrixAt(i,m)}ref.current.instanceMatrix.needsUpdate=true},[])
-  return <instancedMesh ref={ref} args={[geometry,undefined,420]} castShadow receiveShadow><meshStandardMaterial color="#42613b" roughness={1} side={DoubleSide}/></instancedMesh>
-}
-function RainOverlay({count,reduced,isNight}:{count:number;reduced:boolean;isNight:boolean}){
+function RainOverlay({count,reduced,isNight,visible}:{count:number;reduced:boolean;isNight:boolean;visible:boolean}){
   const ref=useRef<InstancedMesh>(null)
   const geometry=useMemo(()=>new CylinderGeometry(.0035,.0035,.58,4,1),[])
   const material=useMemo(()=>new MeshBasicMaterial({color:'#d8e6ee',transparent:true,opacity:.38,depthWrite:false}),[])
@@ -239,7 +333,7 @@ function RainOverlay({count,reduced,isNight}:{count:number;reduced:boolean;isNig
   },[drops,dummy])
   useEffect(()=>()=>{geometry.dispose();material.dispose()},[geometry,material])
   useFrame((_,dt)=>{
-    if(reduced||!ref.current)return
+    if(!visible||reduced||!ref.current)return
     const step=Math.min(dt,.05)
     for(let i=0;i<drops.length;i++){
       const d=drops[i]
@@ -251,7 +345,7 @@ function RainOverlay({count,reduced,isNight}:{count:number;reduced:boolean;isNig
     }
     ref.current.instanceMatrix.needsUpdate=true
   })
-  return <instancedMesh ref={ref} args={[geometry,material,count]} userData={{skipAO:true}} frustumCulled={false} castShadow={false} receiveShadow={false}/>
+  return <instancedMesh ref={ref} args={[geometry,material,count]} visible={visible} userData={{skipAO:true}} frustumCulled={false} castShadow={false} receiveShadow={false} raycast={()=>null}/>
 }
 function roomFurniture(id:Place){
   const b=new Builder()
@@ -377,7 +471,6 @@ function StudyInteractiveNodes({deskLampOn,interactive=true,onToggleLamp,onDrawQ
         <sphereGeometry args={[.038,12,12]}/>
         <meshBasicMaterial color={deskLampOn?'#fff4d2':'#cfc9b8'}/>
       </mesh>
-      <pointLight position={[0,-.08,.04]} color="#ffcf80" intensity={deskLampOn?3.8:0} distance={4.4} decay={2}/>
     </group>
     <group position={[2.3,1.48,-1.3]} onClick={interactive?e=>{e.stopPropagation();if(e.delta<8)onDrawQuote?.()}:undefined} onPointerOver={interactive?on:undefined} onPointerOut={off}>
       <Plaque text="书架灵感签" sub="抽一张读过的句子" at={[0,0,0]} size={[.36,.18]}/>
@@ -512,6 +605,7 @@ export function World({
 }){
   const materials=useMemo(()=>makeMaterials(pack),[pack]),house=useMemo(shell,[]),yard=useMemo(garden,[]),{scene,gl}=useThree()
   const dirLightRef=useRef<DirectionalLight>(null)
+  const studyLampPos=useMemo<[number,number,number]>(()=>roomPoint('study',[.08,1.12,-1.04]).toArray(),[])
   const lighting=useMemo(()=>getAtmosphereLighting(atmospherePreset,weather),[atmospherePreset,weather])
   const glass=useMemo(()=>{const b=new Builder();for(const w of windows)b.add(new PlaneGeometry(w.w-.08,w.h-.08),w.at,'glass',[0,w.r,0]);return b},[])
   // Thin architectural glazing: direct clear view plus dielectric environment reflection.
@@ -527,9 +621,10 @@ export function World({
     scene.environmentIntensity=lighting.environmentIntensity
     glassMaterials.glass.opacity=lighting.glassOpacity
     glassMaterials.glass.envMapIntensity=lighting.glassEnvIntensity
+    updateOutdoorWetness(materials,lighting.wetness)
     gl.setClearColor(lighting.clearColor,1)
     gl.shadowMap.needsUpdate=true
-  },[lighting,scene,gl,glassMaterials])
+  },[lighting,scene,gl,glassMaterials,materials])
   useLayoutEffect(()=>{
     const light=dirLightRef.current
     if(light?.shadow.map){
@@ -546,7 +641,7 @@ export function World({
   return <>
     <fog attach="fog" args={[lighting.fogColor,lighting.fogNear,lighting.fogFar]}/>
     <hemisphereLight args={[lighting.hemiSkyColor,lighting.hemiGroundColor,lighting.hemiIntensity]}/>
-    <directionalLight ref={dirLightRef} position={lighting.sunPosition} intensity={lighting.sunIntensity} color={lighting.sunColor} castShadow shadow-mapSize={pack.quality==='high'?[2048,2048]:[1024,1024]} shadow-camera-left={-18} shadow-camera-right={18} shadow-camera-top={18} shadow-camera-bottom={-18} shadow-camera-near={.5} shadow-camera-far={55} shadow-normalBias={.025} shadow-bias={-.00008} shadow-radius={3}/>
+    <directionalLight ref={dirLightRef} position={lighting.sunPosition} intensity={lighting.sunIntensity} color={lighting.sunColor} castShadow shadow-mapSize={pack.quality==='high'?[2048,2048]:[1024,1024]} shadow-camera-left={-21} shadow-camera-right={21} shadow-camera-top={21} shadow-camera-bottom={-21} shadow-camera-near={.5} shadow-camera-far={60} shadow-normalBias={.025} shadow-bias={-.00008} shadow-radius={3}/>
     <ambientLight intensity={lighting.ambientIntensity} color={lighting.ambientColor}/>
     {[1.8,6.8,11.8].map(d=><pointLight key={d} position={[0,2.55,-d]} color={lighting.hallPointColor} intensity={lighting.hallPointIntensity} distance={4.5} decay={2}/>)}
     {doorStops.map(d=><rectAreaLight key={d.id} position={[d.side*5.12,1.85,-d.depth]} rotation={[0,d.side*Math.PI/2,0]} width={1.7} height={1.3} color={lighting.windowRectColor} intensity={lighting.windowRectIntensity}/>)}
@@ -554,9 +649,8 @@ export function World({
     {doorStops.map(d=>(
       <pointLight key={`warm-${d.id}`} position={[d.side*3.1,2.35,-d.depth]} color="#ffdfa8" intensity={lighting.roomWarmFillIntensity} distance={6.2} decay={2}/>
     ))}
-    {weather==='rain'&&(
-      <RainOverlay count={pack.quality==='high'?180:90} reduced={reduced} isNight={lighting.preset==='night'}/>
-    )}
+    <pointLight position={studyLampPos} color="#ffcf80" intensity={deskLampOn?3.8:0} distance={4.4} decay={2}/>
+    <RainOverlay visible={weather==='rain'} count={pack.quality==='high'?180:90} reduced={reduced} isNight={lighting.preset==='night'}/>
     <StaticBatch builder={house} materials={materials}/><StaticBatch builder={yard} materials={materials}/>
     <StaticBatch builder={glass} materials={glassMaterials} castShadow={false}/>
     <Door at={[0,0,.045]} open={outside&&(!!opening||!!destination)} interactive={isYard} click={()=>navigate('hall')} materials={materials} reduced={reduced} forcedProgress={promoFrontDoorProgress}/>
@@ -594,6 +688,6 @@ export function World({
     <Plant pack={pack} at={[1.08,0,1.12]} height={.67} interactive={isYard} onTap={()=>onTapProp?.('门廊旁的绿植轻轻晃了晃')}/>
     <Plant pack={pack} at={[-3.4,-.28,.65]} height={.8} interactive={isYard} onTap={()=>onTapProp?.('窗边花盆的叶片轻轻晃动')}/>
     <Plant pack={pack} at={[3.6,-.28,.65]} height={.9} interactive={isYard} onTap={()=>onTapProp?.('窗边花盆的叶片轻轻晃动')}/>
-    <Grass/>
+    <ExteriorScenery pack={pack} materials={materials} lighting={lighting} reduced={reduced} interiorHidden={isHall && !destination && !opening}/>
   </>
 }
