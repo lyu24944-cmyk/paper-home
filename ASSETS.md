@@ -23,3 +23,5 @@
 三幅演示插画由项目既有 src/sketch.ts 生成；文章为既有示例。HomeHand 为既有 LXGW WenKai TC 字体子集，作者 LXGW，使用 public/fonts/OFL.txt 所附许可。
 
 旧 public/assets/garden-tree.png 为上一轮 imagegen 生成图片，当前 World.tsx 不引用；其提示词及生成记录见 .qa/visual-update/ASSETS.md。它保留用于旧版相同机位对照，不属于本轮 CC0 素材清单。
+
+宣传视频背景音乐 `scripts/assets/bgm-a-short-walk-with-you.ogg` 选用 Purrple Cat（`purrplecat.com`）创作的 *A Short Walk With You*（源自专辑 *Up All Night*，Wikimedia Commons 镜像 `File:Purrple_Cat_-_A_Short_Walk_With_You.ogg`），采用 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 许可协议，仅用于 `npm run promo:capture` 生成 `promo/` 宣传视频成片音轨，不进入应用构建包与运行时网络请求。

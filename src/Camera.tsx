@@ -11,6 +11,7 @@ export type CameraHandle = {
   travel: (target: Place, reduced: boolean, commit: () => void) => Promise<void>
   snapPlace?: (target: Place) => void
   glidePromo?: (from: PromoCameraWaypoint | null, to: PromoCameraWaypoint, durationSec: number, ease?: string) => Promise<void>
+  setPromoPose?: (from: PromoCameraWaypoint | null, to: PromoCameraWaypoint, tNorm: number, ease?: string) => void
   clearPromoOverride?: () => void
 }
 export const CameraController = forwardRef<CameraHandle,{place:Place;busy:boolean;reduced:boolean;galleryIndex:number;galleryCount:number;focusId?:FocusSubPoseId|null;progress:React.MutableRefObject<number>;onTransition:(state:TransitionState|null)=>void}>(({place,busy,reduced,galleryIndex,galleryCount,focusId=null,progress,onTransition},ref)=>{
@@ -145,6 +146,26 @@ export const CameraController = forwardRef<CameraHandle,{place:Place;busy:boolea
           },
         })
       })
+    },
+    setPromoPose:(from,to,tNorm,ease='sine.inOut')=>{
+      promoOverride.current=true
+      focusTween.current?.kill();focusTween.current=null
+      tween.current?.kill();tween.current=null
+      const makePose=(wp:PromoCameraWaypoint)=>pose(wp.position,wp.target,wp.fov??camera.fov)
+      const startPose=from?makePose(from):makePose(to)
+      const endPose=makePose(to)
+      const clamped=Math.max(0,Math.min(1,tNorm))
+      const easeFn=ease==='none'||ease==='linear'?((v:number)=>v):(gsap.parseEase(ease)??((v:number)=>v))
+      const eased=easeFn(clamped)
+      camera.position.lerpVectors(startPose.position,endPose.position,eased)
+      if(from){
+        const curLook=new Vector3(...from.target).lerp(new Vector3(...to.target),eased)
+        camera.lookAt(curLook)
+      }else{
+        camera.quaternion.copy(endPose.orientation)
+      }
+      camera.fov=startPose.fov+(endPose.fov-startPose.fov)*eased
+      camera.updateProjectionMatrix()
     },
     clearPromoOverride:()=>{
       promoOverride.current=false

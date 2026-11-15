@@ -54,10 +54,11 @@ function doorParts(width:number){
   for(const y of [.24,1.16,1.98])b.cylinder(.012,.012,.095,[.025,y,.065],'brass')
   return b
 }
-function Door({at,rotation=0,open,interactive=true,click,materials,reduced}:{at:V3;rotation?:number;open:boolean;interactive?:boolean;click:()=>void;materials:ReturnType<typeof makeMaterials>;reduced:boolean}){
+function Door({at,rotation=0,open,interactive=true,click,materials,reduced,forcedProgress}:{at:V3;rotation?:number;open:boolean;interactive?:boolean;click:()=>void;materials:ReturnType<typeof makeMaterials>;reduced:boolean;forcedProgress?:React.MutableRefObject<number|null>}){
   const pivot=useRef<Group>(null),body=useMemo(()=>doorParts(layout.doorWidth),[])
   const {gl}=useThree()
-  useEffect(()=>{const ctx=gsap.context(()=>{if(pivot.current)gsap.to(pivot.current.rotation,{y:open?-1.62:0,duration:reduced?0:.7,ease:'power2.inOut',onComplete:()=>{gl.shadowMap.needsUpdate=true}})});return()=>ctx.revert()},[open,reduced])
+  useEffect(()=>{if(forcedProgress?.current!==null&&forcedProgress?.current!==undefined)return;const ctx=gsap.context(()=>{if(pivot.current)gsap.to(pivot.current.rotation,{y:open?-1.62:0,duration:reduced?0:.7,ease:'power2.inOut',onComplete:()=>{gl.shadowMap.needsUpdate=true}})});return()=>ctx.revert()},[open,reduced,forcedProgress])
+  useFrame(()=>{const forced=forcedProgress?.current;if(forced!==null&&forced!==undefined&&pivot.current){pivot.current.rotation.y=-1.62*Math.max(0,Math.min(1,forced))}})
   return <group position={at} rotation={[0,rotation,0]} onClick={interactive?e=>{e.stopPropagation();if(e.delta<8)click()}:undefined} onPointerOver={interactive?on:undefined} onPointerOut={off}>
     <group ref={pivot} position={[-layout.doorWidth/2,0,.01]}><StaticBatch builder={body} materials={materials}/></group>
   </group>
@@ -484,6 +485,7 @@ export function World({
   onTriggerMailbox,
   onTapProp,
   nowNotes,
+  promoFrontDoorProgress,
 }:{
   place:Place
   opening:Place|null
@@ -506,6 +508,7 @@ export function World({
   onTriggerMailbox?:()=>void
   onTapProp?:(msg:string)=>void
   nowNotes?:string[]
+  promoFrontDoorProgress?:React.MutableRefObject<number|null>
 }){
   const materials=useMemo(()=>makeMaterials(pack),[pack]),house=useMemo(shell,[]),yard=useMemo(garden,[]),{scene,gl}=useThree()
   const dirLightRef=useRef<DirectionalLight>(null)
@@ -556,7 +559,7 @@ export function World({
     )}
     <StaticBatch builder={house} materials={materials}/><StaticBatch builder={yard} materials={materials}/>
     <StaticBatch builder={glass} materials={glassMaterials} castShadow={false}/>
-    <Door at={[0,0,.045]} open={outside&&(!!opening||!!destination)} interactive={isYard} click={()=>navigate('hall')} materials={materials} reduced={reduced}/>
+    <Door at={[0,0,.045]} open={outside&&(!!opening||!!destination)} interactive={isYard} click={()=>navigate('hall')} materials={materials} reduced={reduced} forcedProgress={promoFrontDoorProgress}/>
     <Signage homeName={homeName} plaqueTitle={plaqueTitle} plaqueSubtitle={plaqueSubtitle} materials={materials} interactive={isYard||isHall} onTapPlaque={()=>onTapProp?.('轻叩门牌，木纹温润沉稳')}/>
     {/* Yard interactive bench and porch mailbox */}
     <group position={[-5,.42,6.1]} rotation={[0,.1,0]} onClick={isYard?e=>{e.stopPropagation();if(e.delta<8)onSelectFocus?.('yard-bench')}:undefined} onPointerOver={isYard?on:undefined} onPointerOut={off}>

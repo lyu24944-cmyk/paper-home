@@ -11,7 +11,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useThree } from '@react-three/fiber'
 import gsap from 'gsap'
 import { CameraController, World, doorStops, type CameraHandle } from './World'
 import type { PromoCameraWaypoint } from './Camera'
@@ -244,6 +244,72 @@ function startingPlace(): Place {
   return parseDeepLinkHash().room
 }
 
+type PromoBridge = {
+  enterManual: () => void
+  exitManual: () => void
+  renderFlush: (dtSec: number) => void
+  renderAndUpload: (dtSec: number, uploadUrl: string) => Promise<{ width: number; height: number }>
+}
+
+function PromoRenderBridge({ bridgeRef }: { bridgeRef: React.MutableRefObject<PromoBridge | null> }) {
+  const { gl, setFrameloop, advance, clock } = useThree()
+  useEffect(() => {
+    let simSec = clock.elapsedTime
+    let pixelBuf: Uint8Array | null = null
+    let active = false
+    bridgeRef.current = {
+      enterManual: () => {
+        active = true
+        setFrameloop('never')
+        gl.shadowMap.autoUpdate = true
+        simSec = clock.elapsedTime
+      },
+      exitManual: () => {
+        active = false
+        gl.shadowMap.autoUpdate = false
+        gl.shadowMap.needsUpdate = true
+        setFrameloop('always')
+      },
+      renderFlush: (dtSec: number) => {
+        if (!active) return
+        simSec += Math.max(0, dtSec)
+        advance(simSec)
+      },
+      renderAndUpload: async (dtSec: number, uploadUrl: string) => {
+        if (!active) {
+          active = true
+          setFrameloop('never')
+          gl.shadowMap.autoUpdate = true
+          simSec = clock.elapsedTime
+        }
+        simSec += Math.max(0, dtSec)
+        advance(simSec)
+        const ctx = gl.getContext()
+        const w = ctx.drawingBufferWidth
+        const h = ctx.drawingBufferHeight
+        const needed = w * h * 4
+        if (!pixelBuf || pixelBuf.length !== needed) {
+          pixelBuf = new Uint8Array(needed)
+        }
+        ctx.readPixels(0, 0, w, h, ctx.RGBA, ctx.UNSIGNED_BYTE, pixelBuf)
+        const resp = await fetch(uploadUrl, {
+          method: 'POST',
+          body: pixelBuf as unknown as BodyInit,
+        })
+        if (!resp.ok) {
+          throw new Error(`Promo frame upload failed (${resp.status})`)
+        }
+        return { width: w, height: h }
+      },
+    }
+    return () => {
+      bridgeRef.current = null
+      pixelBuf = null
+    }
+  }, [gl, setFrameloop, advance, clock, bridgeRef])
+  return null
+}
+
 export default function App() {
   const promoMode = useMemo(
     () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('promo') === '1',
@@ -274,6 +340,8 @@ export default function App() {
   const transition = useRef<TransitionState | null>(null)
   const prepare = useRef<(() => Promise<void>) | null>(null)
   const captureCanvas = useRef<(() => string | null) | null>(null)
+  const promoBridgeRef = useRef<PromoBridge | null>(null)
+  const promoFrontDoorProgressRef = useRef<number | null>(null)
 
   const [mapOpen, setMapOpen] = useState(false)
   const [galleryIndex, setGalleryIndex] = useState(0)
@@ -891,8 +959,28 @@ export default function App() {
       glideCamera: async (from: PromoCameraWaypoint | null, to: PromoCameraWaypoint, durationSec: number, ease = 'power1.inOut') => {
         await camera.current?.glidePromo?.(from, to, durationSec, ease)
       },
+      setCameraAt: (from: PromoCameraWaypoint | null, to: PromoCameraWaypoint, tNorm: number, ease = 'sine.inOut') => {
+        camera.current?.setPromoPose?.(from, to, tNorm, ease)
+      },
       clearCamera: () => {
         camera.current?.clearPromoOverride?.()
+      },
+      setFrontDoorOpen: (value: number | null) => {
+        promoFrontDoorProgressRef.current = value
+      },
+      enterManualCapture: () => {
+        promoBridgeRef.current?.enterManual()
+      },
+      exitManualCapture: () => {
+        promoFrontDoorProgressRef.current = null
+        promoBridgeRef.current?.exitManual()
+      },
+      stepFrame: (dtSec: number) => {
+        promoBridgeRef.current?.renderFlush(dtSec)
+      },
+      renderAndUploadFrame: async (dtSec: number, uploadUrl: string) => {
+        if (!promoBridgeRef.current) throw new Error('Promo render bridge is not ready')
+        return promoBridgeRef.current.renderAndUpload(dtSec, uploadUrl)
       },
       roomPoint: (id: Place, p: [number, number, number]) => {
         const pt = roomPoint(id, p)
@@ -1793,7 +1881,9 @@ export default function App() {
                 onTriggerMailbox={handleTriggerMailbox}
                 onTapProp={handleTapProp}
                 nowNotes={activeNowNotes}
+                promoFrontDoorProgress={promoMode ? promoFrontDoorProgressRef : undefined}
               />
+              {promoMode && <PromoRenderBridge bridgeRef={promoBridgeRef} />}
               <RenderPipeline
                 quality={pack.quality}
                 clearColor={getAtmosphereLighting(atmospherePreset, weather).clearColor}
