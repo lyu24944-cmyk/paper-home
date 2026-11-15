@@ -1,8 +1,11 @@
 import { handlePreflight, jsonResponse } from '../_shared/cors.ts'
 import {
+  cleanUuidArray,
   createAdminClient,
+  errorResponse,
   flushCleanupQueue,
   HttpError,
+  parseJsonBody,
   requireAdmin,
 } from '../_shared/supabase.ts'
 
@@ -18,14 +21,8 @@ Deno.serve(async (req) => {
     const admin = createAdminClient()
     await requireAdmin(req, admin)
 
-    const body = (await req.json().catch(() => ({}))) as {
-      candidateAssetIds?: unknown
-      sweepOrphans?: boolean
-    }
-
-    const candidateAssetIds = Array.isArray(body.candidateAssetIds)
-      ? body.candidateAssetIds.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
-      : []
+    const body = await parseJsonBody<{ candidateAssetIds?: unknown; sweepOrphans?: boolean }>(req)
+    const candidateAssetIds = cleanUuidArray(body.candidateAssetIds)
 
     if (candidateAssetIds.length > 0 || body.sweepOrphans) {
       const { error } = await admin.rpc('cleanup_candidate_assets', {
@@ -38,11 +35,8 @@ Deno.serve(async (req) => {
     }
 
     const result = await flushCleanupQueue(admin)
-    return jsonResponse({ ok: true, ...result })
+    return jsonResponse({ ok: true, ...result }, 200, req)
   } catch (err) {
-    if (err instanceof HttpError) {
-      return jsonResponse({ error: err.message, detail: err.detail }, err.status)
-    }
-    return jsonResponse({ error: err instanceof Error ? err.message : '服务器错误' }, 500)
+    return errorResponse(err, req)
   }
 })

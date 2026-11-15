@@ -54,6 +54,12 @@ export function ProjectEditorModal({
   const [videoAssetId, setVideoAssetId] = useState<string | null>(null)
 
   const [uploadBusy, setUploadBusy] = useState(false)
+  const busyPickersRef = useRef<Set<string>>(new Set())
+  const setPickerBusy = (key: string, busy: boolean) => {
+    if (busy) busyPickersRef.current.add(key)
+    else busyPickersRef.current.delete(key)
+    setUploadBusy(busyPickersRef.current.size > 0)
+  }
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState('')
   const [saveError, setSaveError] = useState('')
@@ -61,6 +67,17 @@ export function ProjectEditorModal({
   const [deleteError, setDeleteError] = useState('')
 
   const sessionUploadedIdsRef = useRef<string[]>([])
+  const wasOpenRef = useRef(false)
+
+  function flushSessionCandidates() {
+    const ids = sessionUploadedIdsRef.current
+    sessionUploadedIdsRef.current = []
+    if (ids.length > 0) {
+      void cleanupMediaAssetsApi({ candidateAssetIds: ids }).catch(() => {
+        // Unreferenced uploaded assets are also picked up by periodic cleanup.
+      })
+    }
+  }
 
   function syncFromProject(project: AdminProject | null) {
     setCurrent(project)
@@ -75,14 +92,25 @@ export function ProjectEditorModal({
   }
 
   useEffect(() => {
+    const opening = !wasOpenRef.current && open
+    const closing = wasOpenRef.current && !open
+    wasOpenRef.current = open
+    if (closing) {
+      flushSessionCandidates()
+      return
+    }
     if (!open) return
     syncFromProject(initialProject)
-    setSaveStatus('')
-    setSaveError('')
-    setDeleteError('')
-    setConfirmDeleteOpen(false)
-    sessionUploadedIdsRef.current = []
-  }, [open, initialProject?.id])
+    if (opening) {
+      setSaveStatus('')
+      setSaveError('')
+      setDeleteError('')
+      setConfirmDeleteOpen(false)
+      sessionUploadedIdsRef.current = []
+    }
+  }, [open, initialProject?.id, initialProject?.version, initialProject?.updatedAt])
+
+  useEffect(() => () => flushSessionCandidates(), [])
 
   function buildDraftPayload(): ProjectPayload {
     return {
@@ -205,6 +233,7 @@ export function ProjectEditorModal({
       return
     }
 
+    const wasPublished = Boolean(current?.isPublished)
     setSaving(true)
     setSaveError('')
     setSaveStatus('')
@@ -216,7 +245,7 @@ export function ProjectEditorModal({
         setCurrent(pubRes.item)
         onSaved(pubRes.item, pubRes.pendingCleanupCount, 'publish')
         setSaveStatus(
-          current?.isPublished ? '已发布更新，访客目录与三维展示已同步。' : '作品已发布到作品室。',
+          wasPublished ? '已发布更新，访客目录与三维展示已同步。' : '作品已发布到作品室。',
         )
       }
     } catch (err) {
@@ -275,11 +304,7 @@ export function ProjectEditorModal({
   }
 
   function handleClose() {
-    if (sessionUploadedIdsRef.current.length > 0) {
-      void cleanupMediaAssetsApi({ candidateAssetIds: sessionUploadedIdsRef.current }).catch(() => {
-        // Unreferenced uploaded assets are also picked up by periodic cleanup.
-      })
-    }
+    flushSessionCandidates()
     onClose()
   }
 
@@ -375,7 +400,7 @@ export function ProjectEditorModal({
                 sessionUploadedIdsRef.current.push(asset.id)
                 onAssetUploaded(asset)
               }}
-              onUploadStateChange={setUploadBusy}
+              onUploadStateChange={(busy) => setPickerBusy('cover', busy)}
             />
 
             <ImageListPicker
@@ -389,7 +414,7 @@ export function ProjectEditorModal({
                 sessionUploadedIdsRef.current.push(asset.id)
                 onAssetUploaded(asset)
               }}
-              onUploadStateChange={setUploadBusy}
+              onUploadStateChange={(busy) => setPickerBusy('gallery', busy)}
             />
 
             <VideoUploadPicker
@@ -401,7 +426,7 @@ export function ProjectEditorModal({
                 sessionUploadedIdsRef.current.push(asset.id)
                 onAssetUploaded(asset)
               }}
-              onUploadStateChange={setUploadBusy}
+              onUploadStateChange={(busy) => setPickerBusy('video', busy)}
             />
           </div>
         </div>

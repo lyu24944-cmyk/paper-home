@@ -22,14 +22,16 @@ import {
   type SiteSettingsPayload,
 } from '../types/content'
 
+import { safeExternalUrl } from './text'
+
 function cleanLinks(raw: unknown): ContactLink[] {
   if (!Array.isArray(raw)) return []
   return raw
     .map((item) => ({
-      label: typeof item?.label === 'string' ? item.label.trim() : '',
-      url: typeof item?.url === 'string' ? item.url.trim() : '',
+      label: typeof item?.label === 'string' ? item.label.trim().slice(0, 40) : '',
+      url: typeof item?.url === 'string' ? item.url.trim().slice(0, 500) : '',
     }))
-    .filter((item) => item.label && item.url)
+    .filter((item) => item.label && safeExternalUrl(item.url) !== null)
 }
 
 function cleanStringList(raw: unknown, maxItems = 8, maxLen = 120): string[] {
@@ -168,7 +170,10 @@ async function fetchStaticSnapshot(): Promise<PublicCottageData> {
         throw new ApiError(res.status, '静态小屋快照文件读取失败。', 'SNAPSHOT_ERROR')
       }
       return (await res.json()) as PublicCottageData
-    })()
+    })().catch((err) => {
+      snapshotPromise = null
+      throw err
+    })
   }
   return await snapshotPromise
 }

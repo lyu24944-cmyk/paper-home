@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getCachedUrl, isUrlNearExpiry, refreshSignedUrl } from '../lib/media'
 
 export function SignedImage({
@@ -14,23 +14,34 @@ export function SignedImage({
   alt: string
   className?: string
 }) {
-  const [src, setSrc] = useState<string | null>(() => getCachedUrl(assetId, variant))
+  const [src, setSrc] = useState<string | null>(() => getCachedUrl(assetId, variant, scope))
   const [retried, setRetried] = useState(false)
   const [unavailable, setUnavailable] = useState(false)
+  const mountedRef = useRef(true)
+  const activeKeyRef = useRef(`${scope}:${assetId ?? ''}:${variant}`)
+  activeKeyRef.current = `${scope}:${assetId ?? ''}:${variant}`
 
   useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const reqKey = `${scope}:${assetId ?? ''}:${variant}`
     setRetried(false)
     setUnavailable(false)
     if (!assetId) {
       setSrc(null)
       return
     }
-    const cached = getCachedUrl(assetId, variant)
+    const cached = getCachedUrl(assetId, variant, scope)
     setSrc(cached)
-    if (!cached || isUrlNearExpiry(assetId)) {
+    if (!cached || isUrlNearExpiry(assetId, scope)) {
       let active = true
       void refreshSignedUrl(assetId, scope, !cached).then((entry) => {
-        if (!active) return
+        if (!active || !mountedRef.current || activeKeyRef.current !== reqKey) return
         if (!entry) {
           setSrc(null)
           setUnavailable(true)
@@ -68,8 +79,10 @@ export function SignedImage({
           setUnavailable(true)
           return
         }
+        const errKey = `${scope}:${assetId}:${variant}`
         setRetried(true)
         void refreshSignedUrl(assetId, scope, true).then((entry) => {
+          if (!mountedRef.current || activeKeyRef.current !== errKey) return
           if (!entry) {
             setUnavailable(true)
           } else {

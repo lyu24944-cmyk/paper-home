@@ -64,7 +64,7 @@ export function parseDeepLinkHash(
       at: isValidAtmosphereMode(rawAt) ? rawAt : null,
       weather: isValidWeatherMode(rawWeather) ? rawWeather : null,
       focus: isValidFocusForRoom(rawFocus, room) ? rawFocus : null,
-      lamp: parseBoolParam(rawLamp),
+      lamp: room === 'study' ? parseBoolParam(rawLamp) : null,
       isRich: true,
     }
   }

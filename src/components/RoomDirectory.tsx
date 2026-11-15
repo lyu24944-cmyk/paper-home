@@ -1,4 +1,4 @@
-import { buildStatusLabel, renderParagraphs, safeExternalUrl } from '../lib/text'
+import { buildStatusLabel, renderParagraphs, safeExternalUrl, safeMailtoHref } from '../lib/text'
 import type {
   AdminCottageData,
   AdminNote,
@@ -148,8 +148,9 @@ export function RoomDirectory({
               {adminData.projects.map((project, i) => {
                 const coverId = project.draft.coverAssetId ?? project.published?.coverAssetId
                 const wallSlot = wallSlotById.get(project.id)
+                const titleId = `manage-project-${project.id}`
                 return (
-                  <div key={project.id} className="cms-manage-card">
+                  <div key={project.id} className="cms-manage-card" role="group" aria-labelledby={titleId}>
                     <div className="cms-manage-main">
                       {coverId ? (
                         <SignedImage
@@ -163,7 +164,7 @@ export function RoomDirectory({
                         <div className="art-list-placeholder" aria-hidden="true">无封面</div>
                       )}
                       <div className="cms-manage-text">
-                        <strong>{project.draft.title || '未命名作品'}</strong>
+                        <strong id={titleId}>{project.draft.title || '未命名作品'}</strong>
                         <div className="cms-manage-subline">
                           <span className={`status-badge ${project.isPublished ? 'live' : 'draft'}`}>
                             {buildStatusLabel(project)}
@@ -178,6 +179,7 @@ export function RoomDirectory({
                       <button
                         type="button"
                         className="cms-mini-btn"
+                        aria-describedby={titleId}
                         onClick={() => onOpenAdminProjectPreview(project)}
                       >
                         预览
@@ -185,6 +187,7 @@ export function RoomDirectory({
                       <button
                         type="button"
                         className="cms-mini-btn primary"
+                        aria-describedby={titleId}
                         onClick={() => onOpenProjectEditor(project)}
                       >
                         编辑
@@ -308,10 +311,11 @@ export function RoomDirectory({
                 const linkedTitle = note.draft.projectId
                   ? projectTitleById.get(note.draft.projectId)
                   : undefined
+                const titleId = `manage-note-${note.id}`
                 return (
-                  <div key={note.id} className="cms-manage-card">
+                  <div key={note.id} className="cms-manage-card" role="group" aria-labelledby={titleId}>
                     <div className="cms-manage-text">
-                      <strong>{note.draft.title || '未命名手记'}</strong>
+                      <strong id={titleId}>{note.draft.title || '未命名手记'}</strong>
                       <div className="cms-manage-subline">
                         <span className={`status-badge ${note.isPublished ? 'live' : 'draft'}`}>
                           {buildStatusLabel(note)}
@@ -323,6 +327,7 @@ export function RoomDirectory({
                       <button
                         type="button"
                         className="cms-mini-btn"
+                        aria-describedby={titleId}
                         onClick={() => onOpenAdminNotePreview(note)}
                       >
                         预览
@@ -330,6 +335,7 @@ export function RoomDirectory({
                       <button
                         type="button"
                         className="cms-mini-btn primary"
+                        aria-describedby={titleId}
                         onClick={() => onOpenNoteEditor(note)}
                       >
                         编辑
@@ -405,6 +411,8 @@ export function RoomDirectory({
     const draft = profile?.draft
     const validDraftLinks = (draft?.contactLinks ?? []).filter((l) => safeExternalUrl(l.url))
     const draftNowNotes = (draft?.nowNotes ?? []).filter(Boolean)
+    const draftQuotes = (draft?.quotes ?? []).filter(Boolean)
+    const draftEmailHref = draft?.contactEmail ? safeMailtoHref(draft.contactEmail) : null
     const hasDraft = Boolean(
       draft &&
         (draft.displayName ||
@@ -413,7 +421,8 @@ export function RoomDirectory({
           draft.avatarAssetId ||
           draft.contactEmail ||
           draft.contactLinks.length > 0 ||
-          draftNowNotes.length > 0),
+          draftNowNotes.length > 0 ||
+          draftQuotes.length > 0),
     )
 
     return (
@@ -472,21 +481,25 @@ export function RoomDirectory({
                 <ul className="profile-now-list">
                   {draftNowNotes.map((note, idx) => (
                     <li key={idx}>
-                      <span className="now-index">0{idx + 1}</span>
+                      <span className="now-pin-index">0{idx + 1}</span>
                       <span>{note}</span>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
-            {(draft.contactEmail || validDraftLinks.length > 0) && (
+            {(draftEmailHref || draft.contactEmail || validDraftLinks.length > 0) && (
               <div className="profile-contact-box">
                 <strong>联系方式</strong>
                 {draft.contactEmail && (
                   <div className="profile-email-row">
-                    <a className="profile-contact-link" href={`mailto:${draft.contactEmail}`}>
-                      {draft.contactEmail}
-                    </a>
+                    {draftEmailHref ? (
+                      <a className="profile-contact-link" href={draftEmailHref}>
+                        {draft.contactEmail}
+                      </a>
+                    ) : (
+                      <span className="profile-contact-link">{draft.contactEmail}</span>
+                    )}
                     <button
                       type="button"
                       className="cms-mini-btn copy-email-btn"
@@ -530,6 +543,8 @@ export function RoomDirectory({
   const pubProfile = publicData.profile
   const validLinks = (pubProfile?.contactLinks ?? []).filter((l) => safeExternalUrl(l.url))
   const pubNowNotes = (pubProfile?.nowNotes ?? []).filter(Boolean)
+  const pubQuotes = (pubProfile?.quotes ?? []).filter(Boolean)
+  const pubEmailHref = pubProfile?.contactEmail ? safeMailtoHref(pubProfile.contactEmail) : null
   const hasPublicProfile = Boolean(
     pubProfile &&
       (pubProfile.displayName ||
@@ -538,7 +553,8 @@ export function RoomDirectory({
         pubProfile.avatarAssetId ||
         pubProfile.contactEmail ||
         validLinks.length > 0 ||
-        pubNowNotes.length > 0),
+        pubNowNotes.length > 0 ||
+        pubQuotes.length > 0),
   )
 
   if (!hasPublicProfile || !pubProfile) {
@@ -611,7 +627,7 @@ export function RoomDirectory({
             <ul className="profile-now-list">
               {pubNowNotes.map((note, idx) => (
                 <li key={idx}>
-                  <span className="now-index">0{idx + 1}</span>
+                  <span className="now-pin-index">0{idx + 1}</span>
                   <span>{note}</span>
                 </li>
               ))}
@@ -623,9 +639,13 @@ export function RoomDirectory({
             <strong>联系方式</strong>
             {pubProfile.contactEmail && (
               <div className="profile-email-row">
-                <a className="profile-contact-link" href={`mailto:${pubProfile.contactEmail}`}>
-                  {pubProfile.contactEmail}
-                </a>
+                {pubEmailHref ? (
+                  <a className="profile-contact-link" href={pubEmailHref}>
+                    {pubProfile.contactEmail}
+                  </a>
+                ) : (
+                  <span className="profile-contact-link">{pubProfile.contactEmail}</span>
+                )}
                 <button
                   type="button"
                   className="cms-mini-btn copy-email-btn"

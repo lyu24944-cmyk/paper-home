@@ -143,37 +143,79 @@ function wrapMixedText(
   maxWidth: number,
   maxLines: number,
 ): string[] {
-  const paragraphs = text.replace(/\r\n/g, '\n').split('\n')
+  const paragraphs = text
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((p) => p.trim())
+    .filter(Boolean)
   const lines: string[] = []
+  let truncated = false
 
-  for (const para of paragraphs) {
-    const trimmed = para.trim()
-    if (!trimmed) continue
+  for (let pIdx = 0; pIdx < paragraphs.length; pIdx++) {
+    const chars = Array.from(paragraphs[pIdx])
     let current = ''
-    for (const ch of trimmed) {
+    for (let i = 0; i < chars.length; i++) {
+      const ch = chars[i]
       const candidate = current + ch
       if (ctx.measureText(candidate).width > maxWidth && current.length > 0) {
         lines.push(current)
+        if (lines.length >= maxLines) {
+          truncated = true
+          break
+        }
         current = ch
-        if (lines.length >= maxLines) break
       } else {
         current = candidate
       }
     }
-    if (lines.length >= maxLines) break
-    if (current) lines.push(current)
-    if (lines.length >= maxLines) break
+    if (truncated) break
+    if (current) {
+      if (lines.length >= maxLines) {
+        truncated = true
+        break
+      }
+      lines.push(current)
+      if (lines.length >= maxLines && pIdx < paragraphs.length - 1) {
+        truncated = true
+        break
+      }
+    }
   }
 
-  if (lines.length === maxLines && text.length > lines.join('').length) {
+  if (truncated && lines.length === maxLines) {
     let last = lines[maxLines - 1]
     while (last.length > 1 && ctx.measureText(`${last}…`).width > maxWidth) {
-      last = last.slice(0, -1)
+      last = Array.from(last).slice(0, -1).join('')
     }
     lines[maxLines - 1] = `${last}…`
   }
 
   return lines.length > 0 ? lines : [POSTCARD_PRESET_QUOTES[0]]
+}
+
+function drawRoundedRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x, y, w, h, r)
+    return
+  }
+  const radius = Math.min(r, w / 2, h / 2)
+  ctx.moveTo(x + radius, y)
+  ctx.lineTo(x + w - radius, y)
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius)
+  ctx.lineTo(x + w, y + h - radius)
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h)
+  ctx.lineTo(x + radius, y + h)
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius)
+  ctx.lineTo(x, y + radius)
+  ctx.quadraticCurveTo(x, y, x + radius, y)
+  ctx.closePath()
 }
 
 function drawPaperTexture(ctx: CanvasRenderingContext2D) {
@@ -362,8 +404,13 @@ function drawQrCode(
   x: number,
   y: number,
   size: number,
-) {
-  const qr = createQrCode(url, { errorCorrectionLevel: 'M' })
+): boolean {
+  let qr: ReturnType<typeof createQrCode>
+  try {
+    qr = createQrCode(url, { errorCorrectionLevel: 'M' })
+  } catch {
+    return false
+  }
   const count = qr.modules.size
   const pad = 10
   const inner = size - pad * 2
@@ -387,6 +434,7 @@ function drawQrCode(
     }
   }
   ctx.restore()
+  return true
 }
 
 export async function renderPostcardCanvas(input: PostcardInput): Promise<RenderedPostcard> {
@@ -499,7 +547,7 @@ export async function renderPostcardCanvas(input: PostcardInput): Promise<Render
   const pillWidth = Math.min(matW - 40, ctx.measureText(tagText).width + 40)
   ctx.fillStyle = 'rgba(54, 88, 64, 0.09)'
   ctx.beginPath()
-  ctx.roundRect(textX, cursorY - 28, pillWidth, 40, 20)
+  drawRoundedRectPath(ctx, textX, cursorY - 28, pillWidth, 40, 20)
   ctx.fill()
   ctx.fillStyle = '#365840'
   ctx.textAlign = 'left'
@@ -557,17 +605,27 @@ export async function renderPostcardCanvas(input: PostcardInput): Promise<Render
   ctx.fillText(linkDisplay, footerLeftX, 1456)
 
   if (input.includeQr) {
-    drawQrCode(ctx, input.deepLinkUrl, qrX, qrY, qrSize)
-    ctx.fillStyle = '#536154'
-    ctx.font = '500 14px "KaiTi", "STKaiti", serif'
-    ctx.textAlign = 'center'
-    ctx.fillText('扫码直达此刻房间', qrX + qrSize / 2, qrY + qrSize + 22)
+    const drewQr = drawQrCode(ctx, input.deepLinkUrl, qrX, qrY, qrSize)
+    if (drewQr) {
+      ctx.fillStyle = '#536154'
+      ctx.font = '500 14px "KaiTi", "STKaiti", serif'
+      ctx.textAlign = 'center'
+      ctx.fillText('扫码直达此刻房间', qrX + qrSize / 2, qrY + qrSize + 22)
+    }
   }
 
-  const dataUrl = canvas.toDataURL('image/png')
   const blob = await new Promise<Blob | null>((resolve) => {
     canvas.toBlob((b) => resolve(b), 'image/png')
   })
+  const dataUrl = blob
+    ? await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () =>
+          resolve(typeof reader.result === 'string' ? reader.result : canvas.toDataURL('image/png'))
+        reader.onerror = () => resolve(canvas.toDataURL('image/png'))
+        reader.readAsDataURL(blob)
+      })
+    : canvas.toDataURL('image/png')
 
   return { dataUrl, blob, width: CARD_W, height: CARD_H }
 }

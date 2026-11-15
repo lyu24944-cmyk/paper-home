@@ -7,6 +7,7 @@
   --paper-card: rgba(238, 236, 226, 0.72);
   --paper-card-hover: rgba(226, 230, 217, 0.86);
   --paper-track: rgba(231, 230, 219, 0.78);
+  --glass: rgba(248, 246, 239, 0.84);
   --ink: #29362e;
   --muted: #536154;
   --green: #365840;
@@ -15,6 +16,8 @@
   --hairline: rgba(41, 54, 46, 0.11);
   --hairline-strong: rgba(41, 54, 46, 0.2);
   --blur-frost: blur(14px) saturate(1.1);
+  --shadow-soft: 0 4px 16px rgba(26, 36, 28, 0.08), 0 1px 2px rgba(26, 36, 28, 0.04);
+  --inner-highlight: rgba(255, 255, 255, 0.65);
   --shadow-pill: 0 4px 16px rgba(26, 36, 28, 0.08), 0 1px 2px rgba(26, 36, 28, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.62);
   --shadow-card: 0 14px 36px rgba(26, 36, 28, 0.11), 0 2px 6px rgba(26, 36, 28, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.68);
   --shadow-dialog: 0 24px 72px rgba(20, 29, 22, 0.22), 0 4px 16px rgba(20, 29, 22, 0.08);
@@ -30,10 +33,6 @@
   min-height: 420px;
   background: transparent;
   color: var(--ink);
-}
-
-.paper-grain {
-  display: none;
 }
 
 textarea,
@@ -2111,18 +2110,26 @@ a:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding-top: 8px;
+  gap: 12px;
+  padding: 12px 0 4px;
 }
 
 .lightbox-dot-btn {
+  position: relative;
   width: 8px;
   height: 8px;
   padding: 0;
   border: 0;
   border-radius: 999px;
+  cursor: pointer;
   background: rgba(255, 255, 255, 0.34);
   transition: width 0.2s var(--ease-editorial), background 0.2s;
+}
+
+.lightbox-dot-btn::after {
+  content: '';
+  position: absolute;
+  inset: -14px -10px;
 }
 
 .lightbox-dot-btn.active {
@@ -2553,8 +2560,14 @@ a:focus-visible {
     gap: 6px;
   }
   .walk-actions {
+    margin-left: 0;
+    justify-content: space-between;
     width: 100%;
     gap: 8px;
+  }
+  .interaction-hint,
+  .desktop-break {
+    display: none;
   }
   .walk-hint {
     padding: 0 12px;
@@ -2590,7 +2603,7 @@ a:focus-visible {
     top: auto;
     bottom: 108px;
     width: auto;
-    max-height: min(56svh, 390px);
+    max-height: min(56svh, 390px, calc(100svh - 295px));
     padding: 10px 16px 16px;
     border-radius: 22px 22px 16px 16px;
     box-shadow: 0 -10px 38px rgba(20, 29, 22, 0.16), var(--shadow-card);
@@ -2602,11 +2615,11 @@ a:focus-visible {
   }
   .room-content:has(.cms-manage-list) {
     width: auto;
-    max-height: min(56svh, 390px);
+    max-height: min(56svh, 390px, calc(100svh - 295px));
   }
   .place-gallery .room-content.mobile-drawer {
     bottom: 108px;
-    max-height: min(56svh, 390px);
+    max-height: min(56svh, 390px, calc(100svh - 295px));
   }
   .art-list {
     display: grid;
@@ -2636,8 +2649,34 @@ a:focus-visible {
     margin-bottom: 10px;
   }
   .paper-dialog {
+    width: calc(100% - 28px);
+    max-height: calc(100svh - 30px);
     padding: 26px 18px 22px;
     border-radius: 18px;
+  }
+  .paper-dialog h2 {
+    font-size: 27px;
+  }
+  .dialog-intro {
+    font-size: 12px;
+    margin-bottom: 18px;
+  }
+  .floor-plan button {
+    min-height: 110px;
+    padding: 14px 6px;
+    gap: 8px;
+  }
+  .floor-plan button > span {
+    font-size: 10px;
+    line-height: 1.5;
+    text-align: center;
+  }
+  .floor-plan strong {
+    font-size: 20px;
+  }
+  .floor-plan .plan-hall,
+  .floor-plan .plan-yard {
+    min-height: 68px;
   }
   .contact-link-edit-row {
     grid-template-columns: 1fr;
@@ -2857,20 +2896,29 @@ a:focus-visible {
   border-color: var(--green);
 }
 
-/* Night & dusk atmospheric readability */
+/* Night atmospheric readability */
+.home-app.atmo-night:not(.place-hall) .welcome-copy {
+  background: rgba(19, 27, 24, 0.78);
+  border-color: rgba(244, 239, 228, 0.16);
+  box-shadow: 0 16px 38px rgba(8, 12, 10, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
 .home-app.atmo-night .welcome-copy h1 {
   color: #f4efe4;
-  text-shadow: 0 2px 18px rgba(10, 16, 24, 0.65);
+  text-shadow: 0 2px 14px rgba(10, 16, 24, 0.55);
 }
 
 .home-app.atmo-night .welcome-copy p {
   color: rgba(238, 233, 221, 0.88);
-  text-shadow: 0 1px 12px rgba(10, 16, 24, 0.6);
+  text-shadow: 0 1px 10px rgba(10, 16, 24, 0.45);
 }
 
 .home-app.atmo-night .welcome-eyebrow {
-  background: rgba(247, 242, 230, 0.9);
-  color: #26342b;
+  color: #cfe0c9;
+}
+
+.home-app.atmo-night .welcome-eyebrow::before {
+  background: #cfe0c9;
 }
 
 /* Tactile room interaction bar */
@@ -3241,6 +3289,10 @@ a:focus-visible {
   .atmo-compact-trigger {
     display: inline-flex;
   }
+  .atmo-popover {
+    left: 0;
+    right: auto;
+  }
 }
 
 @media (max-width: 650px) {
@@ -3249,10 +3301,18 @@ a:focus-visible {
     padding: 0 9px;
     font-size: 11px;
   }
+  .atmo-popover {
+    position: fixed;
+    top: 58px;
+    left: 12px;
+    right: 12px;
+    width: min(260px, calc(100vw - 24px));
+    margin-inline: auto;
+  }
   .tactile-bar {
     left: 14px;
     right: 14px;
-    bottom: 102px;
+    bottom: 118px;
     justify-content: center;
     pointer-events: none;
   }
@@ -3266,7 +3326,9 @@ a:focus-visible {
     left: 12px;
     right: 12px;
     width: auto;
-    bottom: 142px;
+    bottom: 160px;
+    max-height: calc(100svh - 335px);
+    overflow-y: auto;
     padding: 14px;
   }
   .now-notes-strip {
@@ -3277,9 +3339,25 @@ a:focus-visible {
   }
 }
 
+@media (max-width: 650px) and (max-height: 700px) {
+  .tactile-bar {
+    bottom: 112px;
+  }
+  .tactile-floating-card {
+    bottom: 152px;
+    max-height: calc(100svh - 310px);
+  }
+  .room-content.mobile-drawer,
+  .room-content:has(.cms-manage-list),
+  .place-gallery .room-content.mobile-drawer {
+    max-height: calc(100svh - 275px);
+  }
+}
+
 /* Phase 2: Editorial Paper Postcard Modal */
 .postcard-dialog {
   width: min(840px, 94vw);
+  max-width: 840px;
 }
 
 .postcard-workspace {

@@ -18,8 +18,11 @@ export function LazyVideoPlayer({
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [error, setError] = useState('')
   const videoRef = useRef<HTMLVideoElement>(null)
+  const mountedRef = useRef(true)
+  const reqSeqRef = useRef(0)
 
   const stopPlayback = () => {
+    reqSeqRef.current += 1
     const el = videoRef.current
     if (el) {
       el.pause()
@@ -31,21 +34,35 @@ export function LazyVideoPlayer({
   }
 
   useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      stopPlayback()
+    }
+  }, [])
+
+  useEffect(() => {
     if (!active) {
       stopPlayback()
       setError('')
     }
-  }, [active, assetId])
+  }, [active])
 
-  useEffect(() => () => stopPlayback(), [])
+  useEffect(() => {
+    stopPlayback()
+    setError('')
+    setLoading(false)
+  }, [assetId, scope])
 
   if (!assetId) return null
 
   async function onPlayRequest() {
     if (!assetId) return
+    const seq = ++reqSeqRef.current
     setLoading(true)
     setError('')
-    const entry = await refreshSignedUrl(assetId, scope, isUrlNearExpiry(assetId))
+    const entry = await refreshSignedUrl(assetId, scope, isUrlNearExpiry(assetId, scope))
+    if (!mountedRef.current || reqSeqRef.current !== seq) return
     setLoading(false)
     if (!entry?.displayUrl) {
       setError('演示视频暂不可用或已撤回。')
@@ -54,6 +71,7 @@ export function LazyVideoPlayer({
     setVideoUrl(entry.displayUrl)
     setRequested(true)
     requestAnimationFrame(() => {
+      if (!mountedRef.current || reqSeqRef.current !== seq) return
       void videoRef.current?.play().catch(() => {
         // Controls remain visible if browser blocks autoplay.
       })

@@ -1,4 +1,16 @@
-import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  Component,
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react'
 import { Canvas } from '@react-three/fiber'
 import gsap from 'gsap'
 import { CameraController, World, doorStops, type CameraHandle } from './World'
@@ -6,6 +18,7 @@ import {
   ATMOSPHERE_OPTIONS,
   DEFAULT_NOW_NOTES,
   DEFAULT_STUDY_QUOTES,
+  getAtmosphereLighting,
   isValidAtmosphereMode,
   isValidWeatherMode,
   resolveAtmospherePreset,
@@ -27,7 +40,7 @@ import {
 } from './lib/api'
 import { isLocalOwnerActive, resolveBackendHealth } from './lib/backend'
 import { buildDeepLinkHash, buildDeepLinkUrl, parseDeepLinkHash } from './lib/deeplink'
-import { evictSignedUrl, getCachedUrl, refreshSignedUrl, seedSignedUrls } from './lib/media'
+import { clearSignedUrlCache, evictSignedUrl, getCachedUrl, refreshSignedUrl, seedSignedUrls } from './lib/media'
 import {
   installGlobalClickSoundDelegator,
   isSfxEnabled,
@@ -59,14 +72,73 @@ import { Icon } from './components/Icon'
 import { Modal } from './components/Modal'
 import { AdminAuthPanel } from './components/AdminAuthPanel'
 import { RoomDirectory } from './components/RoomDirectory'
-import { ProjectDetailModal, type LinkedNoteRef } from './components/ProjectDetailModal'
-import { NoteDetailModal, type LinkedProjectRef } from './components/NoteDetailModal'
-import { ProjectEditorModal, type SaveActionKind } from './components/ProjectEditorModal'
-import { NoteEditorModal } from './components/NoteEditorModal'
-import { PostcardModal } from './components/PostcardModal'
-import { ProfileEditorModal } from './components/ProfileEditorModal'
-import { ConflictDialog, type ConflictContext } from './components/ConflictDialog'
+import type { LinkedNoteRef } from './components/ProjectDetailModal'
+import type { LinkedProjectRef } from './components/NoteDetailModal'
+import type { SaveActionKind } from './components/ProjectEditorModal'
+import type { ConflictContext } from './components/ConflictDialog'
 import { ToastHost, type ToastItem } from './components/ToastHost'
+
+const ProjectDetailModal = lazy(() =>
+  import('./components/ProjectDetailModal').then((m) => ({ default: m.ProjectDetailModal })),
+)
+const NoteDetailModal = lazy(() =>
+  import('./components/NoteDetailModal').then((m) => ({ default: m.NoteDetailModal })),
+)
+const ProjectEditorModal = lazy(() =>
+  import('./components/ProjectEditorModal').then((m) => ({ default: m.ProjectEditorModal })),
+)
+const NoteEditorModal = lazy(() =>
+  import('./components/NoteEditorModal').then((m) => ({ default: m.NoteEditorModal })),
+)
+const PostcardModal = lazy(() =>
+  import('./components/PostcardModal').then((m) => ({ default: m.PostcardModal })),
+)
+const ProfileEditorModal = lazy(() =>
+  import('./components/ProfileEditorModal').then((m) => ({ default: m.ProfileEditorModal })),
+)
+const ConflictDialog = lazy(() =>
+  import('./components/ConflictDialog').then((m) => ({ default: m.ConflictDialog })),
+)
+
+function useEverTrue(active: boolean): boolean {
+  const [ever, setEver] = useState(active)
+  useEffect(() => {
+    if (active) setEver(true)
+  }, [active])
+  return active || ever
+}
+
+function handleMenuArrowNavigation(container: HTMLElement | null, e: ReactKeyboardEvent) {
+  if (!container) return
+  if (
+    e.key !== 'ArrowDown' &&
+    e.key !== 'ArrowRight' &&
+    e.key !== 'ArrowUp' &&
+    e.key !== 'ArrowLeft' &&
+    e.key !== 'Home' &&
+    e.key !== 'End'
+  ) {
+    return
+  }
+  const items = Array.from(container.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'))
+  if (items.length === 0) return
+  e.preventDefault()
+  const currentIdx = items.indexOf(document.activeElement as HTMLButtonElement)
+  if (e.key === 'Home') {
+    items[0]?.focus()
+    return
+  }
+  if (e.key === 'End') {
+    items[items.length - 1]?.focus()
+    return
+  }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+    items[(currentIdx + 1 + items.length) % items.length]?.focus()
+    return
+  }
+  const base = currentIdx >= 0 ? currentIdx : 0
+  items[(base - 1 + items.length) % items.length]?.focus()
+}
 
 // Preserve real elapsed time on slow or background browser frames.
 gsap.ticker.lagSmoothing(0)
@@ -210,9 +282,13 @@ export default function App() {
   const [reduced, setReduced] = useState(() => matchMedia('(prefers-reduced-motion: reduce)').matches)
   const [ambient, setAmbient] = useState(false)
   const [sfxEnabled, setSfxEnabled] = useState<boolean>(isSfxEnabled)
+  const sfxEnabledRef = useRef(sfxEnabled)
+  sfxEnabledRef.current = sfxEnabled
   const doorKnockTimerRef = useRef<number | null>(null)
   const [atmosphereMode, setAtmosphereMode] = useState<AtmosphereMode>(initialAtmosphereMode)
   const [weather, setWeather] = useState<WeatherMode>(initialWeatherMode)
+  const weatherRef = useRef(weather)
+  weatherRef.current = weather
   const [autoClockTick, setAutoClockTick] = useState(0)
   const userTouchedAtmoRef = useRef(Boolean(initialDeepLink.at || initialDeepLink.weather))
   const atmospherePreset = useMemo(
@@ -222,16 +298,28 @@ export default function App() {
   const [deskLampOn, setDeskLampOn] = useState<boolean>(
     () => initialDeepLink.lamp ?? (atmospherePreset === 'golden' || atmospherePreset === 'night' || weather === 'rain'),
   )
+  const deskLampOnRef = useRef(deskLampOn)
+  deskLampOnRef.current = deskLampOn
   const userTouchedLampRef = useRef(initialDeepLink.lamp !== null)
   const [focusId, setFocusId] = useState<FocusSubPoseId | null>(initialDeepLink.focus)
+  const focusIdRef = useRef(focusId)
+  focusIdRef.current = focusId
   const [studyQuote, setStudyQuote] = useState<string | null>(null)
   const [quoteIdx, setQuoteIdx] = useState(0)
+  const quoteIdxRef = useRef(quoteIdx)
+  quoteIdxRef.current = quoteIdx
   const [guestStamps, setGuestStamps] = useState<GuestStampEntry[]>(loadGuestStamps)
+  const guestStampsRef = useRef(guestStamps)
+  guestStampsRef.current = guestStamps
   const [selectedStampMood, setSelectedStampMood] = useState(STAMP_MOODS[0].id)
   const [guestNoteInput, setGuestNoteInput] = useState('')
   const [latestStampReply, setLatestStampReply] = useState('')
   const [atmoPopoverOpen, setAtmoPopoverOpen] = useState(false)
   const atmoAnchorRef = useRef<HTMLDivElement>(null)
+  const atmoTriggerRef = useRef<HTMLButtonElement>(null)
+  const atmoPopoverRef = useRef<HTMLDivElement>(null)
+  const tactileBarRef = useRef<HTMLDivElement>(null)
+  const moodGroupRef = useRef<HTMLDivElement>(null)
   const pendingFocusAfterNavRef = useRef<FocusSubPoseId | null>(null)
   const camera = useRef<CameraHandle>(null)
   const progress = useRef(place === 'yard' || place === 'hall' ? 0 : stopProgress(doorStops.find((d) => d.id === place)!.depth))
@@ -240,6 +328,8 @@ export default function App() {
   const [isNarrowViewport, setIsNarrowViewport] = useState(() =>
     matchMedia('(max-width: 650px)').matches,
   )
+  const isNarrowViewportRef = useRef(isNarrowViewport)
+  isNarrowViewportRef.current = isNarrowViewport
   const [directoryOpen, setDirectoryOpen] = useState(
     () => startingPlace() !== 'gallery' && !matchMedia('(max-width: 650px)').matches,
   )
@@ -249,6 +339,8 @@ export default function App() {
   const toastIdRef = useRef(0)
   const toastTimersRef = useRef<Map<number, number>>(new Map())
   const studioAnchorRef = useRef<HTMLDivElement>(null)
+  const studioTriggerRef = useRef<HTMLButtonElement>(null)
+  const studioPopoverRef = useRef<HTMLDivElement>(null)
   const placeRef = useRef(place)
   placeRef.current = place
   const title = useRef<HTMLHeadingElement>(null)
@@ -288,6 +380,8 @@ export default function App() {
   const [conflict, setConflict] = useState<ConflictContext | null>(null)
 
   const isAdmin = Boolean(adminEmail && adminData)
+  const canPersistSiteSettings =
+    isAdmin && (backendHealth.mode === 'local-studio' || backendHealth.mode === 'cloud')
   const anyModalOpen =
     mapOpen ||
     postcardOpen ||
@@ -299,19 +393,32 @@ export default function App() {
     conflict !== null
   const modalOpenRef = useRef(anyModalOpen)
   modalOpenRef.current = anyModalOpen
+  const projectEditorMounted = useEverTrue(projectEditorOpen)
+  const noteEditorMounted = useEverTrue(noteEditorOpen)
+  const profileEditorMounted = useEverTrue(profileEditorOpen)
+  const projectDetailMounted = useEverTrue(viewingProject !== null)
+  const noteDetailMounted = useEverTrue(viewingNote !== null)
+  const postcardMounted = useEverTrue(postcardOpen)
+  const conflictMounted = useEverTrue(conflict !== null)
+
+  const publicSeqRef = useRef(0)
+  const adminSeqRef = useRef(0)
 
   const loadPublic = useCallback(async () => {
+    const seq = ++publicSeqRef.current
     setCloudLoading(true)
     setCloudError('')
     try {
       const health = await resolveBackendHealth()
+      if (seq !== publicSeqRef.current) return
       setBackendHealth(health)
       if (health.mode === 'unconfigured-readonly') {
         setPublicData(emptyPublicData)
         return
       }
       const data = await fetchPublicCottage()
-      seedSignedUrls(data.signedUrls)
+      if (seq !== publicSeqRef.current) return
+      seedSignedUrls(data.signedUrls, 'public')
       setPublicData(data)
       if (data.siteSettings) {
         setSiteSettings(data.siteSettings)
@@ -332,16 +439,21 @@ export default function App() {
       }
       setSignedUrlRevision((r) => r + 1)
     } catch (err) {
+      if (seq !== publicSeqRef.current) return
       setCloudError(err instanceof Error ? err.message : '公开内容读取失败，请稍后重试。')
     } finally {
-      setCloudLoading(false)
+      if (seq === publicSeqRef.current) {
+        setCloudLoading(false)
+      }
     }
   }, [])
 
   const loadAdmin = useCallback(async () => {
+    const seq = ++adminSeqRef.current
     setAdminError('')
     try {
       const health = await resolveBackendHealth()
+      if (seq !== adminSeqRef.current) return
       setBackendHealth(health)
 
       if (health.mode === 'local-studio') {
@@ -351,11 +463,13 @@ export default function App() {
           return
         }
         const data = await fetchAdminCottage()
-        seedSignedUrls(data.signedUrls)
+        if (seq !== adminSeqRef.current) return
+        seedSignedUrls(data.signedUrls, 'admin')
         setAdminData(data)
         setAdminEmail('本地主人')
         if (data.siteSettings) {
           setSiteSettings(data.siteSettings)
+          setSettingsDraft(data.siteSettings)
         }
         setSignedUrlRevision((r) => r + 1)
         return
@@ -369,19 +483,27 @@ export default function App() {
 
       const client = getSupabaseClient()
       const { data: sess } = await client.auth.getSession()
+      if (seq !== adminSeqRef.current) return
       if (!sess.session?.access_token) {
         setAdminEmail(null)
         setAdminData(null)
         return
       }
       const data = await fetchAdminCottage()
-      seedSignedUrls(data.signedUrls)
+      if (seq !== adminSeqRef.current) return
+      seedSignedUrls(data.signedUrls, 'admin')
       setAdminData(data)
       setAdminEmail(sess.session.user?.email ?? '主人')
+      if (data.siteSettings) {
+        setSiteSettings(data.siteSettings)
+        setSettingsDraft(data.siteSettings)
+      }
       setSignedUrlRevision((r) => r + 1)
     } catch (err) {
+      if (seq !== adminSeqRef.current) return
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         await signOutAdmin().catch(() => {})
+        clearSignedUrlCache()
         setAdminEmail(null)
         setAdminData(null)
         setAdminError('当前无管理权限或登录已失效，已恢复访客视图。')
@@ -435,11 +557,14 @@ export default function App() {
       })
       const { data: sub } = client.auth.onAuthStateChange((event, session) => {
         if (!session || event === 'SIGNED_OUT') {
+          adminSeqRef.current += 1
+          clearSignedUrlCache()
           setAdminEmail(null)
           setAdminData(null)
           setProjectEditorOpen(false)
           setNoteEditorOpen(false)
           setProfileEditorOpen(false)
+          void loadPublic()
         } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           setAdminEmail(session.user?.email ?? '主人')
           if (event === 'SIGNED_IN') void loadAdmin()
@@ -483,7 +608,7 @@ export default function App() {
   }, [homeName, place])
 
   useEffect(() => {
-    if (!ready || cloudLoading || !pendingDeepLinkItemRef.current) return
+    if (!ready || cloudLoading || cloudError || !pendingDeepLinkItemRef.current) return
     const targetItem = pendingDeepLinkItemRef.current
     pendingDeepLinkItemRef.current = null
     if (place === 'gallery') {
@@ -494,7 +619,7 @@ export default function App() {
       if (idx >= 0) openPublicNote(idx)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, cloudLoading, place, publicData.projects, publicData.notes])
+  }, [ready, cloudLoading, cloudError, place, publicData.projects, publicData.notes])
 
   const applyHashDeepLinkRef = useRef<(dl: ReturnType<typeof parseDeepLinkHash>) => void>(() => {})
   applyHashDeepLinkRef.current = (dl) => {
@@ -511,12 +636,14 @@ export default function App() {
       setDeskLampOn(dl.lamp)
     }
     if (dl.room !== placeRef.current) {
+      if (busyRef.current || !ready) return
       richHashActiveRef.current = dl.isRich
       pendingFocusAfterNavRef.current = dl.focus
       pendingDeepLinkItemRef.current = dl.item
       void navigate(dl.room, { preserveRichHash: dl.isRich, skipOpenSound: true })
       return
     }
+    richHashActiveRef.current = dl.isRich
     setFocusId(dl.focus)
     if (dl.item) {
       if (dl.room === 'gallery') {
@@ -526,6 +653,9 @@ export default function App() {
         const idx = publicData.notes.findIndex((n) => n.slug === dl.item || n.id === dl.item)
         if (idx >= 0) openPublicNote(idx)
       }
+    } else {
+      setViewingProject(null)
+      setViewingNote(null)
     }
   }
 
@@ -597,17 +727,27 @@ export default function App() {
 
   useEffect(() => {
     if (!studioMenuOpen) return
+    const rafId = requestAnimationFrame(() => {
+      studioPopoverRef.current
+        ?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')
+        ?.focus()
+    })
     const onPointerDown = (e: PointerEvent) => {
       if (studioAnchorRef.current && e.target instanceof Node && !studioAnchorRef.current.contains(e.target)) {
         setStudioMenuOpen(false)
       }
     }
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setStudioMenuOpen(false)
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        setStudioMenuOpen(false)
+        requestAnimationFrame(() => studioTriggerRef.current?.focus())
+      }
     }
     window.addEventListener('pointerdown', onPointerDown)
     window.addEventListener('keydown', onKeyDown)
     return () => {
+      cancelAnimationFrame(rafId)
       window.removeEventListener('pointerdown', onPointerDown)
       window.removeEventListener('keydown', onKeyDown)
     }
@@ -661,21 +801,55 @@ export default function App() {
 
   useEffect(() => {
     if (!atmoPopoverOpen) return
+    const rafId = requestAnimationFrame(() => {
+      const box = atmoPopoverRef.current
+      const target =
+        box?.querySelector<HTMLButtonElement>('button.active:not(:disabled)') ??
+        box?.querySelector<HTMLButtonElement>('button:not(:disabled)')
+      target?.focus()
+    })
     const onPointerDown = (e: PointerEvent) => {
       if (atmoAnchorRef.current && e.target instanceof Node && !atmoAnchorRef.current.contains(e.target)) {
         setAtmoPopoverOpen(false)
       }
     }
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setAtmoPopoverOpen(false)
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        setAtmoPopoverOpen(false)
+        requestAnimationFrame(() => atmoTriggerRef.current?.focus())
+      }
     }
     window.addEventListener('pointerdown', onPointerDown)
     window.addEventListener('keydown', onKeyDown)
     return () => {
+      cancelAnimationFrame(rafId)
       window.removeEventListener('pointerdown', onPointerDown)
       window.removeEventListener('keydown', onKeyDown)
     }
   }, [atmoPopoverOpen])
+
+  useEffect(() => {
+    if (focusId === null && studyQuote === null) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (modalOpenRef.current || document.querySelector('dialog[open]')) return
+      if (studioMenuOpen || atmoPopoverOpen) return
+      const active = document.activeElement
+      const wasInsideCard =
+        active instanceof Element && Boolean(active.closest('.tactile-floating-card'))
+      setStudyQuote(null)
+      setFocusId(null)
+      playSound('modal-close')
+      if (wasInsideCard) {
+        requestAnimationFrame(() => {
+          tactileBarRef.current?.querySelector<HTMLButtonElement>('button')?.focus()
+        })
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [focusId, studyQuote, studioMenuOpen, atmoPopoverOpen])
 
   // Ambient sound is synthesized locally and starts only after explicit user gesture.
   useEffect(() => {
@@ -892,7 +1066,7 @@ export default function App() {
   function openPublicProject(index: number) {
     const item = publicData.projects[index]
     if (!item) return
-    if (index < 3) setGalleryIndex(index)
+    setGalleryIndex(index)
     setViewingNote(null)
     setViewingProject({
       project: item,
@@ -957,7 +1131,7 @@ export default function App() {
   }
 
   const handleCoverExpired = useCallback((assetId: string) => {
-    evictSignedUrl(assetId)
+    evictSignedUrl(assetId, 'public')
     void refreshSignedUrl(assetId, 'public', true).then((entry) => {
       if (entry) setSignedUrlRevision((r) => r + 1)
     })
@@ -969,7 +1143,7 @@ export default function App() {
       title: p.title,
       summary: p.summary,
       coverAssetId: p.coverAssetId,
-      coverThumbUrl: getCachedUrl(p.coverAssetId, 'thumb'),
+      coverThumbUrl: getCachedUrl(p.coverAssetId, 'thumb', 'public'),
     }))
   }, [publicData.projects, signedUrlRevision])
 
@@ -997,6 +1171,8 @@ export default function App() {
     setSignOutBusy(true)
     try {
       await signOutAdmin()
+      adminSeqRef.current += 1
+      clearSignedUrlCache()
       setAdminEmail(null)
       setAdminData(null)
       setStudioMenuOpen(false)
@@ -1013,6 +1189,7 @@ export default function App() {
   }
 
   function handleProjectSaved(saved: AdminProject, pendingCleanupCount: number, action?: SaveActionKind) {
+    setEditingProject((prev) => (prev && prev.id === saved.id ? saved : prev))
     setAdminData((prev) => {
       if (!prev) return prev
       const exists = prev.projects.some((p) => p.id === saved.id)
@@ -1047,6 +1224,7 @@ export default function App() {
   }
 
   function handleNoteSaved(saved: AdminNote, pendingCleanupCount: number, action?: SaveActionKind) {
+    setEditingNote((prev) => (prev && prev.id === saved.id ? saved : prev))
     setAdminData((prev) => {
       if (!prev) return prev
       const exists = prev.notes.some((n) => n.id === saved.id)
@@ -1233,22 +1411,20 @@ export default function App() {
 
   const handleToggleWeather = useCallback(() => {
     userTouchedAtmoRef.current = true
-    setWeather((prev) => {
-      const next: WeatherMode = prev === 'rain' ? 'clear' : 'rain'
-      playSound(next === 'rain' ? 'rain-on' : 'rain-off')
-      try { localStorage.setItem('paper-home:weather', next) } catch {}
-      return next
-    })
+    const next: WeatherMode = weatherRef.current === 'rain' ? 'clear' : 'rain'
+    weatherRef.current = next
+    setWeather(next)
+    playSound(next === 'rain' ? 'rain-on' : 'rain-off')
+    try { localStorage.setItem('paper-home:weather', next) } catch {}
   }, [])
 
   const handleToggleSfx = useCallback(() => {
-    setSfxEnabled((prev) => {
-      const next = !prev
-      persistSfxEnabled(next)
-      if (next) playSound('ui-switch', { force: true })
-      showToast(next ? '已开启交互触感音效' : '已静音交互触感音效', 'info')
-      return next
-    })
+    const next = !sfxEnabledRef.current
+    sfxEnabledRef.current = next
+    setSfxEnabled(next)
+    persistSfxEnabled(next)
+    if (next) playSound('ui-switch', { force: true })
+    showToast(next ? '已开启交互触感音效' : '已静音交互触感音效', 'info')
   }, [showToast])
 
   const handleTapProp = useCallback((msg: string) => {
@@ -1257,33 +1433,32 @@ export default function App() {
 
   const handleToggleDeskLamp = useCallback(() => {
     userTouchedLampRef.current = true
-    setDeskLampOn((prev) => {
-      const next = !prev
-      playSound(next ? 'lamp-on' : 'lamp-off')
-      showToast(next ? '已点亮书房黄铜绿台灯' : '已关上书桌台灯', 'info')
-      return next
-    })
+    const next = !deskLampOnRef.current
+    deskLampOnRef.current = next
+    setDeskLampOn(next)
+    playSound(next ? 'lamp-on' : 'lamp-off')
+    showToast(next ? '已点亮书房黄铜绿台灯' : '已关上书桌台灯', 'info')
   }, [showToast])
 
   const handleDrawStudyQuote = useCallback(() => {
     if (busyRef.current) return
     playSound('paper-flip')
+    if (isNarrowViewportRef.current) setDirectoryOpen(false)
     setFocusId('study-shelf')
-    setQuoteIdx((prev) => {
-      const nextIdx = (prev + 1) % activeQuotesPool.length
-      setStudyQuote(activeQuotesPool[nextIdx] ?? DEFAULT_STUDY_QUOTES[0])
-      return nextIdx
-    })
+    const nextIdx = (quoteIdxRef.current + 1) % activeQuotesPool.length
+    quoteIdxRef.current = nextIdx
+    setQuoteIdx(nextIdx)
+    setStudyQuote(activeQuotesPool[nextIdx] ?? DEFAULT_STUDY_QUOTES[0])
   }, [activeQuotesPool])
 
   const handleToggleFocus = useCallback((targetFocus: FocusSubPoseId) => {
     if (busyRef.current) return
     playSound(targetFocus === 'yard-bench' ? 'bench' : 'paper-card')
-    setFocusId((prev) => {
-      const next = prev === targetFocus ? null : targetFocus
-      if (next !== 'study-shelf') setStudyQuote(null)
-      return next
-    })
+    const next = focusIdRef.current === targetFocus ? null : targetFocus
+    focusIdRef.current = next
+    setFocusId(next)
+    if (next !== 'study-shelf') setStudyQuote(null)
+    if (next !== null && isNarrowViewportRef.current) setDirectoryOpen(false)
   }, [])
 
   function handleTriggerMailbox() {
@@ -1303,11 +1478,10 @@ export default function App() {
       message: guestNoteInput.trim().slice(0, 48),
       createdAt: new Date().toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }),
     }
-    setGuestStamps((prev) => {
-      const next = [entry, ...prev].slice(0, 12)
-      try { localStorage.setItem('paper-home:guestbook', JSON.stringify(next)) } catch {}
-      return next
-    })
+    const nextStamps = [entry, ...guestStampsRef.current].slice(0, 12)
+    guestStampsRef.current = nextStamps
+    setGuestStamps(nextStamps)
+    try { localStorage.setItem('paper-home:guestbook', JSON.stringify(nextStamps)) } catch {}
     setGuestNoteInput('')
     setLatestStampReply(moodItem.reply)
     showToast(`已盖下「${moodItem.id}」访客印章`, 'success')
@@ -1471,6 +1645,7 @@ export default function App() {
               />
               <RenderPipeline
                 quality={pack.quality}
+                clearColor={getAtmosphereLighting(atmospherePreset, weather).clearColor}
                 transition={transition}
                 prepare={prepare}
                 capture={captureCanvas}
@@ -1481,7 +1656,6 @@ export default function App() {
           )}
         </SceneBoundary>
       </div>
-      <div className="paper-grain" aria-hidden="true" />
 
       <header className="site-header">
         <button
@@ -1544,6 +1718,7 @@ export default function App() {
               </button>
             </div>
             <button
+              ref={atmoTriggerRef}
               type="button"
               className={`atmo-compact-trigger ${atmoPopoverOpen ? 'open' : ''}`}
               aria-expanded={atmoPopoverOpen}
@@ -1555,7 +1730,13 @@ export default function App() {
               <span>{activeAtmoMeta.label}{weather === 'rain' ? '·雨' : ''}</span>
             </button>
             {atmoPopoverOpen && (
-              <div className="atmo-popover" role="dialog" aria-label="切换天色与细雨">
+              <div
+                ref={atmoPopoverRef}
+                className="atmo-popover"
+                role="dialog"
+                aria-label="切换天色与细雨"
+                onKeyDown={(e) => handleMenuArrowNavigation(atmoPopoverRef.current, e)}
+              >
                 <div className="atmo-popover-grid">
                   {ATMOSPHERE_OPTIONS.map((opt) => (
                     <button
@@ -1565,6 +1746,7 @@ export default function App() {
                       onClick={() => {
                         handleSelectAtmosphere(opt.id)
                         setAtmoPopoverOpen(false)
+                        requestAnimationFrame(() => atmoTriggerRef.current?.focus())
                       }}
                     >
                       <Icon name={opt.icon} size={14} />
@@ -1577,6 +1759,7 @@ export default function App() {
                     onClick={() => {
                       handleToggleWeather()
                       setAtmoPopoverOpen(false)
+                      requestAnimationFrame(() => atmoTriggerRef.current?.focus())
                     }}
                   >
                     <Icon name="rain" size={14} />
@@ -1622,6 +1805,7 @@ export default function App() {
           {isAdmin && (
             <div className="studio-anchor" ref={studioAnchorRef}>
               <button
+                ref={studioTriggerRef}
                 type="button"
                 className={`admin-status-pill ${studioMenuOpen ? 'open' : ''}`}
                 aria-expanded={studioMenuOpen}
@@ -1634,7 +1818,13 @@ export default function App() {
                 <Icon name={studioMenuOpen ? 'chevronUp' : 'chevronDown'} size={13} />
               </button>
               {studioMenuOpen && (
-                <div className="studio-quick-popover" role="menu" aria-label="快捷创作入口">
+                <div
+                  ref={studioPopoverRef}
+                  className="studio-quick-popover"
+                  role="menu"
+                  aria-label="快捷创作入口"
+                  onKeyDown={(e) => handleMenuArrowNavigation(studioPopoverRef.current, e)}
+                >
                   <div className="studio-popover-head">
                     <strong>
                       {backendHealth.mode === 'local-studio' ? '本地编辑工作室' : '云端主人工作台'}
@@ -1766,8 +1956,8 @@ export default function App() {
           )}
         </div>
 
-        {ready && !busy && (place === 'yard' || place === 'study' || place === 'blank') && (
-          <div className="tactile-bar" role="group" aria-label="房间互动小物件">
+        {ready && !busy && !(isNarrowViewport && directoryOpen) && (place === 'yard' || place === 'study' || place === 'blank') && (
+          <div ref={tactileBarRef} className="tactile-bar" role="group" aria-label="房间互动小物件">
             {place === 'yard' && (
               <>
                 <button
@@ -1907,15 +2097,34 @@ export default function App() {
                 <span>选一枚印章，留在木匣里</span>
                 <small>已收集 {guestStamps.length} 枚足迹</small>
               </div>
-              <div className="guestbox-moods" role="radiogroup" aria-label="选择印章心情">
-                {STAMP_MOODS.map((m) => (
+              <div ref={moodGroupRef} className="guestbox-moods" role="radiogroup" aria-label="选择印章心情">
+                {STAMP_MOODS.map((m, idx) => (
                   <button
                     key={m.id}
                     type="button"
                     role="radio"
+                    tabIndex={selectedStampMood === m.id ? 0 : -1}
                     aria-checked={selectedStampMood === m.id}
                     className={`stamp-mood-btn ${selectedStampMood === m.id ? 'active' : ''}`}
                     onClick={() => setSelectedStampMood(m.id)}
+                    onKeyDown={(e) => {
+                      let nextIdx = -1
+                      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                        nextIdx = (idx + 1) % STAMP_MOODS.length
+                      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                        nextIdx = (idx - 1 + STAMP_MOODS.length) % STAMP_MOODS.length
+                      } else if (e.key === 'Home') {
+                        nextIdx = 0
+                      } else if (e.key === 'End') {
+                        nextIdx = STAMP_MOODS.length - 1
+                      }
+                      if (nextIdx < 0) return
+                      e.preventDefault()
+                      setSelectedStampMood(STAMP_MOODS[nextIdx].id)
+                      moodGroupRef.current
+                        ?.querySelectorAll<HTMLButtonElement>('[role="radio"]')
+                        [nextIdx]?.focus()
+                    }}
                   >
                     {m.id}
                   </button>
@@ -2094,7 +2303,14 @@ export default function App() {
                     data-sound="drawer-slide"
                     aria-expanded={directoryOpen}
                     aria-controls="room-directory"
-                    onClick={() => setDirectoryOpen((v) => !v)}
+                    onClick={() => {
+                      const next = !directoryOpen
+                      if (next && isNarrowViewport) {
+                        setFocusId(null)
+                        setStudyQuote(null)
+                      }
+                      setDirectoryOpen(next)
+                    }}
                   >
                     <Icon name={room.icon} size={17} />
                     <span>
@@ -2257,7 +2473,11 @@ export default function App() {
               defaultAtmosphere: settingsDraft.defaultAtmosphere ?? 'daylight',
               defaultWeather: settingsDraft.defaultWeather ?? 'clear',
             }
-            if (backendHealth.mode === 'local-studio' && isAdmin) {
+            if (canPersistSiteSettings) {
+              const savedHint =
+                backendHealth.mode === 'local-studio'
+                  ? '小屋名称与外观文字已保存到本机 local-data/。'
+                  : '小屋名称与外观文字已保存到云端。'
               void (async () => {
                 setSettingsBusy(true)
                 setNameMessage('')
@@ -2267,7 +2487,7 @@ export default function App() {
                   setSettingsDraft(res.siteSettings)
                   await refreshCloud()
                   playSound('success-seal')
-                  setNameMessage('小屋名称与外观文字已保存到本机 local-data/。')
+                  setNameMessage(savedHint)
                   showToast('小屋名称与外观文字已保存', 'success')
                 } catch (err) {
                   if (err instanceof ConflictError) {
@@ -2314,10 +2534,16 @@ export default function App() {
               disabled={settingsBusy}
             />
             <button type="submit" disabled={settingsBusy}>
-              {settingsBusy ? '保存中…' : backendHealth.mode === 'local-studio' && isAdmin ? '保存本机' : '记住'}
+              {settingsBusy
+                ? '保存中…'
+                : canPersistSiteSettings
+                  ? backendHealth.mode === 'local-studio'
+                    ? '保存本机'
+                    : '保存设置'
+                  : '记住'}
             </button>
           </div>
-          {backendHealth.mode === 'local-studio' && isAdmin && (
+          {canPersistSiteSettings && (
             <section className="site-extra-settings" aria-label="小屋文字外观设置">
               <button
                 type="button"
@@ -2427,8 +2653,10 @@ export default function App() {
           )}
           <p className="name-message" role="status">
             {nameMessage ||
-              (backendHealth.mode === 'local-studio' && isAdmin
-                ? '在本地编辑模式下保存后，会写入本机 local-data/ 并应用到所有页面。'
+              (canPersistSiteSettings
+                ? backendHealth.mode === 'local-studio'
+                  ? '在本地编辑模式下保存后，会写入本机 local-data/ 并应用到所有页面。'
+                  : '在主人登录状态下保存后，会同步到云端并应用给所有访客。'
                 : '名字会保存在这台设备的浏览器里。')}
           </p>
         </form>
@@ -2454,6 +2682,8 @@ export default function App() {
             )
           }}
           onSignedOut={async () => {
+            adminSeqRef.current += 1
+            clearSignedUrlCache()
             setAdminEmail(null)
             setAdminData(null)
             await loadPublic()
@@ -2472,205 +2702,222 @@ export default function App() {
         />
       </Modal>
 
-      <ProjectEditorModal
-        open={projectEditorOpen}
-        initialProject={editingProject}
-        assets={adminData?.assets ?? {}}
-        onAssetUploaded={registerUploadedAsset}
-        onSaved={handleProjectSaved}
-        onDeleted={handleProjectDeleted}
-        onPreview={(draft) => {
-          setViewingProject({
-            project: draft,
-            scope: 'admin',
-            isPreview: true,
-            publicIndex: null,
-            adminItem: editingProject ?? undefined,
-          })
-        }}
-        onConflict={(c) => setConflict(c)}
-        onClose={() => setProjectEditorOpen(false)}
-      />
+      <Suspense fallback={null}>
+        {projectEditorMounted && (
+          <ProjectEditorModal
+            open={projectEditorOpen}
+            initialProject={editingProject}
+            assets={adminData?.assets ?? {}}
+            onAssetUploaded={registerUploadedAsset}
+            onSaved={handleProjectSaved}
+            onDeleted={handleProjectDeleted}
+            onPreview={(draft) => {
+              setViewingProject({
+                project: draft,
+                scope: 'admin',
+                isPreview: true,
+                publicIndex: null,
+                adminItem: editingProject ?? undefined,
+              })
+            }}
+            onConflict={(c) => setConflict(c)}
+            onClose={() => setProjectEditorOpen(false)}
+          />
+        )}
 
-      <NoteEditorModal
-        open={noteEditorOpen}
-        initialNote={editingNote}
-        projects={adminData?.projects ?? []}
-        assets={adminData?.assets ?? {}}
-        onAssetUploaded={registerUploadedAsset}
-        onSaved={handleNoteSaved}
-        onDeleted={handleNoteDeleted}
-        onPreview={(draft) => {
-          setViewingNote({
-            note: draft,
-            scope: 'admin',
-            isPreview: true,
-            publicIndex: null,
-            adminItem: editingNote ?? undefined,
-          })
-        }}
-        onConflict={(c) => setConflict(c)}
-        onClose={() => setNoteEditorOpen(false)}
-      />
+        {noteEditorMounted && (
+          <NoteEditorModal
+            open={noteEditorOpen}
+            initialNote={editingNote}
+            projects={adminData?.projects ?? []}
+            assets={adminData?.assets ?? {}}
+            onAssetUploaded={registerUploadedAsset}
+            onSaved={handleNoteSaved}
+            onDeleted={handleNoteDeleted}
+            onPreview={(draft) => {
+              setViewingNote({
+                note: draft,
+                scope: 'admin',
+                isPreview: true,
+                publicIndex: null,
+                adminItem: editingNote ?? undefined,
+              })
+            }}
+            onConflict={(c) => setConflict(c)}
+            onClose={() => setNoteEditorOpen(false)}
+          />
+        )}
 
-      <ProfileEditorModal
-        open={profileEditorOpen}
-        initialProfile={adminData?.profile ?? null}
-        assets={adminData?.assets ?? {}}
-        onAssetUploaded={registerUploadedAsset}
-        onSaved={handleProfileSaved}
-        onConflict={(c) => setConflict(c)}
-        onClose={() => setProfileEditorOpen(false)}
-      />
+        {profileEditorMounted && (
+          <ProfileEditorModal
+            open={profileEditorOpen}
+            initialProfile={adminData?.profile ?? null}
+            assets={adminData?.assets ?? {}}
+            onAssetUploaded={registerUploadedAsset}
+            onSaved={handleProfileSaved}
+            onConflict={(c) => setConflict(c)}
+            onClose={() => setProfileEditorOpen(false)}
+          />
+        )}
 
-      <ProjectDetailModal
-        open={viewingProject !== null}
-        project={viewingProject?.project ?? null}
-        scope={viewingProject?.scope ?? 'public'}
-        isPreview={viewingProject?.isPreview ?? false}
-        linkedNotes={viewingProjectLinkedNotes}
-        totalCount={viewingProject?.publicIndex !== null ? publishedProjects.length : 1}
-        currentIndex={viewingProject?.publicIndex ?? 0}
-        onStep={
-          viewingProject?.publicIndex !== null && publishedProjects.length > 1
-            ? (delta) => {
-                const idx = viewingProject?.publicIndex ?? 0
-                const next = (idx + delta + publishedProjects.length) % publishedProjects.length
-                openPublicProject(next)
+        {projectDetailMounted && (
+          <ProjectDetailModal
+            open={viewingProject !== null}
+            project={viewingProject?.project ?? null}
+            scope={viewingProject?.scope ?? 'public'}
+            isPreview={viewingProject?.isPreview ?? false}
+            linkedNotes={viewingProjectLinkedNotes}
+            totalCount={viewingProject?.publicIndex !== null ? publishedProjects.length : 1}
+            currentIndex={viewingProject?.publicIndex ?? 0}
+            onStep={
+              viewingProject?.publicIndex !== null && publishedProjects.length > 1
+                ? (delta) => {
+                    const idx = viewingProject?.publicIndex ?? 0
+                    const next = (idx + delta + publishedProjects.length) % publishedProjects.length
+                    openPublicProject(next)
+                  }
+                : undefined
+            }
+            onOpenNote={(noteId) => {
+              if (viewingProject?.scope === 'admin' && adminData) {
+                const match = adminData.notes.find((n) => n.id === noteId)
+                if (match) openAdminNotePreview(match)
+              } else {
+                const pubIdx = publicData.notes.findIndex((n) => n.id === noteId)
+                if (pubIdx >= 0) openPublicNote(pubIdx)
               }
-            : undefined
-        }
-        onOpenNote={(noteId) => {
-          if (viewingProject?.scope === 'admin' && adminData) {
-            const match = adminData.notes.find((n) => n.id === noteId)
-            if (match) openAdminNotePreview(match)
-          } else {
-            const pubIdx = publicData.notes.findIndex((n) => n.id === noteId)
-            if (pubIdx >= 0) openPublicNote(pubIdx)
-          }
-        }}
-        onCopyDeepLink={
-          viewingProject?.scope === 'public'
-            ? () => {
-                const pub = publicData.projects.find((p) => p.id === viewingProject.project.id)
-                handleCopyDeepLink({ room: 'gallery', item: pub?.slug || viewingProject.project.id })
-              }
-            : undefined
-        }
-        onOpenPostcard={
-          viewingProject?.scope === 'public'
-            ? () => {
-                const pub = publicData.projects.find((p) => p.id === viewingProject.project.id)
-                handleOpenPostcard({
-                  slug: pub?.slug || viewingProject.project.id,
-                  title: viewingProject.project.title || '作品',
-                })
-              }
-            : undefined
-        }
-        onEdit={
-          isAdmin && viewingProject && !projectEditorOpen
-            ? () => {
-                const target =
-                  viewingProject.adminItem ??
-                  adminData?.projects.find((p) => p.id === viewingProject.project.id) ??
-                  null
-                if (target) {
-                  setViewingProject(null)
-                  setEditingProject(target)
-                  setProjectEditorOpen(true)
-                }
-              }
-            : undefined
-        }
-        onClose={() => setViewingProject(null)}
-      />
+            }}
+            onCopyDeepLink={
+              viewingProject?.scope === 'public'
+                ? () => {
+                    const pub = publicData.projects.find((p) => p.id === viewingProject.project.id)
+                    handleCopyDeepLink({ room: 'gallery', item: pub?.slug || viewingProject.project.id })
+                  }
+                : undefined
+            }
+            onOpenPostcard={
+              viewingProject?.scope === 'public'
+                ? () => {
+                    const pub = publicData.projects.find((p) => p.id === viewingProject.project.id)
+                    handleOpenPostcard({
+                      slug: pub?.slug || viewingProject.project.id,
+                      title: viewingProject.project.title || '作品',
+                    })
+                  }
+                : undefined
+            }
+            onEdit={
+              isAdmin && viewingProject && !projectEditorOpen
+                ? () => {
+                    const target =
+                      viewingProject.adminItem ??
+                      adminData?.projects.find((p) => p.id === viewingProject.project.id) ??
+                      null
+                    if (target) {
+                      setViewingProject(null)
+                      setEditingProject(target)
+                      setProjectEditorOpen(true)
+                    }
+                  }
+                : undefined
+            }
+            onClose={() => setViewingProject(null)}
+          />
+        )}
 
-      <NoteDetailModal
-        open={viewingNote !== null}
-        note={viewingNote?.note ?? null}
-        scope={viewingNote?.scope ?? 'public'}
-        isPreview={viewingNote?.isPreview ?? false}
-        linkedProject={viewingNoteLinkedProject}
-        totalCount={viewingNote?.publicIndex !== null ? publicData.notes.length : 1}
-        currentIndex={viewingNote?.publicIndex ?? 0}
-        onStep={
-          viewingNote?.publicIndex !== null && publicData.notes.length > 1
-            ? (delta) => {
-                const idx = viewingNote?.publicIndex ?? 0
-                const next = (idx + delta + publicData.notes.length) % publicData.notes.length
-                openPublicNote(next)
+        {noteDetailMounted && (
+          <NoteDetailModal
+            open={viewingNote !== null}
+            note={viewingNote?.note ?? null}
+            scope={viewingNote?.scope ?? 'public'}
+            isPreview={viewingNote?.isPreview ?? false}
+            linkedProject={viewingNoteLinkedProject}
+            totalCount={viewingNote?.publicIndex !== null ? publicData.notes.length : 1}
+            currentIndex={viewingNote?.publicIndex ?? 0}
+            onStep={
+              viewingNote?.publicIndex !== null && publicData.notes.length > 1
+                ? (delta) => {
+                    const idx = viewingNote?.publicIndex ?? 0
+                    const next = (idx + delta + publicData.notes.length) % publicData.notes.length
+                    openPublicNote(next)
+                  }
+                : undefined
+            }
+            onOpenProject={(projectId) => {
+              if (viewingNote?.scope === 'admin' && adminData) {
+                const match = adminData.projects.find((p) => p.id === projectId)
+                if (match) openAdminProjectPreview(match)
+              } else {
+                const pubIdx = publicData.projects.findIndex((p) => p.id === projectId)
+                if (pubIdx >= 0) openPublicProject(pubIdx)
               }
-            : undefined
-        }
-        onOpenProject={(projectId) => {
-          if (viewingNote?.scope === 'admin' && adminData) {
-            const match = adminData.projects.find((p) => p.id === projectId)
-            if (match) openAdminProjectPreview(match)
-          } else {
-            const pubIdx = publicData.projects.findIndex((p) => p.id === projectId)
-            if (pubIdx >= 0) openPublicProject(pubIdx)
-          }
-        }}
-        onCopyDeepLink={
-          viewingNote?.scope === 'public'
-            ? () => {
-                const pub = publicData.notes.find((n) => n.id === viewingNote.note.id)
-                handleCopyDeepLink({ room: 'study', item: pub?.slug || viewingNote.note.id })
-              }
-            : undefined
-        }
-        onOpenPostcard={
-          viewingNote?.scope === 'public'
-            ? () => {
-                const pub = publicData.notes.find((n) => n.id === viewingNote.note.id)
-                handleOpenPostcard({
-                  slug: pub?.slug || viewingNote.note.id,
-                  title: viewingNote.note.title || '手记',
-                })
-              }
-            : undefined
-        }
-        onEdit={
-          isAdmin && viewingNote && !noteEditorOpen
-            ? () => {
-                const target =
-                  viewingNote.adminItem ??
-                  adminData?.notes.find((n) => n.id === viewingNote.note.id) ??
-                  null
-                if (target) {
-                  setViewingNote(null)
-                  setEditingNote(target)
-                  setNoteEditorOpen(true)
-                }
-              }
-            : undefined
-        }
-        onClose={() => setViewingNote(null)}
-      />
+            }}
+            onCopyDeepLink={
+              viewingNote?.scope === 'public'
+                ? () => {
+                    const pub = publicData.notes.find((n) => n.id === viewingNote.note.id)
+                    handleCopyDeepLink({ room: 'study', item: pub?.slug || viewingNote.note.id })
+                  }
+                : undefined
+            }
+            onOpenPostcard={
+              viewingNote?.scope === 'public'
+                ? () => {
+                    const pub = publicData.notes.find((n) => n.id === viewingNote.note.id)
+                    handleOpenPostcard({
+                      slug: pub?.slug || viewingNote.note.id,
+                      title: viewingNote.note.title || '手记',
+                    })
+                  }
+                : undefined
+            }
+            onEdit={
+              isAdmin && viewingNote && !noteEditorOpen
+                ? () => {
+                    const target =
+                      viewingNote.adminItem ??
+                      adminData?.notes.find((n) => n.id === viewingNote.note.id) ??
+                      null
+                    if (target) {
+                      setViewingNote(null)
+                      setEditingNote(target)
+                      setNoteEditorOpen(true)
+                    }
+                  }
+                : undefined
+            }
+            onClose={() => setViewingNote(null)}
+          />
+        )}
 
-      <PostcardModal
-        open={postcardOpen}
-        snapshotDataUrl={postcardSnapshot}
-        homeName={homeName}
-        plaqueTitle={siteSettings.plaqueTitle}
-        room={place}
-        roomName={room.name}
-        atmospherePreset={atmospherePreset}
-        weather={weather}
-        itemLabel={postcardSeedItem?.title ?? null}
-        nowNote={activeNowNotes[0] ?? null}
-        deepLinkUrl={activeDeepLinkUrl}
-        deepLinkHash={activeDeepLinkHash}
-        onCopyDeepLink={() => handleCopyDeepLink()}
-        onNotify={showToast}
-        onClose={() => {
-          setPostcardOpen(false)
-          setPostcardSeedItem(null)
-        }}
-      />
+        {postcardMounted && (
+          <PostcardModal
+            open={postcardOpen}
+            snapshotDataUrl={postcardSnapshot}
+            homeName={homeName}
+            plaqueTitle={siteSettings.plaqueTitle}
+            room={place}
+            roomName={room.name}
+            atmospherePreset={atmospherePreset}
+            weather={weather}
+            itemLabel={postcardSeedItem?.title ?? null}
+            nowNote={activeNowNotes[0] ?? null}
+            deepLinkUrl={activeDeepLinkUrl}
+            deepLinkHash={activeDeepLinkHash}
+            onCopyDeepLink={() => handleCopyDeepLink()}
+            onNotify={showToast}
+            onClose={() => {
+              setPostcardOpen(false)
+              setPostcardSeedItem(null)
+              setPostcardSnapshot(null)
+            }}
+          />
+        )}
 
-      <ConflictDialog conflict={conflict} onClose={() => setConflict(null)} />
+        {conflictMounted && (
+          <ConflictDialog conflict={conflict} onClose={() => setConflict(null)} />
+        )}
+      </Suspense>
       <ToastHost toasts={toasts} onDismiss={dismissToast} />
     </div>
   )

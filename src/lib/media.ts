@@ -2,7 +2,7 @@ import { Upload } from 'tus-js-client'
 import { getSupabaseClient, supabaseAnonKey, supabaseUrl } from './supabase'
 import { getBackendMode, getLocalHeaders } from './backend'
 import { registerMediaAssetApi, signMediaUrlsApi } from './api'
-import type { MediaAsset, SignedMediaEntry } from '../types/content'
+import { ApiError, type MediaAsset, type SignedMediaEntry } from '../types/content'
 
 export const MAX_RAW_IMAGE_BYTES = 10 * 1024 * 1024 // 10 MB
 export const MAX_VIDEO_BYTES = 50 * 1024 * 1024 // 50 MB
@@ -11,32 +11,73 @@ export const ALLOWED_VIDEO_MIME = new Set(['video/mp4', 'video/webm'])
 
 const BUCKET_NAME = 'cottage-media'
 const REFRESH_MARGIN_MS = 30_000
+const MAX_CACHE_ENTRIES = 500
 
 const urlCache = new Map<string, SignedMediaEntry>()
 const inflightSign = new Map<string, Promise<SignedMediaEntry | null>>()
 
-export function seedSignedUrls(entries: Record<string, SignedMediaEntry> | undefined | null) {
-  if (!entries) return
-  for (const [id, entry] of Object.entries(entries)) {
-    if (entry?.displayUrl) urlCache.set(id, entry)
+function cacheKeyFor(assetId: string, scope: 'public' | 'admin' = 'public'): string {
+  return `${scope}:${assetId}`
+}
+
+function setCachedEntry(key: string, entry: SignedMediaEntry) {
+  if (urlCache.has(key)) urlCache.delete(key)
+  urlCache.set(key, entry)
+  while (urlCache.size > MAX_CACHE_ENTRIES) {
+    const oldest = urlCache.keys().next().value
+    if (oldest === undefined) break
+    urlCache.delete(oldest)
   }
 }
 
-export function evictSignedUrl(assetId: string) {
-  urlCache.delete(assetId)
+export function seedSignedUrls(
+  entries: Record<string, SignedMediaEntry> | undefined | null,
+  scope: 'public' | 'admin' = 'public',
+) {
+  if (!entries) return
+  for (const [id, entry] of Object.entries(entries)) {
+    if (entry?.displayUrl) setCachedEntry(cacheKeyFor(id, scope), entry)
+  }
 }
 
-export function getCachedUrl(assetId: string | null | undefined, variant: 'display' | 'thumb' = 'display'): string | null {
+export function evictSignedUrl(assetId: string, scope?: 'public' | 'admin') {
+  if (scope) {
+    urlCache.delete(cacheKeyFor(assetId, scope))
+    return
+  }
+  urlCache.delete(cacheKeyFor(assetId, 'public'))
+  urlCache.delete(cacheKeyFor(assetId, 'admin'))
+}
+
+export function clearSignedUrlCache(scope?: 'public' | 'admin') {
+  if (!scope) {
+    urlCache.clear()
+    return
+  }
+  const prefix = `${scope}:`
+  for (const key of Array.from(urlCache.keys())) {
+    if (key.startsWith(prefix)) urlCache.delete(key)
+  }
+}
+
+export function getCachedUrl(
+  assetId: string | null | undefined,
+  variant: 'display' | 'thumb' = 'display',
+  scope: 'public' | 'admin' = 'public',
+): string | null {
   if (!assetId) return null
-  const entry = urlCache.get(assetId)
+  const entry = urlCache.get(cacheKeyFor(assetId, scope))
   if (!entry) return null
   if (Date.now() >= entry.expiresAt) return null
   return variant === 'thumb' ? (entry.thumbUrl ?? entry.displayUrl) : entry.displayUrl
 }
 
-export function isUrlNearExpiry(assetId: string | null | undefined): boolean {
+export function isUrlNearExpiry(
+  assetId: string | null | undefined,
+  scope: 'public' | 'admin' = 'public',
+): boolean {
   if (!assetId) return true
-  const entry = urlCache.get(assetId)
+  const entry = urlCache.get(cacheKeyFor(assetId, scope))
   if (!entry) return true
   return Date.now() >= entry.expiresAt - REFRESH_MARGIN_MS
 }
@@ -46,25 +87,27 @@ export async function refreshSignedUrl(
   scope: 'public' | 'admin',
   force = false,
 ): Promise<SignedMediaEntry | null> {
-  if (!force && !isUrlNearExpiry(assetId)) {
-    return urlCache.get(assetId) ?? null
+  const key = cacheKeyFor(assetId, scope)
+  if (!force && !isUrlNearExpiry(assetId, scope)) {
+    return urlCache.get(key) ?? null
   }
 
-  const key = `${scope}:${assetId}`
   const existing = inflightSign.get(key)
   if (existing) return await existing
 
   const task = (async () => {
     try {
       const res = await signMediaUrlsApi([assetId], scope)
-      seedSignedUrls(res.signedUrls)
+      seedSignedUrls(res.signedUrls, scope)
       if (res.deniedIds.includes(assetId)) {
-        urlCache.delete(assetId)
+        urlCache.delete(key)
         return null
       }
       return res.signedUrls[assetId] ?? null
-    } catch {
-      urlCache.delete(assetId)
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        urlCache.delete(key)
+      }
       return null
     } finally {
       inflightSign.delete(key)
@@ -499,8 +542,21 @@ export async function createResumableVideoUpload(
     chunkSize: 6 * 1024 * 1024,
     uploadDataDuringCreation: true,
     removeFingerprintOnSuccess: true,
+    onBeforeRequest: async (req) => {
+      let authToken = token
+      try {
+        const { data } = await client.auth.getSession()
+        if (data.session?.access_token) {
+          authToken = data.session.access_token
+        }
+      } catch {
+        // Fallback to initial header if session probe transiently fails.
+      }
+      if (!req.getHeader('authorization')) {
+        req.setHeader('authorization', `Bearer ${authToken}`)
+      }
+    },
     headers: {
-      authorization: `Bearer ${token}`,
       apikey: supabaseAnonKey,
       'x-upsert': 'true',
     },
@@ -518,6 +574,9 @@ export async function createResumableVideoUpload(
     onError: (err) => {
       if (cancelled) return
       const msg = err?.message || '上传中断'
+      if (/\b(400|401|403|404|413)\b/.test(msg)) {
+        clearPending()
+      }
       callbacks.onError(
         msg.includes('413') || msg.toLowerCase().includes('size')
           ? '文件超出存储单文件 50 MB 限制或剩余额度不足，请压缩后重试。'

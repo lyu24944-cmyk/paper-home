@@ -45,6 +45,7 @@ export function ImageLightbox({
       if (e.key === 'Escape') {
         e.preventDefault()
         e.stopPropagation()
+        playSound('modal-close')
         onClose()
       } else if (e.key === 'ArrowLeft' && count > 1) {
         e.preventDefault()

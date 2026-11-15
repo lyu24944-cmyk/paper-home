@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { Box3, CanvasTexture, CylinderGeometry, DoubleSide, Euler, ExtrudeGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshDepthMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PlaneGeometry, Quaternion, RGBADepthPacking, Shape, ShapeGeometry, SRGBColorSpace, Vector3 } from 'three'
+import { Box3, CanvasTexture, CylinderGeometry, DirectionalLight, DoubleSide, Euler, ExtrudeGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshDepthMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PlaneGeometry, Quaternion, RGBADepthPacking, Shape, ShapeGeometry, SRGBColorSpace, Vector3 } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import gsap from 'gsap'
 import { DEFAULT_NOW_NOTES, getAtmosphereLighting } from './atmosphere'
@@ -25,7 +25,7 @@ function Plaque({text,sub='',at,size=[1.45,.38],rotation=0}:{text:string;sub?:st
   const texture=useMemo(()=>textMap(text,sub),[text,sub]);useEffect(()=>()=>texture.dispose(),[texture])
   return <group position={at} rotation={[0,rotation,0]}><mesh castShadow receiveShadow><boxGeometry args={[size[0]+.04,size[1]+.04,.045]}/><meshStandardMaterial color="#6f6047" roughness={.75}/></mesh><mesh position={[0,0,.024]}><planeGeometry args={size}/><meshStandardMaterial map={texture} roughness={.85}/></mesh></group>
 }
-function Signage({homeName,plaqueTitle,plaqueSubtitle,materials,onTapPlaque}:{homeName:string;plaqueTitle:string;plaqueSubtitle:string;materials:ReturnType<typeof makeMaterials>;onTapPlaque?:()=>void}){
+function Signage({homeName,plaqueTitle,plaqueSubtitle,materials,interactive=true,onTapPlaque}:{homeName:string;plaqueTitle:string;plaqueSubtitle:string;materials:ReturnType<typeof makeMaterials>;interactive?:boolean;onTapPlaque?:()=>void}){
   const signs=useMemo(()=>{
     const labels=[{text:homeName,sub:'',at:[0,2.38,.13] as V3,size:[1.48,.25],r:0},{text:plaqueTitle,sub:plaqueSubtitle,at:[1.075,1.75,-1.45] as V3,size:[.9,.42],r:-Math.PI/2},...doorStops.map(d=>({text:d.name,sub:'',at:[d.side*1.075,2.43,-d.depth] as V3,size:[.88,.22],r:-d.side*Math.PI/2}))]
     const canvas=document.createElement('canvas');canvas.width=canvas.height=2048;const c=canvas.getContext('2d')!,b=new Builder(),geometries:PlaneGeometry[]=[]
@@ -41,7 +41,7 @@ function Signage({homeName,plaqueTitle,plaqueSubtitle,materials,onTapPlaque}:{ho
     return {b,geometry:mergeGeometries(geometries,false)!,texture}
   },[homeName,plaqueTitle,plaqueSubtitle])
   useEffect(()=>()=>{signs.geometry.dispose();signs.texture.dispose()},[signs])
-  return <group onClick={e=>{e.stopPropagation();if(e.delta<8){playSound('bench');onTapPlaque?.()}}} onPointerOver={on} onPointerOut={off}><StaticBatch builder={signs.b} materials={materials}/><mesh geometry={signs.geometry} receiveShadow><meshStandardMaterial map={signs.texture} roughness={.85}/></mesh></group>
+  return <group onClick={interactive?e=>{e.stopPropagation();if(e.delta<8){playSound('bench');onTapPlaque?.()}}:undefined} onPointerOver={interactive?on:undefined} onPointerOut={off}><StaticBatch builder={signs.b} materials={materials}/><mesh geometry={signs.geometry} receiveShadow><meshStandardMaterial map={signs.texture} roughness={.85}/></mesh></group>
 }
 function doorParts(width:number){
   const b=new Builder(),h=layout.doorHeight
@@ -54,11 +54,11 @@ function doorParts(width:number){
   for(const y of [.24,1.16,1.98])b.cylinder(.012,.012,.095,[.025,y,.065],'brass')
   return b
 }
-function Door({at,rotation=0,open,click,materials,reduced}:{at:V3;rotation?:number;open:boolean;click:()=>void;materials:ReturnType<typeof makeMaterials>;reduced:boolean}){
+function Door({at,rotation=0,open,interactive=true,click,materials,reduced}:{at:V3;rotation?:number;open:boolean;interactive?:boolean;click:()=>void;materials:ReturnType<typeof makeMaterials>;reduced:boolean}){
   const pivot=useRef<Group>(null),body=useMemo(()=>doorParts(layout.doorWidth),[])
   const {gl}=useThree()
   useEffect(()=>{const ctx=gsap.context(()=>{if(pivot.current)gsap.to(pivot.current.rotation,{y:open?-1.62:0,duration:reduced?0:.7,ease:'power2.inOut',onComplete:()=>{gl.shadowMap.needsUpdate=true}})});return()=>ctx.revert()},[open,reduced])
-  return <group position={at} rotation={[0,rotation,0]} onClick={e=>{e.stopPropagation();if(e.delta<8)click()}} onPointerOver={on} onPointerOut={off}>
+  return <group position={at} rotation={[0,rotation,0]} onClick={interactive?e=>{e.stopPropagation();if(e.delta<8)click()}:undefined} onPointerOver={interactive?on:undefined} onPointerOut={off}>
     <group ref={pivot} position={[-layout.doorWidth/2,0,.01]}><StaticBatch builder={body} materials={materials}/></group>
   </group>
 }
@@ -185,27 +185,34 @@ function garden(){
   b.box([.18,.025,.02],[1.7,.89,2.13],'brass',[0,-.18,0],.004)
   return b
 }
-function Plant({pack,at,height=1,tree=false,rotation=0,onTap}:{pack:ResourcePack;at:V3;height?:number;tree?:boolean;rotation?:number;onTap?:()=>void}){
-  const object=useMemo(()=>{
+function Plant({pack,at,height=1,tree=false,rotation=0,interactive=true,onTap}:{pack:ResourcePack;at:V3;height?:number;tree?:boolean;rotation?:number;interactive?:boolean;onTap?:()=>void}){
+  const {object,depthMaterials}=useMemo(()=>{
     const root=(tree?pack.tree:pack.plant).scene.clone(true),bounds=new Box3().setFromObject(root),size=bounds.getSize(new Vector3()),center=bounds.getCenter(new Vector3())
     const scale=height/size.y
+    const mats:MeshDepthMaterial[]=[]
     root.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);root.scale.setScalar(scale)
     root.traverse(o=>{if(o instanceof Mesh){o.castShadow=true;o.receiveShadow=true
-      const materials=Array.isArray(o.material)?o.material:[o.material];materials.forEach(m=>{if(m.alphaTest>0)o.customDepthMaterial=new MeshDepthMaterial({map:m.map,alphaTest:m.alphaTest,depthPacking:RGBADepthPacking,side:DoubleSide})})
+      const materials=Array.isArray(o.material)?o.material:[o.material];materials.forEach(m=>{if(m.alphaTest>0){const dm=new MeshDepthMaterial({map:m.map,alphaTest:m.alphaTest,depthPacking:RGBADepthPacking,side:DoubleSide});o.customDepthMaterial=dm;mats.push(dm)}})
     }})
-    return root
+    return {object:root,depthMaterials:mats}
   },[pack,tree,height])
-  return <group position={at} rotation={[0,rotation,0]} onClick={e=>{e.stopPropagation();if(e.delta<8){playSound('foliage');onTap?.()}}} onPointerOver={on} onPointerOut={off}><primitive object={object}/></group>
+  useEffect(()=>()=>{depthMaterials.forEach(m=>m.dispose())},[depthMaterials])
+  return <group position={at} rotation={[0,rotation,0]} onClick={interactive?e=>{e.stopPropagation();if(e.delta<8){playSound('foliage');onTap?.()}}:undefined} onPointerOver={interactive?on:undefined} onPointerOut={off}><primitive object={object}/></group>
 }
 function Grass(){
   const ref=useRef<InstancedMesh>(null),geometry=useMemo(()=>{const shape=new Shape();shape.moveTo(-.018,0);shape.quadraticCurveTo(-.018,.14,.045,.24);shape.quadraticCurveTo(.018,.1,.018,0);shape.closePath();return new ShapeGeometry(shape,3)},[])
+  useEffect(()=>()=>{geometry.dispose()},[geometry])
   useEffect(()=>{if(!ref.current)return;const m=new Matrix4(),p=new Vector3(),q=new Quaternion(),s=new Vector3();for(let i=0;i<420;i++){const x=Math.sin(i*127.1)*6.8,z=2.4+((i*7.31)%7.7);p.set(Math.abs(x)<.9?x+1.8:x,-.32,z);q.setFromAxisAngle(new Vector3(0,1,0),i*2.4);s.setScalar(.65+(i%6)*.18);m.compose(p,q,s);ref.current.setMatrixAt(i,m)}ref.current.instanceMatrix.needsUpdate=true},[])
   return <instancedMesh ref={ref} args={[geometry,undefined,420]} castShadow receiveShadow><meshStandardMaterial color="#42613b" roughness={1} side={DoubleSide}/></instancedMesh>
 }
 function RainOverlay({count,reduced,isNight}:{count:number;reduced:boolean;isNight:boolean}){
   const ref=useRef<InstancedMesh>(null)
   const geometry=useMemo(()=>new CylinderGeometry(.0035,.0035,.58,4,1),[])
-  const material=useMemo(()=>new MeshBasicMaterial({color:isNight?'#9bb8d4':'#d8e6ee',transparent:true,opacity:isNight?.32:.38,depthWrite:false}),[isNight])
+  const material=useMemo(()=>new MeshBasicMaterial({color:'#d8e6ee',transparent:true,opacity:.38,depthWrite:false}),[])
+  useEffect(()=>{
+    material.color.set(isNight?'#9bb8d4':'#d8e6ee')
+    material.opacity=isNight?.32:.38
+  },[isNight,material])
   const drops=useMemo(()=>{
     const arr:{x:number;y:number;z:number;speed:number}[]=[]
     for(let i=0;i<count;i++){
@@ -315,7 +322,7 @@ function drawNowNoteCard(canvas:HTMLCanvasElement,text:string,index:number){
     c.fillText(line1,w/2,h*.52,w-48)
   }
 }
-function BlankTabletopCards({nowNotes,onSelect}:{nowNotes?:string[];onSelect:()=>void}){
+function BlankTabletopCards({nowNotes,interactive=true,onSelect}:{nowNotes?:string[];interactive?:boolean;onSelect:()=>void}){
   const notes=useMemo(()=>{
     const list=(nowNotes&&nowNotes.length>0?nowNotes:DEFAULT_NOW_NOTES).slice(0,3)
     while(list.length<3)list.push(DEFAULT_NOW_NOTES[list.length]||'记录日常微光')
@@ -335,7 +342,7 @@ function BlankTabletopCards({nowNotes,onSelect}:{nowNotes?:string[];onSelect:()=
     {pos:[.16,.431,-.52],rot:.11},
     {pos:[-.08,.434,-.44],rot:.04},
   ]
-  return <group onClick={e=>{e.stopPropagation();if(e.delta<8)onSelect()}} onPointerOver={on} onPointerOut={off}>
+  return <group onClick={interactive?e=>{e.stopPropagation();if(e.delta<8)onSelect()}:undefined} onPointerOver={interactive?on:undefined} onPointerOut={off}>
     {textures.map((tex,i)=>(
       <mesh key={i} position={placements[i].pos} rotation={[-Math.PI/2,0,placements[i].rot]} receiveShadow castShadow>
         <planeGeometry args={[.22,.15]}/>
@@ -347,16 +354,21 @@ function BlankTabletopCards({nowNotes,onSelect}:{nowNotes?:string[];onSelect:()=
     </group>
   </group>
 }
-function StudyInteractiveNodes({deskLampOn,onToggleLamp,onDrawQuote}:{deskLampOn:boolean;onToggleLamp?:()=>void;onDrawQuote?:()=>void}){
+function StudyInteractiveNodes({deskLampOn,interactive=true,onToggleLamp,onDrawQuote}:{deskLampOn:boolean;interactive?:boolean;onToggleLamp?:()=>void;onDrawQuote?:()=>void}){
   const shadeMaterial=useMemo(()=>new MeshStandardMaterial({
-    color:deskLampOn?'#8fb07c':'#7e8c73',
-    emissive:deskLampOn?'#ffcf75':'#000000',
-    emissiveIntensity:deskLampOn?.75:0,
+    color:'#7e8c73',
+    emissive:'#000000',
+    emissiveIntensity:0,
     roughness:.48,
-  }),[deskLampOn])
-  useEffect(()=>()=>shadeMaterial.dispose(),[shadeMaterial])
+  }),[])
+  useEffect(()=>{
+    shadeMaterial.color.set(deskLampOn?'#8fb07c':'#7e8c73')
+    shadeMaterial.emissive.set(deskLampOn?'#ffcf75':'#000000')
+    shadeMaterial.emissiveIntensity=deskLampOn?.75:0
+  },[deskLampOn,shadeMaterial])
+  useEffect(()=>()=>{shadeMaterial.dispose()},[shadeMaterial])
   return <>
-    <group position={[.08,1.2,-1.08]} onClick={e=>{e.stopPropagation();if(e.delta<8)onToggleLamp?.()}} onPointerOver={on} onPointerOut={off}>
+    <group position={[.08,1.2,-1.08]} onClick={interactive?e=>{e.stopPropagation();if(e.delta<8)onToggleLamp?.()}:undefined} onPointerOver={interactive?on:undefined} onPointerOut={off}>
       <mesh castShadow receiveShadow material={shadeMaterial}>
         <cylinderGeometry args={[.09,.18,.15,16]}/>
       </mesh>
@@ -364,11 +376,9 @@ function StudyInteractiveNodes({deskLampOn,onToggleLamp,onDrawQuote}:{deskLampOn
         <sphereGeometry args={[.038,12,12]}/>
         <meshBasicMaterial color={deskLampOn?'#fff4d2':'#cfc9b8'}/>
       </mesh>
-      {deskLampOn&&(
-        <pointLight position={[0,-.08,.04]} color="#ffcf80" intensity={3.8} distance={4.4} decay={2}/>
-      )}
+      <pointLight position={[0,-.08,.04]} color="#ffcf80" intensity={deskLampOn?3.8:0} distance={4.4} decay={2}/>
     </group>
-    <group position={[2.3,1.48,-1.3]} onClick={e=>{e.stopPropagation();if(e.delta<8)onDrawQuote?.()}} onPointerOver={on} onPointerOut={off}>
+    <group position={[2.3,1.48,-1.3]} onClick={interactive?e=>{e.stopPropagation();if(e.delta<8)onDrawQuote?.()}:undefined} onPointerOver={interactive?on:undefined} onPointerOut={off}>
       <Plaque text="书架灵感签" sub="抽一张读过的句子" at={[0,0,0]} size={[.36,.18]}/>
     </group>
   </>
@@ -393,7 +403,7 @@ function drawGallerySheet(canvas:HTMLCanvasElement,title:string,img?:HTMLImageEl
     c.fillText(title,w/2,h/2,w-96)
   }
 }
-function Paper({item,index,count,reduced,interact,onCoverExpired}:{item:GalleryDisplayItem;index:number;count:number;reduced:boolean;interact:(i:number)=>void;onCoverExpired?:(assetId:string)=>void}){
+function Paper({item,index,count,reduced,interactive=true,interact,onCoverExpired}:{item:GalleryDisplayItem;index:number;count:number;reduced:boolean;interactive?:boolean;interact:(i:number)=>void;onCoverExpired?:(assetId:string)=>void}){
   const group=useRef<Group>(null)
   const {canvas,texture}=useMemo(()=>{
     const cvs=document.createElement('canvas');cvs.width=720;cvs.height=900
@@ -415,14 +425,14 @@ function Paper({item,index,count,reduced,interact,onCoverExpired}:{item:GalleryD
   },[canvas,texture,item.title,item.coverThumbUrl,item.coverAssetId,onCoverExpired])
   useEffect(()=>()=>texture.dispose(),[texture])
   useFrame(({clock})=>{if(group.current)group.current.rotation.y=reduced?0:Math.sin(clock.elapsedTime*.5+index)*.012})
-  return <group ref={group} position={[gallerySlotX(index,count),1.65,-.85]} onClick={e=>{e.stopPropagation();if(e.delta<8){playSound('paper-flip');interact(index)}}} onPointerOver={on} onPointerOut={off}>
+  return <group ref={group} position={[gallerySlotX(index,count),1.65,-.85]} onClick={interactive?e=>{e.stopPropagation();if(e.delta<8){playSound('paper-flip');interact(index)}}:undefined} onPointerOver={interactive?on:undefined} onPointerOut={off}>
     <mesh position={[0,.71,0]}><cylinderGeometry args={[.002,.002,.38,6]}/><meshStandardMaterial color="#7c7561"/></mesh>
     <mesh castShadow receiveShadow><planeGeometry args={[.91,1.22,20,3]} onUpdate={g=>{const p=g.getAttribute('position');for(let i=0;i<p.count;i++)p.setZ(i,Math.sin((p.getX(i)/.91+.5)*Math.PI)*.035);g.computeVertexNormals()}}/><meshStandardMaterial color="#f9f6e9" side={DoubleSide} roughness={.95}/></mesh>
     <mesh position={[0,.02,.042]} receiveShadow><planeGeometry args={[.74,.806,20,2]} onUpdate={g=>{const p=g.getAttribute('position');for(let i=0;i<p.count;i++)p.setZ(i,Math.sin((p.getX(i)/.91+.5)*Math.PI)*.035);g.computeVertexNormals()}}/><meshStandardMaterial map={texture} roughness={.92} side={DoubleSide}/></mesh>
     <mesh position={[0,.61,.035]} castShadow><boxGeometry args={[.045,.055,.03]}/><meshStandardMaterial color="#8e8a7c" metalness={.8} roughness={.28}/></mesh>
   </group>
 }
-function RoomDecor({id,pack,materials,interact,reduced,exterior,galleryProjects,onCoverExpired,deskLampOn=false,onToggleDeskLamp,onDrawStudyQuote,onSelectBlankTable,onTapProp,nowNotes}:{id:Place;pack:ResourcePack;materials:ReturnType<typeof makeMaterials>;interact:(i:number)=>void;reduced:boolean;exterior:boolean;galleryProjects:GalleryDisplayItem[];onCoverExpired?:(assetId:string)=>void;deskLampOn?:boolean;onToggleDeskLamp?:()=>void;onDrawStudyQuote?:()=>void;onSelectBlankTable?:()=>void;onTapProp?:(msg:string)=>void;nowNotes?:string[]}){
+function RoomDecor({id,active,pack,materials,interact,reduced,exterior,galleryProjects,onCoverExpired,deskLampOn=false,onToggleDeskLamp,onDrawStudyQuote,onSelectBlankTable,onTapProp,nowNotes}:{id:Place;active:boolean;pack:ResourcePack;materials:ReturnType<typeof makeMaterials>;interact:(i:number)=>void;reduced:boolean;exterior:boolean;galleryProjects:GalleryDisplayItem[];onCoverExpired?:(assetId:string)=>void;deskLampOn?:boolean;onToggleDeskLamp?:()=>void;onDrawStudyQuote?:()=>void;onSelectBlankTable?:()=>void;onTapProp?:(msg:string)=>void;nowNotes?:string[]}){
   const b=useMemo(()=>roomFurniture(id),[id]),t=roomTransform(id)
   const root=useRef<Group>(null),scratch=useMemo(()=>({forward:new Vector3(),delta:new Vector3()}),[])
   useFrame(({camera})=>{
@@ -435,20 +445,20 @@ function RoomDecor({id,pack,materials,interact,reduced,exterior,galleryProjects,
   })
   const displayed=galleryProjects.slice(0,3)
   return <group ref={root} userData={{skipAO:exterior}} position={[t.x,0,t.z]} rotation={[0,t.rotation,0]}><StaticBatch builder={b} materials={materials} castShadow={!exterior}/>
-    {id==='gallery'&&<group name="gallery-papers">{displayed.map((item,i)=><Paper key={item.id} item={item} index={i} count={displayed.length} interact={interact} reduced={reduced} onCoverExpired={onCoverExpired}/>)}</group>}
+    {id==='gallery'&&<group name="gallery-papers">{displayed.map((item,i)=><Paper key={item.id} item={item} index={i} count={displayed.length} interactive={active} interact={interact} reduced={reduced} onCoverExpired={onCoverExpired}/>)}</group>}
     {id==='study'&&<>
-      <group position={[-.5,.79,-.85]} rotation={[-Math.PI/2,0,-.08]} onClick={e=>{e.stopPropagation();if(e.delta<8){playSound('paper-flip');interact(0)}}} onPointerOver={on} onPointerOut={off}><Plaque text="创作手记" sub="翻开，读一会儿" at={[0,0,0]} size={[.32,.24]}/></group>
-      <StudyInteractiveNodes deskLampOn={deskLampOn} onToggleLamp={onToggleDeskLamp} onDrawQuote={onDrawStudyQuote}/>
+      <group position={[-.5,.79,-.85]} rotation={[-Math.PI/2,0,-.08]} onClick={active?e=>{e.stopPropagation();if(e.delta<8){playSound('paper-flip');interact(0)}}:undefined} onPointerOver={active?on:undefined} onPointerOut={off}><Plaque text="创作手记" sub="翻开，读一会儿" at={[0,0,0]} size={[.32,.24]}/></group>
+      <StudyInteractiveNodes deskLampOn={deskLampOn} interactive={active} onToggleLamp={onToggleDeskLamp} onDrawQuote={onDrawStudyQuote}/>
     </>}
-    <Plant pack={pack} at={id==='study'?[-2.5,0,-1.35]:id==='gallery'?[2.45,0,-1.5]:[-2.5,0,-1.3]} height={id==='blank'?1.2:.9} onTap={()=>onTapProp?.('枝叶在房间光线里微微摇晃')}/>
+    <Plant pack={pack} at={id==='study'?[-2.5,0,-1.35]:id==='gallery'?[2.45,0,-1.5]:[-2.5,0,-1.3]} height={id==='blank'?1.2:.9} interactive={active} onTap={()=>onTapProp?.('枝叶在房间光线里微微摇晃')}/>
     {id==='blank'&&<>
-      <group onClick={e=>{e.stopPropagation();if(e.delta<8){playSound('bench');onTapProp?.('实木铭牌微凉沉稳，推开窗就是小院')}}} onPointerOver={on} onPointerOut={off}>
+      <group onClick={active?e=>{e.stopPropagation();if(e.delta<8){playSound('bench');onTapProp?.('实木铭牌微凉沉稳，推开窗就是小院')}}:undefined} onPointerOver={active?on:undefined} onPointerOut={off}>
         <Plaque text="关于我" sub="认识小屋的主人" at={[1.65,1.75,-2.02]} size={[1.2,.4]}/>
       </group>
-      <group position={[.42,.52,-.64]} onClick={e=>{e.stopPropagation();if(e.delta<8){playSound('ceramics');onTapProp?.('轻叩手捏素烧陶罐，传出温和清脆的窑音')}}} onPointerOver={on} onPointerOut={off}>
+      <group position={[.42,.52,-.64]} onClick={active?e=>{e.stopPropagation();if(e.delta<8){playSound('ceramics');onTapProp?.('轻叩手捏素烧陶罐，传出温和清脆的窑音')}}:undefined} onPointerOver={active?on:undefined} onPointerOut={off}>
         <mesh visible={false}><cylinderGeometry args={[.13,.13,.26,12]}/><meshBasicMaterial/></mesh>
       </group>
-      <BlankTabletopCards nowNotes={nowNotes} onSelect={()=>onSelectBlankTable?.()}/>
+      <BlankTabletopCards nowNotes={nowNotes} interactive={active} onSelect={()=>onSelectBlankTable?.()}/>
     </>}
   </group>
 }
@@ -498,6 +508,7 @@ export function World({
   nowNotes?:string[]
 }){
   const materials=useMemo(()=>makeMaterials(pack),[pack]),house=useMemo(shell,[]),yard=useMemo(garden,[]),{scene,gl}=useThree()
+  const dirLightRef=useRef<DirectionalLight>(null)
   const lighting=useMemo(()=>getAtmosphereLighting(atmospherePreset,weather),[atmospherePreset,weather])
   const glass=useMemo(()=>{const b=new Builder();for(const w of windows)b.add(new PlaneGeometry(w.w-.08,w.h-.08),w.at,'glass',[0,w.r,0]);return b},[])
   // Thin architectural glazing: direct clear view plus dielectric environment reflection.
@@ -516,19 +527,28 @@ export function World({
     gl.setClearColor(lighting.clearColor,1)
     gl.shadowMap.needsUpdate=true
   },[lighting,scene,gl,glassMaterials])
-  useEffect(()=>()=>{Object.values(materials).forEach(m=>m.dispose());glassMaterials.glass.dispose()},[materials,glassMaterials])
+  useLayoutEffect(()=>{
+    const light=dirLightRef.current
+    if(light?.shadow.map){
+      light.shadow.map.dispose()
+      light.shadow.map=null
+    }
+    gl.shadowMap.needsUpdate=true
+  },[pack.quality,gl])
+  useEffect(()=>()=>{Object.values(materials).forEach(m=>m.dispose())},[materials])
+  useEffect(()=>()=>{glassMaterials.glass.dispose()},[glassMaterials])
   const outside=place==='yard'||destination==='yard'||opening==='hall'||opening==='yard'
+  const isYard=place==='yard'
+  const isHall=place==='hall'
   return <>
     <fog attach="fog" args={[lighting.fogColor,lighting.fogNear,lighting.fogFar]}/>
     <hemisphereLight args={[lighting.hemiSkyColor,lighting.hemiGroundColor,lighting.hemiIntensity]}/>
-    <directionalLight position={lighting.sunPosition} intensity={lighting.sunIntensity} color={lighting.sunColor} castShadow shadow-mapSize={pack.quality==='high'?[2048,2048]:[1024,1024]} shadow-camera-left={-18} shadow-camera-right={18} shadow-camera-top={18} shadow-camera-bottom={-18} shadow-camera-near={.5} shadow-camera-far={55} shadow-normalBias={.025} shadow-bias={-.00008} shadow-radius={3}/>
+    <directionalLight ref={dirLightRef} position={lighting.sunPosition} intensity={lighting.sunIntensity} color={lighting.sunColor} castShadow shadow-mapSize={pack.quality==='high'?[2048,2048]:[1024,1024]} shadow-camera-left={-18} shadow-camera-right={18} shadow-camera-top={18} shadow-camera-bottom={-18} shadow-camera-near={.5} shadow-camera-far={55} shadow-normalBias={.025} shadow-bias={-.00008} shadow-radius={3}/>
     <ambientLight intensity={lighting.ambientIntensity} color={lighting.ambientColor}/>
     {[1.8,6.8,11.8].map(d=><pointLight key={d} position={[0,2.55,-d]} color={lighting.hallPointColor} intensity={lighting.hallPointIntensity} distance={4.5} decay={2}/>)}
     {doorStops.map(d=><rectAreaLight key={d.id} position={[d.side*5.12,1.85,-d.depth]} rotation={[0,d.side*Math.PI/2,0]} width={1.7} height={1.3} color={lighting.windowRectColor} intensity={lighting.windowRectIntensity}/>)}
-    {lighting.porchLanternIntensity>0&&(
-      <pointLight position={[-.84,1.78,.48]} color={lighting.porchLanternColor} intensity={lighting.porchLanternIntensity} distance={6.5} decay={2}/>
-    )}
-    {lighting.roomWarmFillIntensity>0&&doorStops.map(d=>(
+    <pointLight position={[-.84,1.78,.48]} color={lighting.porchLanternColor} intensity={lighting.porchLanternIntensity} distance={6.5} decay={2}/>
+    {doorStops.map(d=>(
       <pointLight key={`warm-${d.id}`} position={[d.side*3.1,2.35,-d.depth]} color="#ffdfa8" intensity={lighting.roomWarmFillIntensity} distance={6.2} decay={2}/>
     ))}
     {weather==='rain'&&(
@@ -536,20 +556,21 @@ export function World({
     )}
     <StaticBatch builder={house} materials={materials}/><StaticBatch builder={yard} materials={materials}/>
     <StaticBatch builder={glass} materials={glassMaterials} castShadow={false}/>
-    <Door at={[0,0,.045]} open={outside&&(!!opening||!!destination)} click={()=>navigate('hall')} materials={materials} reduced={reduced}/>
-    <Signage homeName={homeName} plaqueTitle={plaqueTitle} plaqueSubtitle={plaqueSubtitle} materials={materials} onTapPlaque={()=>onTapProp?.('轻叩门牌，木纹温润沉稳')}/>
+    <Door at={[0,0,.045]} open={outside&&(!!opening||!!destination)} interactive={isYard} click={()=>navigate('hall')} materials={materials} reduced={reduced}/>
+    <Signage homeName={homeName} plaqueTitle={plaqueTitle} plaqueSubtitle={plaqueSubtitle} materials={materials} interactive={isYard||isHall} onTapPlaque={()=>onTapProp?.('轻叩门牌，木纹温润沉稳')}/>
     {/* Yard interactive bench and porch mailbox */}
-    <group position={[-5,.42,6.1]} rotation={[0,.1,0]} onClick={e=>{e.stopPropagation();if(e.delta<8&&place==='yard')onSelectFocus?.('yard-bench')}} onPointerOver={on} onPointerOut={off}>
+    <group position={[-5,.42,6.1]} rotation={[0,.1,0]} onClick={isYard?e=>{e.stopPropagation();if(e.delta<8)onSelectFocus?.('yard-bench')}:undefined} onPointerOver={isYard?on:undefined} onPointerOut={off}>
       <mesh visible={false}><boxGeometry args={[1.75,.55,.6]}/><meshBasicMaterial/></mesh>
     </group>
-    <group position={[1.72,.84,1.92]} rotation={[0,-.18,0]} onClick={e=>{e.stopPropagation();if(e.delta<8&&place==='yard')onTriggerMailbox?.()}} onPointerOver={on} onPointerOut={off}>
+    <group position={[1.72,.84,1.92]} rotation={[0,-.18,0]} onClick={isYard?e=>{e.stopPropagation();if(e.delta<8)onTriggerMailbox?.()}:undefined} onPointerOver={isYard?on:undefined} onPointerOut={off}>
       <mesh visible={false}><boxGeometry args={[.48,.52,.52]}/><meshBasicMaterial/></mesh>
       <Plaque text="寄语信箱" sub="留张便签" at={[0,.24,0]} size={[.34,.14]}/>
     </group>
     {doorStops.map(d=><group key={d.id}>
-      <Door at={[d.side*1.08,0,-d.depth]} rotation={-d.side*Math.PI/2} open={place===d.id||opening===d.id||destination===d.id} click={()=>navigate(d.id)} materials={materials} reduced={reduced}/>
+      <Door at={[d.side*1.08,0,-d.depth]} rotation={-d.side*Math.PI/2} open={place===d.id||opening===d.id||destination===d.id} interactive={isHall} click={()=>navigate(d.id)} materials={materials} reduced={reduced}/>
       <RoomDecor
         id={d.id}
+        active={place===d.id}
         pack={pack}
         materials={materials}
         interact={interact}
@@ -565,11 +586,11 @@ export function World({
         nowNotes={nowNotes}
       />
     </group>)}
-    <Plant pack={pack} at={[-5.5,-.29,5.3]} height={5.7} tree rotation={.5} onTap={()=>onTapProp?.('风吹过院子里的老树，叶片沙沙作响')}/>
-    <Plant pack={pack} at={[-1.05,0,1.15]} height={.86} onTap={()=>onTapProp?.('门廊旁的绿植轻轻晃了晃')}/>
-    <Plant pack={pack} at={[1.08,0,1.12]} height={.67} onTap={()=>onTapProp?.('门廊旁的绿植轻轻晃了晃')}/>
-    <Plant pack={pack} at={[-3.4,-.28,.65]} height={.8} onTap={()=>onTapProp?.('窗边花盆的叶片轻轻晃动')}/>
-    <Plant pack={pack} at={[3.6,-.28,.65]} height={.9} onTap={()=>onTapProp?.('窗边花盆的叶片轻轻晃动')}/>
+    <Plant pack={pack} at={[-5.5,-.29,5.3]} height={5.7} tree rotation={.5} interactive={isYard} onTap={()=>onTapProp?.('风吹过院子里的老树，叶片沙沙作响')}/>
+    <Plant pack={pack} at={[-1.05,0,1.15]} height={.86} interactive={isYard} onTap={()=>onTapProp?.('门廊旁的绿植轻轻晃了晃')}/>
+    <Plant pack={pack} at={[1.08,0,1.12]} height={.67} interactive={isYard} onTap={()=>onTapProp?.('门廊旁的绿植轻轻晃了晃')}/>
+    <Plant pack={pack} at={[-3.4,-.28,.65]} height={.8} interactive={isYard} onTap={()=>onTapProp?.('窗边花盆的叶片轻轻晃动')}/>
+    <Plant pack={pack} at={[3.6,-.28,.65]} height={.9} interactive={isYard} onTap={()=>onTapProp?.('窗边花盆的叶片轻轻晃动')}/>
     <Grass/>
   </>
 }

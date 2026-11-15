@@ -5,7 +5,7 @@ import {
   saveProfileDraftApi,
   unpublishProfileApi,
 } from '../lib/api'
-import { buildStatusLabel, renderParagraphs, safeExternalUrl } from '../lib/text'
+import { buildStatusLabel, isValidEmail, renderParagraphs, safeExternalUrl } from '../lib/text'
 import {
   ConflictError,
   type AdminProfile,
@@ -55,6 +55,17 @@ export function ProfileEditorModal({
   const [saveError, setSaveError] = useState('')
 
   const sessionUploadedIdsRef = useRef<string[]>([])
+  const wasOpenRef = useRef(false)
+
+  function flushSessionCandidates() {
+    const ids = sessionUploadedIdsRef.current
+    sessionUploadedIdsRef.current = []
+    if (ids.length > 0) {
+      void cleanupMediaAssetsApi({ candidateAssetIds: ids }).catch(() => {
+        // Unreferenced assets stay queued.
+      })
+    }
+  }
 
   function syncFromProfile(profile: AdminProfile | null) {
     setCurrent(profile)
@@ -71,13 +82,24 @@ export function ProfileEditorModal({
   }
 
   useEffect(() => {
+    const opening = !wasOpenRef.current && open
+    const closing = wasOpenRef.current && !open
+    wasOpenRef.current = open
+    if (closing) {
+      flushSessionCandidates()
+      return
+    }
     if (!open) return
     syncFromProfile(initialProfile)
-    setPreviewOpen(false)
-    setSaveStatus('')
-    setSaveError('')
-    sessionUploadedIdsRef.current = []
-  }, [open])
+    if (opening) {
+      setPreviewOpen(false)
+      setSaveStatus('')
+      setSaveError('')
+      sessionUploadedIdsRef.current = []
+    }
+  }, [open, initialProfile?.version, initialProfile?.updatedAt])
+
+  useEffect(() => () => flushSessionCandidates(), [])
 
   function buildDraftPayload(): ProfilePayload {
     return {
@@ -100,6 +122,9 @@ export function ProfileEditorModal({
 
   function validateDraft(draft: ProfilePayload, requireAnyField: boolean): string | null {
     if (uploadBusy) return '头像正在上传中，请等待完成后再操作。'
+    if (draft.contactEmail && !isValidEmail(draft.contactEmail)) {
+      return '公开联系邮箱格式无效，请检查后再试。'
+    }
     for (const item of draft.contactLinks) {
       if (!item.label || !item.url) {
         return '联系方式链接请同时填写名称与网址，或删除空白行。'
@@ -170,7 +195,7 @@ export function ProfileEditorModal({
       setSaveError(validationErr)
       return null
     }
-    const res = await saveProfileDraftApi(current?.version ?? 0, draft)
+    const res = await saveProfileDraftApi(current?.version ?? 1, draft)
     if (res.item) {
       setCurrent(res.item)
       onSaved(res.item, res.pendingCleanupCount, notifyAction)
@@ -253,11 +278,7 @@ export function ProfileEditorModal({
   }
 
   function handleClose() {
-    if (sessionUploadedIdsRef.current.length > 0) {
-      void cleanupMediaAssetsApi({ candidateAssetIds: sessionUploadedIdsRef.current }).catch(() => {
-        // Unreferenced assets stay queued.
-      })
-    }
+    flushSessionCandidates()
     onClose()
   }
 

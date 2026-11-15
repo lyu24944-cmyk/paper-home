@@ -16,12 +16,18 @@ export function Modal({
   className?: string
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
+  const closingProgrammaticallyRef = useRef(false)
 
   useEffect(() => {
     const el = dialog.current
     if (!el) return
-    if (open && !el.open) el.showModal()
-    else if (!open && el.open) el.close()
+    if (open && !el.open) {
+      closingProgrammaticallyRef.current = false
+      el.showModal()
+    } else if (!open && el.open) {
+      closingProgrammaticallyRef.current = true
+      el.close()
+    }
   }, [open])
 
   return (
@@ -29,7 +35,13 @@ export function Modal({
       ref={dialog}
       className={`paper-dialog ${className}`}
       aria-label={label}
-      onClose={close}
+      onClose={() => {
+        if (closingProgrammaticallyRef.current) {
+          closingProgrammaticallyRef.current = false
+          return
+        }
+        close()
+      }}
       onCancel={(e) => {
         e.preventDefault()
         playSound('modal-close')

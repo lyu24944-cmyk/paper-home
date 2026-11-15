@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   createResumableVideoUpload,
   processAndUploadImage,
@@ -28,12 +28,30 @@ export function ImageListPicker({
   onUploadStateChange?: (busy: boolean) => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const mountedRef = useRef(true)
+  const latestAssetIdsRef = useRef(assetIds)
+  latestAssetIdsRef.current = assetIds
+  const uploadingRef = useRef(false)
+  const onUploadStateChangeRef = useRef(onUploadStateChange)
+  onUploadStateChangeRef.current = onUploadStateChange
   const [uploading, setUploading] = useState(false)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (uploadingRef.current) {
+        uploadingRef.current = false
+        onUploadStateChangeRef.current?.(false)
+      }
+    }
+  }, [])
+
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return
+    uploadingRef.current = true
     setUploading(true)
     onUploadStateChange?.(true)
     setError('')
@@ -43,8 +61,10 @@ export function ImageListPicker({
     const errors: string[] = []
 
     for (const file of Array.from(files)) {
+      if (!mountedRef.current) break
       try {
         const { asset } = await processAndUploadImage(file)
+        if (!mountedRef.current) break
         onAssetUploaded(asset)
         added.push(asset.id)
       } catch (err) {
@@ -52,8 +72,11 @@ export function ImageListPicker({
       }
     }
 
+    if (!mountedRef.current) return
+
     if (added.length > 0) {
-      onChange(multiple ? [...assetIds, ...added] : [added[added.length - 1]])
+      const current = latestAssetIdsRef.current
+      onChange(multiple ? [...current, ...added] : [added[added.length - 1]])
       setStatus(`已上传 ${added.length} 张图片（已自动生成展示图与缩略图）。`)
     } else {
       setStatus('')
@@ -64,6 +87,7 @@ export function ImageListPicker({
     }
 
     if (inputRef.current) inputRef.current.value = ''
+    uploadingRef.current = false
     setUploading(false)
     onUploadStateChange?.(false)
   }
@@ -107,6 +131,7 @@ export function ImageListPicker({
                   <button
                     type="button"
                     aria-label="前移图片"
+                    disabled={disabled || uploading}
                     onClick={() => {
                       const next = [...assetIds]
                       ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
@@ -119,6 +144,7 @@ export function ImageListPicker({
                 <button
                   type="button"
                   aria-label="移除图片"
+                  disabled={disabled || uploading}
                   onClick={() => onChange(assetIds.filter((x) => x !== id))}
                 >
                   移除
@@ -149,11 +175,30 @@ export function VideoUploadPicker({
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const controllerRef = useRef<VideoUploadController | null>(null)
+  const mountedRef = useRef(true)
+  const busyRef = useRef(false)
+  const onUploadStateChangeRef = useRef(onUploadStateChange)
+  onUploadStateChangeRef.current = onUploadStateChange
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [phase, setPhase] = useState<'idle' | 'checking' | 'uploading' | 'error'>('idle')
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (controllerRef.current) {
+        void controllerRef.current.cancel()
+        controllerRef.current = null
+      }
+      if (busyRef.current) {
+        busyRef.current = false
+        onUploadStateChangeRef.current?.(false)
+      }
+    }
+  }, [])
 
   async function beginUpload(file: File) {
     setPendingFile(file)
@@ -161,11 +206,13 @@ export function VideoUploadPicker({
     setProgress(0)
     setError('')
     setStatus('正在检查视频格式、大小与可播放性…')
+    busyRef.current = true
     onUploadStateChange?.(true)
 
     try {
       const controller = await createResumableVideoUpload(file, {
         onProgress: (pct, uploaded, total) => {
+          if (!mountedRef.current) return
           setPhase('uploading')
           setProgress(pct)
           setStatus(
@@ -174,6 +221,11 @@ export function VideoUploadPicker({
         },
         onSuccess: (asset) => {
           controllerRef.current = null
+          busyRef.current = false
+          if (!mountedRef.current) {
+            onUploadStateChange?.(false)
+            return
+          }
           setPendingFile(null)
           setPhase('idle')
           setProgress(100)
@@ -185,18 +237,34 @@ export function VideoUploadPicker({
         },
         onError: (msg) => {
           controllerRef.current = null
+          busyRef.current = false
+          if (!mountedRef.current) {
+            onUploadStateChange?.(false)
+            return
+          }
           setPhase('error')
           setError(msg)
           setStatus('')
           onUploadStateChange?.(false)
         },
       })
+      if (!mountedRef.current) {
+        void controller.cancel()
+        busyRef.current = false
+        onUploadStateChange?.(false)
+        return
+      }
       controllerRef.current = controller
       setPhase('uploading')
       setStatus('开始上传视频…')
       controller.start()
     } catch (err) {
       controllerRef.current = null
+      busyRef.current = false
+      if (!mountedRef.current) {
+        onUploadStateChange?.(false)
+        return
+      }
       setPhase('error')
       setStatus('')
       setError(err instanceof Error ? err.message : '视频校验失败。')
@@ -207,6 +275,8 @@ export function VideoUploadPicker({
   async function handleCancel() {
     await controllerRef.current?.cancel()
     controllerRef.current = null
+    busyRef.current = false
+    if (!mountedRef.current) return
     setPendingFile(null)
     setPhase('idle')
     setProgress(0)

@@ -90,8 +90,10 @@ let sfxEnabled = (() => {
 
 let lastExplicitSoundAt = 0
 let activeClickEvent: Event | null = null
+let activeClickClearTimer: number | null = null
 const handledClickEvents = new WeakSet<Event>()
 let contextCreateCount = 0
+let pendingResumeSound: { id: SoundEffectId; at: number; force?: boolean } | null = null
 
 function syncQaAudioMetrics(id: SoundEffectId) {
   if (!qaEnabled) return
@@ -180,7 +182,18 @@ function ensureEngine(): EngineState | null {
   }
 
   if (engine.ctx.state === 'suspended') {
-    void engine.ctx.resume().catch(() => {})
+    void engine.ctx
+      .resume()
+      .then(() => {
+        if (!engine || engine.ctx.state !== 'running' || !pendingResumeSound) return
+        const pending = pendingResumeSound
+        pendingResumeSound = null
+        if (!sfxEnabled && !pending.force) return
+        if (performance.now() - pending.at <= 150) {
+          synthesize(engine, pending.id)
+        }
+      })
+      .catch(() => {})
   }
   return engine
 }
@@ -716,23 +729,34 @@ export function setAcousticSpace(space: 'yard' | 'indoor'): void {
 }
 
 export function markSoundHandled(): void {
-  lastExplicitSoundAt = performance.now()
   if (activeClickEvent !== null) {
     handledClickEvents.add(activeClickEvent)
+  } else {
+    lastExplicitSoundAt = performance.now()
+  }
+}
+
+function dispatchSound(id: SoundEffectId, opts?: { force?: boolean }): void {
+  if (!sfxEnabled && !opts?.force) return
+  try {
+    const st = ensureEngine()
+    syncQaAudioMetrics(id)
+    if (!st || st.ctx.state === 'closed') return
+    if (st.ctx.state !== 'running') {
+      // Coalesce pending playback while suspended instead of piling up oscillators at t=0
+      pendingResumeSound = { id, at: performance.now(), force: opts?.force }
+      return
+    }
+    pendingResumeSound = null
+    synthesize(st, id)
+  } catch {
+    syncQaAudioMetrics(id)
   }
 }
 
 export function playSound(id: SoundEffectId, opts?: { force?: boolean }): void {
   markSoundHandled()
-  if (!sfxEnabled && !opts?.force) return
-  try {
-    const st = ensureEngine()
-    syncQaAudioMetrics(id)
-    if (!st) return
-    synthesize(st, id)
-  } catch {
-    syncQaAudioMetrics(id)
-  }
+  dispatchSound(id, opts)
 }
 
 function resolveDelegatedSound(el: Element): SoundEffectId | 'none' {
@@ -768,12 +792,25 @@ export function installGlobalClickSoundDelegator(): () => void {
   const onClickCapture = (e: MouseEvent) => {
     activeClickEvent = e
     handledClickEvents.delete(e)
+    // Clear via macrotask fallback so stopPropagation() never strands activeClickEvent,
+    // without racing the microtask checkpoint between capture and React root bubble listeners.
+    if (activeClickClearTimer !== null) window.clearTimeout(activeClickClearTimer)
+    activeClickClearTimer = window.setTimeout(() => {
+      activeClickClearTimer = null
+      if (activeClickEvent === e) {
+        activeClickEvent = null
+      }
+    }, 0)
   }
 
   const onClick = (e: MouseEvent) => {
     const handledThisEvent = handledClickEvents.has(e)
     if (activeClickEvent === e) {
       activeClickEvent = null
+    }
+    if (activeClickClearTimer !== null) {
+      window.clearTimeout(activeClickClearTimer)
+      activeClickClearTimer = null
     }
     if (!sfxEnabled) return
     if (handledThisEvent || performance.now() - lastExplicitSoundAt < 45) return
@@ -786,7 +823,7 @@ export function installGlobalClickSoundDelegator(): () => void {
 
     const soundId = resolveDelegatedSound(control)
     if (soundId === 'none') return
-    playSound(soundId)
+    dispatchSound(soundId)
   }
 
   document.addEventListener('click', onClickCapture, true)
@@ -794,6 +831,10 @@ export function installGlobalClickSoundDelegator(): () => void {
   return () => {
     document.removeEventListener('click', onClickCapture, true)
     document.removeEventListener('click', onClick, false)
+    if (activeClickClearTimer !== null) {
+      window.clearTimeout(activeClickClearTimer)
+      activeClickClearTimer = null
+    }
     activeClickEvent = null
   }
 }

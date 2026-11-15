@@ -54,6 +54,12 @@ export function NoteEditorModal({
   const [videoAssetId, setVideoAssetId] = useState<string | null>(null)
 
   const [uploadBusy, setUploadBusy] = useState(false)
+  const busyPickersRef = useRef<Set<string>>(new Set())
+  const setPickerBusy = (key: string, busy: boolean) => {
+    if (busy) busyPickersRef.current.add(key)
+    else busyPickersRef.current.delete(key)
+    setUploadBusy(busyPickersRef.current.size > 0)
+  }
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState('')
   const [saveError, setSaveError] = useState('')
@@ -61,6 +67,17 @@ export function NoteEditorModal({
   const [deleteError, setDeleteError] = useState('')
 
   const sessionUploadedIdsRef = useRef<string[]>([])
+  const wasOpenRef = useRef(false)
+
+  function flushSessionCandidates() {
+    const ids = sessionUploadedIdsRef.current
+    sessionUploadedIdsRef.current = []
+    if (ids.length > 0) {
+      void cleanupMediaAssetsApi({ candidateAssetIds: ids }).catch(() => {
+        // Unreferenced assets remain queued for cleanup retry.
+      })
+    }
+  }
 
   function syncFromNote(note: AdminNote | null) {
     setCurrent(note)
@@ -73,14 +90,25 @@ export function NoteEditorModal({
   }
 
   useEffect(() => {
+    const opening = !wasOpenRef.current && open
+    const closing = wasOpenRef.current && !open
+    wasOpenRef.current = open
+    if (closing) {
+      flushSessionCandidates()
+      return
+    }
     if (!open) return
     syncFromNote(initialNote)
-    setSaveStatus('')
-    setSaveError('')
-    setDeleteError('')
-    setConfirmDeleteOpen(false)
-    sessionUploadedIdsRef.current = []
-  }, [open, initialNote?.id])
+    if (opening) {
+      setSaveStatus('')
+      setSaveError('')
+      setDeleteError('')
+      setConfirmDeleteOpen(false)
+      sessionUploadedIdsRef.current = []
+    }
+  }, [open, initialNote?.id, initialNote?.version, initialNote?.updatedAt])
+
+  useEffect(() => () => flushSessionCandidates(), [])
 
   function buildDraftPayload(): NotePayload {
     return {
@@ -175,6 +203,7 @@ export function NoteEditorModal({
       setSaveError(validationError)
       return
     }
+    const wasPublished = Boolean(current?.isPublished)
     setSaving(true)
     setSaveError('')
     setSaveStatus('')
@@ -185,7 +214,7 @@ export function NoteEditorModal({
       if (pubRes.item) {
         setCurrent(pubRes.item)
         onSaved(pubRes.item, pubRes.pendingCleanupCount, 'publish')
-        setSaveStatus(current?.isPublished ? '手记更新已发布。' : '手记已发布到创作手记。')
+        setSaveStatus(wasPublished ? '手记更新已发布。' : '手记已发布到创作手记。')
       }
     } catch (err) {
       if (err instanceof ConflictError) {
@@ -243,11 +272,7 @@ export function NoteEditorModal({
   }
 
   function handleClose() {
-    if (sessionUploadedIdsRef.current.length > 0) {
-      void cleanupMediaAssetsApi({ candidateAssetIds: sessionUploadedIdsRef.current }).catch(() => {
-        // Unreferenced assets remain queued for cleanup retry.
-      })
-    }
+    flushSessionCandidates()
     onClose()
   }
 
@@ -333,7 +358,7 @@ export function NoteEditorModal({
                 sessionUploadedIdsRef.current.push(asset.id)
                 onAssetUploaded(asset)
               }}
-              onUploadStateChange={setUploadBusy}
+              onUploadStateChange={(busy) => setPickerBusy('images', busy)}
             />
 
             <VideoUploadPicker
@@ -345,7 +370,7 @@ export function NoteEditorModal({
                 sessionUploadedIdsRef.current.push(asset.id)
                 onAssetUploaded(asset)
               }}
-              onUploadStateChange={setUploadBusy}
+              onUploadStateChange={(busy) => setPickerBusy('video', busy)}
             />
           </div>
         </div>

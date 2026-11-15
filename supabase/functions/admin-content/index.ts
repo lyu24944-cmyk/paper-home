@@ -1,8 +1,11 @@
 import { handlePreflight, jsonResponse } from '../_shared/cors.ts'
 import {
   cleanContactLinks,
+  cleanShortLines,
   createAdminClient,
+  errorResponse,
   HttpError,
+  normalizeSiteSettingsRow,
   requireAdmin,
   signAssets,
 } from '../_shared/supabase.ts'
@@ -30,10 +33,14 @@ Deno.serve(async (req) => {
   if (preflight) return preflight
 
   try {
+    if (req.method !== 'GET') {
+      throw new HttpError(405, '仅支持 GET 请求')
+    }
+
     const admin = createAdminClient()
     const user = await requireAdmin(req, admin)
 
-    const [projRes, noteRes, profRes, stateRes, assetsRes, cleanupRes] = await Promise.all([
+    const [projRes, noteRes, profRes, settingsRes, stateRes, assetsRes, cleanupRes] = await Promise.all([
       admin
         .from('projects')
         .select('*')
@@ -45,6 +52,7 @@ Deno.serve(async (req) => {
         .order('sort_order', { ascending: true })
         .order('created_at', { ascending: true }),
       admin.from('site_profile').select('*').eq('id', 'owner').maybeSingle(),
+      admin.from('site_settings').select('*').eq('id', 'main').maybeSingle(),
       admin.from('collection_state').select('key, version'),
       admin.from('media_assets').select('id, kind, status, mime_type, byte_size, width, height, duration_sec, original_filename, created_at'),
       admin.from('media_cleanup_queue').select('id', { count: 'exact', head: true }),
@@ -149,6 +157,8 @@ Deno.serve(async (req) => {
             avatarAssetId: pRow.draft_avatar_asset_id,
             contactEmail: pRow.draft_contact_email,
             contactLinks: cleanContactLinks(pRow.draft_contact_links),
+            nowNotes: cleanShortLines((pRow as Record<string, unknown>).draft_now_notes, 3, 36),
+            quotes: cleanShortLines((pRow as Record<string, unknown>).draft_quotes, 8, 120),
           },
           published: pPub
             ? {
@@ -158,11 +168,21 @@ Deno.serve(async (req) => {
                 avatarAssetId: (pPub.avatar_asset_id as string | null) ?? null,
                 contactEmail: String(pPub.contact_email ?? ''),
                 contactLinks: cleanContactLinks(pPub.contact_links),
+                nowNotes: cleanShortLines(pPub.now_notes, 3, 36),
+                quotes: cleanShortLines(pPub.quotes, 8, 120),
                 publishedAt: (pPub.published_at as string | null) ?? pRow.published_at,
               }
             : null,
         }
       : null
+
+    const siteSettings = normalizeSiteSettingsRow(
+      settingsRes.error ? null : (settingsRes.data as Record<string, unknown> | null),
+    )
+    const siteSettingsVersion =
+      !settingsRes.error && settingsRes.data && typeof settingsRes.data.version === 'number'
+        ? settingsRes.data.version
+        : 1
 
     const orderVersions = Object.fromEntries(
       (stateRes.data ?? []).map((s) => [s.key, s.version as number]),
@@ -186,23 +206,26 @@ Deno.serve(async (req) => {
 
     const signedUrls = await signAssets(admin, imageIds, { allowedKinds: ['image'] })
 
-    return jsonResponse({
-      adminUserId: user.id,
-      projects,
-      notes,
-      profile,
-      orderVersions: {
-        projects: orderVersions.projects_order ?? 1,
-        notes: orderVersions.notes_order ?? 1,
+    return jsonResponse(
+      {
+        adminUserId: user.id,
+        projects,
+        notes,
+        profile,
+        siteSettings,
+        siteSettingsVersion,
+        orderVersions: {
+          projects: orderVersions.projects_order ?? 1,
+          notes: orderVersions.notes_order ?? 1,
+        },
+        assets,
+        signedUrls,
+        pendingCleanupCount: cleanupRes.count ?? 0,
       },
-      assets,
-      signedUrls,
-      pendingCleanupCount: cleanupRes.count ?? 0,
-    })
+      200,
+      req,
+    )
   } catch (err) {
-    if (err instanceof HttpError) {
-      return jsonResponse({ error: err.message, detail: err.detail }, err.status)
-    }
-    return jsonResponse({ error: err instanceof Error ? err.message : '服务器错误' }, 500)
+    return errorResponse(err, req)
   }
 })

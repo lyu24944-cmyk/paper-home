@@ -23,6 +23,58 @@ export function isValidUuid(value) {
   return typeof value === 'string' && UUID_RE.test(value.trim())
 }
 
+export function httpError(status, message) {
+  const err = new Error(message)
+  err.status = status
+  return err
+}
+
+export function isValidHttpUrl(value) {
+  if (typeof value !== 'string') return false
+  const trimmed = value.trim()
+  if (!trimmed || trimmed.length > 500) return false
+  try {
+    const parsed = new URL(trimmed)
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && Boolean(parsed.hostname)
+  } catch {
+    return false
+  }
+}
+
+export function isValidEmail(value) {
+  if (typeof value !== 'string') return false
+  const trimmed = value.trim()
+  return Boolean(trimmed) && trimmed.length <= 180 && /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(trimmed)
+}
+
+export function hasValidMagicBytes(buf, mimeType) {
+  if (!buf || !Buffer.isBuffer(buf)) return false
+  switch (mimeType) {
+    case 'image/webp':
+      return buf.length >= 12 && buf.subarray(0, 4).toString('ascii') === 'RIFF' && buf.subarray(8, 12).toString('ascii') === 'WEBP'
+    case 'image/png':
+      return (
+        buf.length >= 8 &&
+        buf[0] === 0x89 &&
+        buf[1] === 0x50 &&
+        buf[2] === 0x4e &&
+        buf[3] === 0x47 &&
+        buf[4] === 0x0d &&
+        buf[5] === 0x0a &&
+        buf[6] === 0x1a &&
+        buf[7] === 0x0a
+      )
+    case 'image/jpeg':
+      return buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff
+    case 'video/mp4':
+      return buf.length >= 12 && buf.subarray(4, 8).toString('ascii') === 'ftyp'
+    case 'video/webm':
+      return buf.length >= 4 && buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3
+    default:
+      return false
+  }
+}
+
 function nowIso() {
   return new Date().toISOString()
 }
@@ -55,9 +107,9 @@ function cleanContactLinks(input) {
   return input
     .map((item) => ({
       label: typeof item?.label === 'string' ? item.label.trim().slice(0, 40) : '',
-      url: typeof item?.url === 'string' ? item.url.trim().slice(0, 300) : '',
+      url: typeof item?.url === 'string' ? item.url.trim().slice(0, 500) : '',
     }))
-    .filter((item) => item.label && item.url)
+    .filter((item) => item.label && isValidHttpUrl(item.url))
 }
 
 function cleanShortLines(input, maxItems = 3, maxLen = 36) {
@@ -309,6 +361,31 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
         errors.push(`${id}: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
+
+    if (sweepOrphans && fs.existsSync(mediaDir)) {
+      const staleBefore = Date.now() - 24 * 60 * 60 * 1000
+      for (const kindDir of ['videos', 'images']) {
+        const root = path.join(mediaDir, kindDir)
+        if (!fs.existsSync(root)) continue
+        for (const assetFolder of fs.readdirSync(root)) {
+          const dir = path.join(root, assetFolder)
+          try {
+            if (!fs.statSync(dir).isDirectory()) continue
+            for (const fileName of fs.readdirSync(dir)) {
+              if (!fileName.endsWith('.part')) continue
+              const full = path.join(dir, fileName)
+              if (fs.statSync(full).mtimeMs < staleBefore) {
+                fs.rmSync(full, { force: true })
+              }
+            }
+            if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir)
+          } catch {
+            // Ignore partial cleanup errors on orphan directories.
+          }
+        }
+      }
+    }
+
     return { cleaned, remaining: errors.length, errors }
   }
 
@@ -433,16 +510,29 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
     if (!fs.existsSync(filePath)) {
       return { status: 404, error: '本地磁盘素材文件不存在' }
     }
-    const mimeType = variant === 'thumb' && asset.thumbPath && rel.endsWith('.jpg')
-      ? 'image/jpeg'
-      : variant === 'thumb' && asset.thumbPath && rel.endsWith('.webp')
-        ? 'image/webp'
-        : asset.mimeType
+    const thumbMimeMap = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.webp': 'image/webp',
+    }
+    const thumbExt = variant === 'thumb' && asset.thumbPath ? path.extname(rel).toLowerCase() : ''
+    const mimeType = (thumbExt && thumbMimeMap[thumbExt]) || asset.mimeType
     return { status: 200, filePath, mimeType }
   }
 
-  function writeUploadedMediaBlob(assetId, variant, ext, buffer) {
-    if (!isValidUuid(assetId)) throw new Error('非法素材 ID')
+  function hasAsset(assetId) {
+    if (!isValidUuid(assetId)) return false
+    const db = readDb()
+    return Boolean(db.assets[assetId])
+  }
+
+  function writeUploadedMediaBlob(assetId, variant, ext, buffer, mimeType = '') {
+    if (!isValidUuid(assetId)) throw httpError(400, '非法素材 ID')
+    if (hasAsset(assetId)) throw httpError(409, '该素材 ID 已完成登记，禁止覆盖')
+    if (mimeType && !hasValidMagicBytes(buffer, mimeType)) {
+      throw httpError(400, '上传文件头部签名与声明的图片格式不符')
+    }
     const kindDir = variant === 'video' ? 'videos' : 'images'
     const safeExt = String(ext || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin'
     const filename = variant === 'thumb' ? `thumb.${safeExt}` : variant === 'video' ? `demo.${safeExt}` : `display.${safeExt}`
@@ -453,8 +543,9 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
     return relPath
   }
 
-  function appendVideoChunk(assetId, ext, buffer, { reset = false, finalize = false } = {}) {
-    if (!isValidUuid(assetId)) throw new Error('非法素材 ID')
+  function appendVideoChunk(assetId, ext, buffer, { reset = false, finalize = false, mimeType = '' } = {}) {
+    if (!isValidUuid(assetId)) throw httpError(400, '非法素材 ID')
+    if (hasAsset(assetId)) throw httpError(409, '该素材 ID 已完成登记，禁止覆盖')
     const safeExt = ext === 'webm' ? 'webm' : 'mp4'
     const partRel = `videos/${assetId}/demo.${safeExt}.part`
     const finalRel = `videos/${assetId}/demo.${safeExt}`
@@ -462,11 +553,15 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
     const finalPath = resolveMediaPath(finalRel)
     fs.mkdirSync(path.dirname(partPath), { recursive: true })
     if (reset && fs.existsSync(partPath)) fs.rmSync(partPath, { force: true })
+    const isFirstChunk = reset || !fs.existsSync(partPath)
+    if (isFirstChunk && mimeType && !hasValidMagicBytes(buffer, mimeType)) {
+      throw httpError(400, '视频文件头部签名与声明的视频格式不符')
+    }
     fs.appendFileSync(partPath, buffer)
     const stat = fs.statSync(partPath)
     if (stat.size > MAX_ASSET_BYTES) {
       fs.rmSync(partPath, { force: true })
-      throw new Error('视频文件超出 50 MB 上限')
+      throw httpError(413, '视频文件超出 50 MB 上限')
     }
     if (finalize) {
       fs.renameSync(partPath, finalPath)
@@ -500,6 +595,9 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
       if (!isValidUuid(assetId) || !kind || !displayPath || byteSize <= 0 || byteSize > MAX_ASSET_BYTES) {
         return { status: 400, body: { ok: false, error: '媒体参数不合法或文件超出 50 MB 限制' } }
       }
+      if (db.assets[assetId]) {
+        return { status: 409, body: { ok: false, code: 'CONFLICT', error: '该素材 ID 已完成登记，禁止覆盖。' } }
+      }
       const expectedPrefix = `${kind}s/${assetId}/`
       if (!displayPath.startsWith(expectedPrefix) || (thumbPath && !thumbPath.startsWith(expectedPrefix))) {
         return { status: 400, body: { ok: false, error: '媒体存储路径格式不合法' } }
@@ -510,8 +608,25 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
       if (kind === 'video' && !ALLOWED_VIDEO_MIMES.has(mimeType)) {
         return { status: 400, body: { ok: false, error: '仅支持 MP4 或 WebM 视频' } }
       }
-      if (!fs.existsSync(resolveMediaPath(displayPath))) {
+      const fullDisplayPath = resolveMediaPath(displayPath)
+      if (!fs.existsSync(fullDisplayPath)) {
         return { status: 400, body: { ok: false, error: '本地媒体文件尚未写入完成，请重试上传' } }
+      }
+      const diskStat = fs.statSync(fullDisplayPath)
+      const maxAllowed = kind === 'image' ? MAX_IMAGE_BYTES : MAX_ASSET_BYTES
+      if (diskStat.size <= 0 || diskStat.size > maxAllowed) {
+        return { status: 400, body: { ok: false, error: '媒体文件大小不合法或超出上限' } }
+      }
+      const headBuf = Buffer.alloc(16)
+      const fd = fs.openSync(fullDisplayPath, 'r')
+      let readLen = 0
+      try {
+        readLen = fs.readSync(fd, headBuf, 0, headBuf.length, 0)
+      } finally {
+        fs.closeSync(fd)
+      }
+      if (!hasValidMagicBytes(headBuf.subarray(0, readLen), mimeType)) {
+        return { status: 400, body: { ok: false, error: '文件内容与声明的媒体类型不匹配' } }
       }
 
       const asset = {
@@ -592,11 +707,18 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
         galleryAssetIds: cleanStrArray(payload.galleryAssetIds),
         videoAssetId: isValidUuid(payload.videoAssetId) ? payload.videoAssetId.trim() : null,
       }
+      if (draft.demoUrl && !isValidHttpUrl(draft.demoUrl)) {
+        return { status: 400, body: { ok: false, code: 'VALIDATION_ERROR', error: '演示链接格式无效，请以 http:// 或 https:// 开头。' } }
+      }
       if (!id) {
+        const nextSlug = (typeof payload.slug === 'string' && payload.slug.trim()) || slugify(draft.title, 'project')
+        if (db.projects.some((p) => p.slug === nextSlug)) {
+          return { status: 409, body: { ok: false, code: 'SLUG_TAKEN', error: '作品短链接已存在，请换一个标题或标识。' } }
+        }
         const nextOrder = db.projects.length === 0 ? 0 : Math.max(...db.projects.map((p) => p.sortOrder)) + 1
         const project = {
           id: crypto.randomUUID(),
-          slug: (typeof payload.slug === 'string' && payload.slug.trim()) || slugify(draft.title, 'project'),
+          slug: nextSlug,
           sortOrder: nextOrder,
           isPublished: false,
           publishedAt: null,
@@ -643,6 +765,9 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
       if (!current.draft.summary.trim()) errors.push('请填写作品简介')
       if (!current.draft.body.trim()) errors.push('请填写作品正文')
       if (!current.draft.coverAssetId) errors.push('请上传作品封面图')
+      if (current.draft.demoUrl && !isValidHttpUrl(current.draft.demoUrl)) {
+        errors.push('演示链接必须以 http:// 或 https:// 开头')
+      }
       if (!allAssetsReady(db, collectSnapshotAssets(current.draft))) {
         errors.push('部分图片或视频尚未上传完成，请等待上传就绪后再发布')
       }
@@ -742,11 +867,18 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
         imageAssetIds: cleanStrArray(payload.imageAssetIds),
         videoAssetId: isValidUuid(payload.videoAssetId) ? payload.videoAssetId.trim() : null,
       }
+      if (draft.projectId && !db.projects.some((p) => p.id === draft.projectId)) {
+        return { status: 400, body: { ok: false, code: 'VALIDATION_ERROR', error: '关联的作品不存在或已被删除。' } }
+      }
       if (!id) {
+        const nextSlug = (typeof payload.slug === 'string' && payload.slug.trim()) || slugify(draft.title, 'note')
+        if (db.notes.some((n) => n.slug === nextSlug)) {
+          return { status: 409, body: { ok: false, code: 'SLUG_TAKEN', error: '手记短链接已存在，请换一个标题或标识。' } }
+        }
         const nextOrder = db.notes.length === 0 ? 0 : Math.max(...db.notes.map((n) => n.sortOrder)) + 1
         const note = {
           id: crypto.randomUUID(),
-          slug: (typeof payload.slug === 'string' && payload.slug.trim()) || slugify(draft.title, 'note'),
+          slug: nextSlug,
           sortOrder: nextOrder,
           isPublished: false,
           publishedAt: null,
@@ -882,13 +1014,30 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
       if (current.version !== Number(payload.expectedVersion)) {
         return { status: 409, body: { ok: false, code: 'CONFLICT', error: '个人介绍已被另一窗口修改。', latest: current } }
       }
+      const contactEmail = String(payload.contactEmail ?? '').trim()
+      if (contactEmail && !isValidEmail(contactEmail)) {
+        return { status: 400, body: { ok: false, code: 'VALIDATION_ERROR', error: '联系邮箱格式无效。' } }
+      }
+      if (Array.isArray(payload.contactLinks)) {
+        for (const item of payload.contactLinks) {
+          const label = typeof item?.label === 'string' ? item.label.trim() : ''
+          const url = typeof item?.url === 'string' ? item.url.trim() : ''
+          if (!label && !url) continue
+          if (!label || !isValidHttpUrl(url)) {
+            return {
+              status: 400,
+              body: { ok: false, code: 'VALIDATION_ERROR', error: '联系方式链接需要同时填写名称与有效 http(s):// 网址。' },
+            }
+          }
+        }
+      }
       const prevAvatar = current.draft?.avatarAssetId
       const draft = {
         displayName: String(payload.displayName ?? ''),
         bio: String(payload.bio ?? ''),
         focusAreas: String(payload.focusAreas ?? ''),
         avatarAssetId: isValidUuid(payload.avatarAssetId) ? payload.avatarAssetId.trim() : null,
-        contactEmail: String(payload.contactEmail ?? '').trim(),
+        contactEmail,
         contactLinks: cleanContactLinks(payload.contactLinks),
         nowNotes: cleanShortLines(payload.nowNotes, 3, 36),
         quotes: cleanShortLines(payload.quotes, 8, 120),
@@ -925,6 +1074,9 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
         (!Array.isArray(d.quotes) || d.quotes.length === 0)
       ) {
         errors.push('请至少填写一项公开介绍内容后再发布')
+      }
+      if (d.contactEmail && !isValidEmail(d.contactEmail)) {
+        errors.push('联系邮箱格式无效')
       }
       if (d.avatarAssetId && !allAssetsReady(db, [d.avatarAssetId])) {
         errors.push('头像尚未上传完成，请等待上传就绪后再发布')
@@ -986,13 +1138,17 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
     ]
     const staticSignedUrls = {}
 
+    const mediaRootPrefix = path.resolve(mediaOutDir) + path.sep
     for (const id of [...new Set(neededIds)]) {
       const asset = db.assets[id]
       if (!asset || asset.status !== 'ready') continue
       const displaySrc = resolveMediaPath(asset.displayPath)
       if (!fs.existsSync(displaySrc)) continue
 
-      const displayDest = path.join(mediaOutDir, asset.displayPath)
+      const displayDest = path.resolve(mediaOutDir, asset.displayPath)
+      if (!displayDest.startsWith(mediaRootPrefix)) {
+        throw new Error(`导出路径越界: ${asset.displayPath}`)
+      }
       fs.mkdirSync(path.dirname(displayDest), { recursive: true })
       fs.copyFileSync(displaySrc, displayDest)
 
@@ -1000,7 +1156,10 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
       if (asset.thumbPath) {
         const thumbSrc = resolveMediaPath(asset.thumbPath)
         if (fs.existsSync(thumbSrc)) {
-          const thumbDest = path.join(mediaOutDir, asset.thumbPath)
+          const thumbDest = path.resolve(mediaOutDir, asset.thumbPath)
+          if (!thumbDest.startsWith(mediaRootPrefix)) {
+            throw new Error(`导出路径越界: ${asset.thumbPath}`)
+          }
           fs.mkdirSync(path.dirname(thumbDest), { recursive: true })
           fs.copyFileSync(thumbSrc, thumbDest)
           thumbUrl = `./local-snapshot/media/${asset.thumbPath.replace(/\\/g, '/')}`
@@ -1042,6 +1201,9 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
     }
 
     const sharpMod = (await import('sharp')).default
+    if (force) {
+      fs.rmSync(mediaDir, { recursive: true, force: true })
+    }
     const fresh = createEmptyStoreData()
     const ts = nowIso()
 
@@ -1147,6 +1309,7 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
     buildPublicCottage,
     buildAdminCottage,
     signAssets,
+    hasAsset,
     resolveAssetFile,
     writeUploadedMediaBlob,
     appendVideoChunk,

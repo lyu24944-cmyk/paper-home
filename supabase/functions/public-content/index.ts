@@ -1,8 +1,12 @@
 import { handlePreflight, jsonResponse } from '../_shared/cors.ts'
 import {
   cleanContactLinks,
+  cleanShortLines,
   createAdminClient,
+  errorResponse,
   HttpError,
+  isValidHttpUrl,
+  normalizeSiteSettingsRow,
   signAssets,
 } from '../_shared/supabase.ts'
 
@@ -11,9 +15,13 @@ Deno.serve(async (req) => {
   if (preflight) return preflight
 
   try {
+    if (req.method !== 'GET') {
+      throw new HttpError(405, '仅支持 GET 请求')
+    }
+
     const admin = createAdminClient()
 
-    const [projRes, noteRes, profRes] = await Promise.all([
+    const [projRes, noteRes, profRes, settingsRes] = await Promise.all([
       admin
         .from('projects')
         .select('id, slug, sort_order, published_at, published_snapshot')
@@ -33,6 +41,11 @@ Deno.serve(async (req) => {
         .select('is_published, published_at, published_snapshot')
         .eq('id', 'owner')
         .maybeSingle(),
+      admin
+        .from('site_settings')
+        .select('*')
+        .eq('id', 'main')
+        .maybeSingle(),
     ])
 
     if (projRes.error) throw new HttpError(500, '读取作品失败', projRes.error.message)
@@ -47,6 +60,7 @@ Deno.serve(async (req) => {
         ? snap.gallery_asset_ids.filter((x): x is string => typeof x === 'string')
         : []
       const videoAssetId = typeof snap.video_asset_id === 'string' ? snap.video_asset_id : null
+      const rawDemoUrl = String(snap.demo_url ?? '').trim()
 
       if (coverAssetId) imageAssetIds.push(coverAssetId)
       imageAssetIds.push(...galleryAssetIds)
@@ -59,7 +73,7 @@ Deno.serve(async (req) => {
         title: String(snap.title ?? ''),
         summary: String(snap.summary ?? ''),
         body: String(snap.body ?? ''),
-        demoUrl: String(snap.demo_url ?? ''),
+        demoUrl: isValidHttpUrl(rawDemoUrl) ? rawDemoUrl : '',
         coverAssetId,
         galleryAssetIds,
         videoAssetId,
@@ -102,8 +116,19 @@ Deno.serve(async (req) => {
       const focusAreas = String(snap.focus_areas ?? '').trim()
       const contactEmail = String(snap.contact_email ?? '').trim()
       const contactLinks = cleanContactLinks(snap.contact_links)
+      const nowNotes = cleanShortLines(snap.now_notes, 3, 36)
+      const quotes = cleanShortLines(snap.quotes, 8, 120)
 
-      if (displayName || bio || focusAreas || avatarAssetId || contactEmail || contactLinks.length > 0) {
+      if (
+        displayName ||
+        bio ||
+        focusAreas ||
+        avatarAssetId ||
+        contactEmail ||
+        contactLinks.length > 0 ||
+        nowNotes.length > 0 ||
+        quotes.length > 0
+      ) {
         profile = {
           displayName,
           bio,
@@ -111,19 +136,22 @@ Deno.serve(async (req) => {
           avatarAssetId,
           contactEmail,
           contactLinks,
+          nowNotes,
+          quotes,
           publishedAt: (snap.published_at as string | undefined) ?? profRes.data.published_at ?? null,
         }
       }
     }
 
+    const siteSettings = normalizeSiteSettingsRow(
+      settingsRes.error ? null : (settingsRes.data as Record<string, unknown> | null),
+    )
+
     // Never sign video paths during initial public fetch; videos are lazy-signed on user play click.
     const signedUrls = await signAssets(admin, imageAssetIds, { allowedKinds: ['image'] })
 
-    return jsonResponse({ projects, notes, profile, signedUrls })
+    return jsonResponse({ projects, notes, profile, siteSettings, signedUrls }, 200, req)
   } catch (err) {
-    if (err instanceof HttpError) {
-      return jsonResponse({ error: err.message, detail: err.detail }, err.status)
-    }
-    return jsonResponse({ error: err instanceof Error ? err.message : '服务器错误' }, 500)
+    return errorResponse(err, req)
   }
 })

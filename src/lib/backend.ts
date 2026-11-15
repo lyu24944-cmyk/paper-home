@@ -12,11 +12,11 @@ export function isStaticSnapshotBuild(): boolean {
 }
 
 export async function resolveBackendHealth(force = false): Promise<LocalStudioHealth> {
-  if (isCloudConfigured) {
-    return { mode: 'cloud', writable: true, isLoopback: false, hasContent: true }
-  }
   if (isStaticSnapshotBuild()) {
     return { mode: 'static-snapshot', writable: false, isLoopback: false, hasContent: true }
+  }
+  if (isCloudConfigured) {
+    return { mode: 'cloud', writable: true, isLoopback: false, hasContent: true }
   }
   if (!force && cachedHealth) return cachedHealth
   if (!force && inflightHealth) return await inflightHealth
