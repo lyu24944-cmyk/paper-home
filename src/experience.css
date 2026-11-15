@@ -1975,6 +1975,30 @@ a:focus-visible {
   padding: 10px 20px;
 }
 
+.context-lost-card {
+  width: min(400px, calc(100% - 36px));
+}
+
+.context-lost-card h2 {
+  font-family: var(--hand);
+  font-size: 24px;
+  font-weight: 400;
+  margin: 0 0 10px;
+  color: var(--ink);
+}
+
+.context-lost-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.context-lost-card button.context-lost-secondary {
+  background: var(--paper-card);
+  color: var(--ink);
+  border: 1px solid var(--hairline-strong);
+}
+
 .loading-note {
   position: fixed;
   z-index: 9;
@@ -3487,4 +3511,26 @@ a:focus-visible {
   .postcard-button span {
     display: none;
   }
+}
+
+/* Promo clean mode (?promo=1): pure 3D frame with no HUD chrome, cards, or welcome copy */
+.home-app.promo-clean .site-header,
+.home-app.promo-clean .site-footer,
+.home-app.promo-clean .welcome-copy,
+.home-app.promo-clean .journey-nav,
+.home-app.promo-clean .tactile-bar,
+.home-app.promo-clean .tactile-floating-card,
+.home-app.promo-clean .room-content,
+.home-app.promo-clean .gallery-viewer,
+.home-app.promo-clean .walk-actions,
+.home-app.promo-clean .toast-host {
+  display: none !important;
+}
+
+.home-app.promo-clean {
+  scrollbar-width: none;
+}
+
+.home-app.promo-clean::-webkit-scrollbar {
+  display: none;
 }

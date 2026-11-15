@@ -3,8 +3,12 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "assets:prepare": "node scripts/assets.mjs",
+    "assets:1k": "node scripts/assets-1k.mjs",
     "assets:verify": "node scripts/check-assets.mjs",
     "prebuild": "node scripts/check-assets.mjs",
     "check:camera": "node scripts/camera-check.mjs",
@@ -23,6 +27,7 @@
     "init:sample": "node scripts/init-sample.mjs",
     "build": "tsc -b && vite build",
     "build:local": "node scripts/check-assets.mjs && tsc -b && vite build --mode local-export",
+    "promo:capture": "node scripts/promo-capture.mjs",
     "sync:supabase": "node scripts/sync-supabase.mjs",
     "preview": "vite preview --host 127.0.0.1 --port 4319 --strictPort"
   },

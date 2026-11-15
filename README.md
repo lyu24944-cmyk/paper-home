@@ -1,103 +1,158 @@
-# Paper Home · A Living 3D Digital Cottage for Creators
+# Paper Home
+
+> An open-source, walkable 3D digital cottage and personal homepage template — launch with a double-click, edit your projects and notes visually in the browser without touching code, and publish anywhere for free.
 
 <p align="center">
-  <a href="./README.md"><strong>English</strong></a> · <a href="./README.zh-CN.md"><strong>简体中文</strong></a> · <a href="./DEPLOY.md"><strong>Cloud Deployment (ZH)</strong></a> · <a href="./QA.md"><strong>Rendering & QA Notes</strong></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-365840.svg" alt="MIT License" /></a>
+  <a href="https://github.com/lyu24944-cmyk/paper-home/actions/workflows/ci.yml"><img src="https://github.com/lyu24944-cmyk/paper-home/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-20%2B-566e57.svg" alt="Node.js 20+" /></a>
 </p>
 
-**Paper Home** is an architectural, tactile 3D personal website and portfolio template built with **React 19, Three.js (`@react-three/fiber`), and Vite**.
+<p align="center">
+  <a href="./README.zh-CN.md">简体中文</a> · <strong>English</strong> · <a href="#-open-your-cottage-in-3-zero-code-steps">Zero-Code Quickstart</a> · <a href="#-no-coding-experience-copy-these-ai-prompts">AI Prompts</a> · <a href="#%EF%B8%8F-developer-reference">Developer Reference</a>
+</p>
 
-Instead of a floating 3D gimmick or a static link-in-bio page, Paper Home gives you a **real 11×15m single-story house** with 6mm physical glass windows, a courtyard tree, a central hallway, and three dedicated rooms (**Study Notes**, **Gallery**, and **About Me**) — complete with **living time-of-day lighting, rain & procedural WebAudio soundscapes, clickable room objects, and a zero-config in-browser Local Studio**.
+<p align="center">
+  <img src="./docs/media/hero.webp" alt="Paper Home 3D cottage courtyard preview" width="100%" />
+</p>
 
----
-
-## ✨ Why Paper Home Stands Out
-
-| Capability | Typical 3D Portfolio Templates | Paper Home |
-| --- | --- | --- |
-| **Architectural Continuity** | Isolated scenes or skybox illusions | **True 11×15m walkable cottage** — look through the 6mm courtyard windows and see the actual Study desk and Gallery frames inside |
-| **Living Time & Weather** | Frozen midday lighting | **4 physical atmospheres (`Dawn`, `Daylight`, `Sunset`, `Night`, plus `Auto` local-clock sync) + `Rain`**, with warm interior lamps glowing through the windows at dusk and night |
-| **Procedural Audio & Tactile Props** | Heavy MP3 downloads & static meshes | **Zero external audio files** — WebAudio synthesizes wind chimes and filtered rain (automatically muffled when you step indoors); click the brass desk lamp, draw a bookshelf quote slip, sit on the yard bench, or stamp the wooden guestbox |
-| **Editing Experience** | Edit raw JSON/TSX files in an IDE | **Built-in Local Studio CMS** — create projects, write study notes, compress images to WebP, upload chunked videos, and preview drafts right in the browser with zero cloud accounts |
-| **Publishing & Hosting** | Locked to a single backend | **1-command static snapshot (`npm run build:local`)** that strips drafts and admin UI for GitHub Pages / Vercel / Netlify, or upgrade to **Supabase + Cloudflare Pages** anytime |
-| **Performance & Privacy** | External CDN fonts/textures & per-frame shadow baking | **0 runtime external network requests**, procedural canvas textures, on-demand shadow map updates (`shadowMap.autoUpdate = false`), and strict mobile viewport discipline |
+<p align="center">
+  <img src="./docs/media/tour.gif" alt="Paper Home walkthrough animation" width="100%" />
+</p>
 
 ---
 
-## 🚀 30-Second Quickstart (Zero Cloud Setup)
+## ✨ What Is Paper Home?
 
-Prerequisites: [Node.js](https://nodejs.org/) 20+ and any modern desktop or mobile browser.
+Instead of a static link-in-bio page or a floating 3D gimmick, Paper Home gives you a **real, walkable 11×15 m single-storey cottage** built with React 19, Three.js, and Vite:
 
-```bash
-# 1. Clone the repo (or click "Use this template" on GitHub)
-git clone <your-repo-url>
-cd paper-home
-
-# 2. Install dependencies
-npm install
-
-# 3. Start the Local Studio (or run `npm run studio` to auto-open your browser)
-npm run dev
-```
-
-Open `http://127.0.0.1:4318/` to step into your cottage.
-
-> 💡 **Want to explore with sample projects & notes pre-loaded?**
-> Run `npm run init:sample` in your terminal, or open **Cottage Map (`小屋地图`) -> Enter Edit Mode (`进入编辑模式`) -> Import Sample Content (`导入示例内容`)**.
+- **Walkable Architecture & 6mm Glass**: Look straight through the courtyard windows into the corridor, study desk, and gallery frames, then open the door and walk through **Study Notes**, **Gallery**, and **About Me**.
+- **Living Time-of-Day & Rain Soundscapes**: Switch between **Dawn**, **Daylight**, **Sunset**, **Night**, **Auto**, and **Rain** in the top bar. Enable ambient audio for synthesized WebAudio wind chimes and filtered rain that muffles realistically when you step indoors.
+- **Tactile Room Objects**: Switch on the green-shaded brass desk lamp, draw a random quote slip from the bookshelf, sit on the yard bench, stamp the wooden guestbox, or capture a paper postcard with a shareable deep link.
+- **Zero-Code Visual Editing**: Create projects, upload images and videos, write notes, and rename your cottage directly inside the browser.
+- **Mobile & In-App Browser Friendly**: Automatically switches to lightweight `1024×1024` `-1k.webp` textures and low-poly plant models on phones, tablets, `<= 4 GB` memory devices, and built-in WebViews (WeChat, Xiaohongshu, Douyin, Bilibili, Weibo, QQ), plus graceful WebGL context-loss recovery.
 
 ---
 
-## 🌤️ Interactive Highlights
+## 🚀 Open Your Cottage in 3 Zero-Code Steps
 
-1. **Four Time-of-Day Atmospheres + Rain Soundscape**
-   - Switch between **Dawn (`晨雾`)**, **Daylight (`晴昼`)**, **Sunset (`落日`)**, **Night (`夜灯`)**, **Auto (`随时间`)**, and **Rain (`细雨`)** directly from the top bar — or share a mood via URL parameters such as `?at=night&weather=rain#yard`.
-   - Enable the bottom-right **Ambient Sound** toggle to hear procedural pentatonic chimes and multi-band filtered rain that subtly muffles when you walk from the courtyard into an indoor room.
-2. **Tactile Room Objects & Camera Sub-Poses**
-   - **Courtyard (`#yard`)**: Click the wooden bench under the tree to sit and look up at the porch eaves, or click the porch postbox to jump straight to the Guestbook box.
-   - **Study (`#study`)**: Click the green-shaded brass desk lamp to toggle warm task lighting, or click the bookshelf to draw a random quote slip.
-   - **About Me (`#blank`)**: Inspect the 3 angled **Now Notes** on the wooden table and leave a mood stamp in the **Visitor Guestbox**.
+### Step 1: Install Node.js (One-Time Setup)
 
----
+1. Visit [https://nodejs.org/](https://nodejs.org/).
+2. Download the **LTS (Long Term Support)** installer (**Node.js 20 or higher**).
+3. Run the installer and click **Next / Install** until finished.
 
-## ✍️ Editing Your Cottage in Local Studio
-
-1. Click **Cottage Map (`小屋地图`)** in the top-right corner and select **Enter Edit Mode (`进入编辑模式`)**.
-   - *Security boundary*: Local write APIs only accept requests from loopback addresses (`127.0.0.1` / `localhost`).
-2. **Customize Branding & Default Atmosphere**:
-   - Rename your cottage, customize the wooden hallway plaque and courtyard greeting, and choose the default atmosphere/weather visitors see first.
-3. **Curate Room Content**:
-   - **Gallery (`#gallery`)**: Add projects with cover art, multi-image galleries (automatically compressed client-side into WebP display & thumb variants), and demo videos (chunked upload with HTTP 206 Range streaming). The top 3 published projects are framed directly on the 3D gallery wall.
-   - **Study (`#study`)**: Write long-form notes with images, video, and bi-directional links to your projects.
-   - **About Me (`#blank`)**: Update your profile, avatar, 3 tabletop **Now Notes**, custom bookshelf quotes, and contact links.
-4. **Draft vs. Public Isolation**:
-   - All edits save as drafts first (`local-data/`). Switch to **Visitor Preview (`退出编辑（访客预览）`)** at any time to verify that unpublished drafts remain hidden.
+> **Troubleshooting**:
+> - If you had an older Node.js version installed, simply install the latest LTS over it.
 
 ---
 
-## 📦 Deploying Your Cottage
+### Step 2: Download and Unzip This Project
 
-### Option 1: GitHub Pages (Included Workflow)
-This repository includes a ready-to-use GitHub Actions workflow at [`.github/workflows/deploy-pages.yml`](./.github/workflows/deploy-pages.yml):
-1. In your GitHub repository, go to **Settings -> Pages** and set **Build and deployment -> Source** to **GitHub Actions**.
-2. Push to `main` (or trigger the workflow manually from the **Actions** tab) to build a clean static snapshot (`npm run build:local`) and deploy it to GitHub Pages.
+1. Click the green **`<> Code`** button near the top of this GitHub page.
+2. Click **`Download ZIP`**.
+3. **Extract / Unzip the downloaded `.zip` archive** into a normal folder (e.g., on your Desktop or Documents).
 
-### Option 2: Export a Pure Static Bundle Anywhere
-```bash
-npm run build:local
-```
-This exports a read-only production bundle into `dist/` containing only **published** items and referenced media (`dist/local-snapshot/`), with all draft data and admin UI stripped out. Host `dist/` on Cloudflare Pages, Vercel, Netlify, or any static server.
-
-### Option 3: Upgrade to Supabase + Cloudflare Pages (Multi-Device Cloud CMS)
-When you want to edit from both your laptop and phone with magic-link authentication and cloud storage, follow [DEPLOY.md](./DEPLOY.md) and run `npm run sync:supabase` to migrate your local `local-data/` to Supabase in one command.
+> **Troubleshooting**:
+> - **Do not launch directly inside a ZIP preview window** — always extract the full folder first.
 
 ---
 
-## 🧪 Verification & Quality Scripts
+### Step 3: Double-Click the Launcher
 
-| Command | Description |
+Inside the extracted folder:
+
+- **Windows**: Double-click **`启动小屋.bat`**
+- **macOS**: Double-click **`启动小屋.command`**
+
+On first launch, it automatically installs dependencies, imports starter sample content so the cottage isn't empty, and opens `http://127.0.0.1:4318/` in your browser.
+
+> **Troubleshooting**:
+> - **macOS blocks `启动小屋.command` ("unidentified developer")**: Right-click (or Control-click) `启动小屋.command` → **Open** → click **Open** in the dialog (only needed once), or allow it under **System Settings → Privacy & Security → Open Anyway**.
+> - **Windows SmartScreen warning**: Click **More info** → **Run anyway**.
+> - **Keep the terminal window open while using the cottage**; close that window when you are done.
+
+---
+
+## ✍️ Customizing Your Content (All in the Browser)
+
+1. Click **Cottage Map (`小屋地图`)** in the top-right corner and choose **Enter Edit Mode (`进入编辑模式`)** (local editing is restricted to `127.0.0.1` / `localhost`).
+2. **Branding & Default Atmosphere**: Rename your cottage, customize the wooden plaque & yard greeting, and choose the default time-of-day and weather visitors see first.
+3. **Edit Each Room**:
+   - **Gallery**: Add projects with cover images, photo galleries (auto-compressed to WebP), and MP4/WebM demo videos. Your top 3 published projects appear framed on the 3D gallery wall.
+   - **Study**: Write long-form notes with images, videos, and project links.
+   - **About Me**: Update your bio, avatar, contact links, 3 tabletop **Now Notes**, and bookshelf quote slips.
+4. **Visitor Preview**: Click **Editing (`编辑中`) → Exit Edit / Visitor Preview** anytime to verify unpublished drafts stay hidden. Everything saves locally inside `local-data/`.
+
+---
+
+## 🤖 No Coding Experience? Copy These AI Prompts
+
+Open the extracted folder in **Antigravity, Cursor, or Trae** and paste any of these prompts directly to your AI assistant:
+
+1. **Launch locally**:
+   ```text
+   Help me launch this Paper Home project locally: check if Node.js 20+ is installed, run npm install if node_modules is missing, import starter samples with npm run init:sample if local-data is empty, start Local Studio with PAPER_HOME_FORCE_LOCAL=1 npm run studio, and tell me in plain language how to edit content in the browser.
+   ```
+2. **Replace with my own profile & projects**:
+   ```text
+   I want to replace Paper Home with my own name, intro, and works without hand-editing code. Make sure Local Studio is running, guide me step by step (or help me load my prepared materials into Local Studio while keeping browser editing intact), and help me verify Visitor Preview has no leaked drafts.
+   ```
+3. **Publish for free on GitHub Pages**:
+   ```text
+   I've customized my cottage locally and want to publish it for free on GitHub Pages. Help me verify all items I want visible are published, run npx tsc --noEmit and npm run build:local, test that the static bundle has zero 404 errors under a repository subpath, and walk me through enabling Settings -> Pages (GitHub Actions) and manually triggering Deploy Paper Home to GitHub Pages -> Run workflow.
+   ```
+4. **Troubleshoot an error**:
+   ```text
+   I hit this error while running or publishing Paper Home (pasted below). Explain the cause in plain, non-technical language, fix it if it's a config/code issue, and show me how to confirm it's working.
+   ```
+
+---
+
+## 📜 License & Asset Attributions
+
+- **Code**: [MIT License](./LICENSE) (`© 2026 lyu24944-cmyk`).
+- **3D Textures, Plants & HDRI**: [Poly Haven](https://polyhaven.com/) under **CC0-1.0**, stored locally in `public/assets/realistic/` with **zero external runtime requests**. Full attribution table and checksums are in [ASSETS.md](./ASSETS.md).
+- **Handwriting Font**: `HomeHand` subset of [LXGW WenKai TC](https://github.com/lxgw/LxgwWenkaiTC) under SIL Open Font License 1.1 ([OFL.txt](./public/fonts/OFL.txt)).
+- **Audio**: Real-time WebAudio synthesis with zero external audio files.
+
+---
+
+## 🛠️ Developer Reference
+
+<details>
+<summary>Expand: Commands, Quality System, Subpath Deployment & Optional Cloud CMS (Supabase)</summary>
+
+### Scripts
+
+| Command | Purpose |
 | --- | --- |
-| `npm run dev` | Start Local Studio at `http://127.0.0.1:4318/` |
-| `npm run build:local` | Build a read-only static snapshot into `dist/` |
-| `npm run assets:verify` | Verify asset budget and enforce 0 runtime external network requests |
-| `npm run check:camera` | Verify 75,000+ camera trajectory samples across 120 doorway routes & 6 viewports |
-| `npm run check:local` | End-to-end Playwright verification of Local Studio, draft isolation & static export |
-| `npm run check:cms` | End-to-end Playwright verification of Cloud CMS, TUS chunked upload & conflict recovery |
+| `npm run dev` | Start Vite dev server + Local Studio API at `http://127.0.0.1:4318/` |
+| `npm run studio` | Start Local Studio and auto-open the browser |
+| `npm run init:sample` | Seed neutral starter items into `local-data/` when empty (`--force` resets) |
+| `npm run build` | Asset verification + TypeScript build + Vite production build |
+| `npm run build:local` | Build a read-only static snapshot in `dist/` (`dist/local-snapshot/`) |
+| `npm run preview` | Preview `dist/` locally at `http://127.0.0.1:4319/` |
+| `npm run assets:1k` | Generate 18 `1024×1024` `-1k.webp` mobile textures and update `manifest.json` |
+| `npm run assets:prepare` | Re-download and process all Poly Haven assets + 1K variants |
+| `npm run assets:verify` | Verify SHA-256 checksums of all 41 local assets in `manifest.json` |
+| `npm run check:camera` | Verify 75,144 camera trajectory samples across 120 routes & 6 viewports |
+| `npm run check:sound` | Playwright verification of WebAudio synthesis & tactile SFX |
+| `npm run check:phase1` | Playwright verification of atmospheres, rain & room props |
+| `npm run check:phase2` | Playwright verification of paper postcards & deep links |
+| `npm run check:local` | Playwright end-to-end verification of Local Studio & static export |
+| `npm run check:cms` | Playwright + Mock Supabase verification of Cloud CMS & TUS uploads |
+| `npm run check:edge-cases` | Verify retry on asset failure, DPR cap & mobile touch against `:4319/?qa` |
+| `npm run promo:capture` | Generate promo screenshots, vertical/horizontal videos & README media |
+| `npm run sync:supabase` | Migrate `local-data/` to your Supabase project |
+
+### Mobile Quality & Context Recovery
+
+- **Dual Quality Packs**: `high` loads full 4K/2K `.webp` textures and high-poly GLBs; `low` loads `1024×1024` `-1k.webp` textures (`1.67 MiB` total) and low-poly GLBs. Selection priority: `?quality=` URL param > saved `localStorage` choice > automatic detection (mobile/tablet devices, `deviceMemory <= 4`, and WeChat / Xiaohongshu / Douyin / Bilibili / Weibo / QQ WebViews default to `low`). Switching quality disposes the replaced GPU textures and GLTF geometries cleanly.
+- **WebGL Context Loss**: Listens for `webglcontextlost`, presents a styled recovery card with a **Switch to Compatible Quality & Retry** button, and remounts `<Canvas>` cleanly in `low` mode.
+
+### Optional Cloud CMS Mode (Supabase + Cloudflare Pages)
+
+For multi-device online editing with magic-link auth, see [DEPLOY.md](./DEPLOY.md) (in Chinese) and run `npm run sync:supabase` when ready. QA measurements are documented in [QA.md](./QA.md).
+
+</details>

@@ -14,9 +14,9 @@
 | potted_plant_02 | [potted_plant_02](https://polyhaven.com/a/potted_plant_02) | Rico Cilliers | CC0-1.0 | high: 21,992 面；low: 6,992 面 |
 | kloofendal_48d_partly_cloudy_puresky | [kloofendal_48d_partly_cloudy_puresky](https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky) | Greg Zaal、Jarod Guest | CC0-1.0 | 1K HDR |
 
-原始下载文件的 URL、作者、MD5，以及最终托管文件的 SHA-256、字节数，都记录在 [manifest.json](public/assets/realistic/manifest.json)。当前共 23 个文件，合计 35.62 MiB；浏览器按当前画质选择模型档位。
+原始下载文件的 URL、作者、MD5，以及最终托管文件的 SHA-256、字节数，都记录在 [manifest.json](public/assets/realistic/manifest.json)。当前共 41 个文件，合计 37.28 MiB（含 6 组表面材质各 1 份 `1024×1024` 轻量版 `*-1k.webp`，共 1.67 MiB）；浏览器按当前画质选择贴图分辨率与模型档位（手机及微信等内置浏览器默认加载兼容画质）。
 
-模型通过 glTF Transform 完成焊接、减面、去重、清理、WebP 纹理编码和 Meshopt 压缩。原始树 1,599,403 面，未进入运行时。所有重建代码见 scripts/assets.mjs；下载缓存保留在 .qa/realistic/raw，未经处理的模型不位于 public。
+模型通过 glTF Transform 完成焊接、减面、去重、清理、WebP 纹理编码和 Meshopt 压缩。原始树 1,599,403 面，未进入运行时。所有重建代码见 `scripts/assets.mjs` 与 `scripts/assets-1k.mjs`；下载缓存保留在 `.qa/realistic/raw`，未经处理的模型不位于 `public`。
 
 住宅外壳、构件、家具、草簇与纹理 UV 由本项目几何代码生成。作品纸的轻微弯曲由网格顶点表达。门牌与欢迎牌使用本地 Canvas 高分辨率文字图集。
 

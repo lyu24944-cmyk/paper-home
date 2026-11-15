@@ -120,6 +120,7 @@ export function buildDeepLinkUrl(opts: BuildDeepLinkOptions): string {
   const sp = new URLSearchParams(window.location.search)
   sp.delete('qa')
   sp.delete('gpu')
+  sp.delete('promo')
   const qs = sp.toString()
   return `${window.location.origin}${window.location.pathname}${qs ? `?${qs}` : ''}${hash}`
 }

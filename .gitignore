@@ -4,6 +4,7 @@ dist/
 .taste-skill/inspect/
 .qa/
 local-data/
+promo/
 .impeccable/hook.cache.json
 .env
 .env.local

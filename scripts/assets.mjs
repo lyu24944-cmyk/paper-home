@@ -6,6 +6,7 @@ import {NodeIO} from '@gltf-transform/core';
 import {ALL_EXTENSIONS} from '@gltf-transform/extensions';
 import {dedup,weld,simplify,prune,textureCompress,meshopt,getBounds} from '@gltf-transform/functions';
 import {MeshoptDecoder,MeshoptEncoder,MeshoptSimplifier} from 'meshoptimizer';
+import {generate1kTextures} from './assets-1k.mjs';
 const root=process.cwd(), out=path.join(root,'public/assets/realistic'), raw=path.join(root,'.qa/realistic/raw');
 await fs.mkdir(out,{recursive:true});await fs.mkdir(raw,{recursive:true});
 const records=[];
@@ -48,6 +49,7 @@ for(const id of ['island_tree_01','potted_plant_02']){
 const id='kloofendal_48d_partly_cloudy_puresky',files=await json('https://api.polyhaven.com/files/'+id),info=await meta(id);
 const env=await download(files.hdri['1k'].hdr,path.join(out,'daylight.hdr'));
 records.push({id,source:'https://polyhaven.com/a/'+id,authors:info.authors,license:'CC0-1.0',assets:[env]});
-const served=[];for(const filename of await fs.readdir(out)){if(filename==='manifest.json')continue;let data=await fs.readFile(path.join(out,filename));served.push({filename,bytes:data.length,sha256:crypto.createHash('sha256').update(data).digest('hex')})}
+await generate1kTextures({outDir:out,updateManifest:false});
+const served=[];for(const filename of (await fs.readdir(out)).sort((a,b)=>a.localeCompare(b))){if(filename==='manifest.json')continue;let data=await fs.readFile(path.join(out,filename));served.push({filename,bytes:data.length,sha256:crypto.createHash('sha256').update(data).digest('hex')})}
 await fs.writeFile(path.join(out,'manifest.json'),JSON.stringify({generated:new Date().toISOString(),records,served},null,2));
 console.log('All assets ready',served.reduce((a,b)=>a+b.bytes,0));

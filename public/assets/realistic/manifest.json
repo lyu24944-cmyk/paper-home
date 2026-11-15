@@ -1,5 +1,5 @@
 {
-  "generated": "2026-11-13T01:12:56.928Z",
+  "generated": "2026-11-15T04:43:38.070Z",
   "records": [
     {
       "name": "brick",
@@ -396,14 +396,29 @@
   ],
   "served": [
     {
+      "filename": "brick-color-1k.webp",
+      "bytes": 194840,
+      "sha256": "95b8e32b567b556c22bd9ed2d60faba232db31ae14ca004107ac00b46619d692"
+    },
+    {
       "filename": "brick-color.webp",
       "bytes": 5839180,
       "sha256": "05cb14b222ed2737c5b0cdc52cc32aacf268d2481b5f31bf9a643f9b9a15ca51"
     },
     {
+      "filename": "brick-normal-1k.webp",
+      "bytes": 138752,
+      "sha256": "6730974c9f87f119d640054261f76a4112ee36696484ca12f36e1aec0d855a6d"
+    },
+    {
       "filename": "brick-normal.webp",
       "bytes": 3953868,
       "sha256": "1d212260dc5cd10a301d06b180c473969c5de0bc7cda0153b85cb0ce9cc874a3"
+    },
+    {
+      "filename": "brick-roughness-1k.webp",
+      "bytes": 60014,
+      "sha256": "aca67e5a7c1d95c75c2a988b7abc9367290a167482b550533e4861074979c2b6"
     },
     {
       "filename": "brick-roughness.webp",
@@ -416,14 +431,29 @@
       "sha256": "fd94c84997b8a3c353b62c2125a9b44e19509956986a126e472684432a02d798"
     },
     {
+      "filename": "grass-color-1k.webp",
+      "bytes": 114128,
+      "sha256": "f3d3dab7cac8ea85621e5786cafda174f2e6ccaf435d808c9ff80c3b352db67f"
+    },
+    {
       "filename": "grass-color.webp",
       "bytes": 1195294,
       "sha256": "c3613c7ce11595505e56b56a14bb925bb6c38c48e3777a2c90dd32df13e44bff"
     },
     {
+      "filename": "grass-normal-1k.webp",
+      "bytes": 344468,
+      "sha256": "75d1acd4a2e9b5dec2946f4cfe35aee0ae04f74e82fd0264e1d519a14b1c8e1f"
+    },
+    {
       "filename": "grass-normal.webp",
       "bytes": 2299402,
       "sha256": "8f1080045aae3d2efbc3d8876b4b506328e5a3f28ce11cadb2076b3c2908d93d"
+    },
+    {
+      "filename": "grass-roughness-1k.webp",
+      "bytes": 2602,
+      "sha256": "cb72cc97f3d1babc3553956667678bfb5d046eb8aa0cc1c7a1cffd25b2271a24"
     },
     {
       "filename": "grass-roughness.webp",
@@ -441,14 +471,29 @@
       "sha256": "dc9a1a0c967e067b6863d49eb85d90c8a0579b7f001897dfd9b54bbaa5203667"
     },
     {
+      "filename": "plaster-color-1k.webp",
+      "bytes": 4668,
+      "sha256": "956ec85c3de95a33c43522fb8885e6ef4ac7a5c7e14f415cad25dcda988f767e"
+    },
+    {
       "filename": "plaster-color.webp",
       "bytes": 154848,
       "sha256": "6d35e6d08c433e89815e7c1907d1a5897d819f06cc53d12a5808179dfbd75318"
     },
     {
+      "filename": "plaster-normal-1k.webp",
+      "bytes": 128610,
+      "sha256": "5391327125987e17861115133807303dd901dfeadb63d332a939715afc30a2d9"
+    },
+    {
       "filename": "plaster-normal.webp",
       "bytes": 1120112,
       "sha256": "9dd43ffb274a74eb9028e9b52b0de0b8d07a133bc335dd97f2366f39dab9782b"
+    },
+    {
+      "filename": "plaster-roughness-1k.webp",
+      "bytes": 1926,
+      "sha256": "f6a3ab41095e395c8687c31a3e387526b7f4716a2394f850c34ef3da82cd7b68"
     },
     {
       "filename": "plaster-roughness.webp",
@@ -466,9 +511,19 @@
       "sha256": "3913070f106ebf031860817b429c6cd0b90980912c2d9b2622a4dfa6f12a6eb7"
     },
     {
+      "filename": "roof-color-1k.webp",
+      "bytes": 68228,
+      "sha256": "a82ae002491e19162cd60f4b600e79895c1ff0b7668df2914a1600d6efa463c9"
+    },
+    {
       "filename": "roof-color.webp",
       "bytes": 385600,
       "sha256": "f796c3e1313fc0b5d0ba7f82da80e27ebdcd173853474190b60a9b1e3e350d1f"
+    },
+    {
+      "filename": "roof-normal-1k.webp",
+      "bytes": 64734,
+      "sha256": "f3edc05cfe181d39f93f3edba5e37be9df28005a303d351789ce281d54a7759c"
     },
     {
       "filename": "roof-normal.webp",
@@ -476,9 +531,19 @@
       "sha256": "42f9e09f906198f29ddc9d5367c28c13b72164d904df39fd65ae917b88a1721a"
     },
     {
+      "filename": "roof-roughness-1k.webp",
+      "bytes": 68932,
+      "sha256": "23b644204f02be5f47a3e1e7cb7b3d5d9d2266995ef1fe2a65f9ad03d8a90969"
+    },
+    {
       "filename": "roof-roughness.webp",
       "bytes": 381274,
       "sha256": "341a42942516192773496922d4c04c0d17b718bd03eec5529d9095c6bc5b0fe7"
+    },
+    {
+      "filename": "stone-color-1k.webp",
+      "bytes": 138570,
+      "sha256": "34418aa499dc0c8eb8974a8cd147ce283e878f086c3069fb7c918e24e6b1ee7e"
     },
     {
       "filename": "stone-color.webp",
@@ -486,9 +551,19 @@
       "sha256": "a8ff681c06c5a354abc0748f286f17a2d672394ffa609e53a3be71a928304282"
     },
     {
+      "filename": "stone-normal-1k.webp",
+      "bytes": 175516,
+      "sha256": "9d3121ac4e8afe8ba020bc0c2d1dfb955edaeb46a3d388382f2cea28527aa346"
+    },
+    {
       "filename": "stone-normal.webp",
       "bytes": 1426408,
       "sha256": "5ab9b28220ccf025710d9baa5fc92b35d9f8d8d40ba343e31bbd6ae730980291"
+    },
+    {
+      "filename": "stone-roughness-1k.webp",
+      "bytes": 124748,
+      "sha256": "ae838c0e3efc5ffaee793c00f60027078d994097cef3850d95d08bd300a0cc86"
     },
     {
       "filename": "stone-roughness.webp",
@@ -496,14 +571,29 @@
       "sha256": "8b5b224dc96897cb92f6c98a3fb20b5e77aef01fd9f69c7faeda6f13eac3f01c"
     },
     {
+      "filename": "wood-color-1k.webp",
+      "bytes": 73284,
+      "sha256": "afcf5ace1619aeb9f400a1b0891bd34119c799ede3a959f4b5da769090163664"
+    },
+    {
       "filename": "wood-color.webp",
       "bytes": 2376458,
       "sha256": "93b481d39b7b54c81ce4ddafe67a4c1a27650ad46fb161e11dfaadf07f3e6ecb"
     },
     {
+      "filename": "wood-normal-1k.webp",
+      "bytes": 3578,
+      "sha256": "e0b83c3da21dfeb9c3cd0ad057c370d8c08e87e22238dd2299368cbdabc86557"
+    },
+    {
       "filename": "wood-normal.webp",
       "bytes": 794926,
       "sha256": "5d41ccbb79d976810fa3f13096421ca429274b692af6f47b135d971f09df0778"
+    },
+    {
+      "filename": "wood-roughness-1k.webp",
+      "bytes": 38402,
+      "sha256": "86fe1b61885e3994a14f2100a2955a37f0f703f6ede58df31cef78190b32c26e"
     },
     {
       "filename": "wood-roughness.webp",

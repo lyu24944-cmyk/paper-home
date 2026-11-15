@@ -26,7 +26,8 @@ import {
 import { rooms, type Place } from './content'
 import { qaEnabled } from './diagnostics'
 import { layout, stopProgress, type FocusSubPoseId, type TransitionState } from './layout'
-import { loadResources, type Quality, type ResourcePack } from './resources'
+import { clearResourcePacks, disposeResourcePack, loadResources, type Quality, type ResourcePack } from './resources'
+import { resolveInitialQuality, saveQualityPreference } from './lib/quality'
 import { RenderPipeline } from './RenderPipeline'
 import {
   cleanupMediaAssetsApi,
@@ -243,6 +244,10 @@ function startingPlace(): Place {
 }
 
 export default function App() {
+  const promoMode = useMemo(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('promo') === '1',
+    [],
+  )
   const initialDeepLink = useMemo(() => parseDeepLinkHash(), [])
   const richHashActiveRef = useRef(initialDeepLink.isRich)
   const pendingDeepLinkItemRef = useRef<string | null>(initialDeepLink.item)
@@ -254,14 +259,17 @@ export default function App() {
   const [ready, setReady] = useState(false)
   const [fontReady, setFontReady] = useState(false)
   const [pack, setPack] = useState<ResourcePack | null>(null)
-  const [quality, setQuality] = useState<Quality>(() =>
-    new URLSearchParams(location.search).get('quality') === 'low' ? 'low' : 'high',
-  )
+  const [quality, setQuality] = useState<Quality>(resolveInitialQuality)
   const [loadProgress, setLoadProgress] = useState(0)
   const [preparing, setPreparing] = useState('')
   const [loadError, setLoadError] = useState('')
+  const [contextLost, setContextLost] = useState(false)
+  const [canvasKey, setCanvasKey] = useState(0)
   const [retryTarget, setRetryTarget] = useState<Place | null>(null)
   const [retry, setRetry] = useState(0)
+  const prevPackRef = useRef<ResourcePack | null>(null)
+  const canvasCleanupRef = useRef<(() => void) | null>(null)
+  const loseContextForQaRef = useRef<(() => boolean) | null>(null)
   const transition = useRef<TransitionState | null>(null)
   const prepare = useRef<(() => Promise<void>) | null>(null)
   const captureCanvas = useRef<(() => string | null) | null>(null)
@@ -594,6 +602,27 @@ export default function App() {
   }, [quality, retry])
 
   useEffect(() => {
+    const prev = prevPackRef.current
+    prevPackRef.current = pack
+    if (!prev || prev === pack) return
+    let raf2 = 0
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        disposeResourcePack(prev)
+      })
+    })
+    return () => {
+      cancelAnimationFrame(raf1)
+      cancelAnimationFrame(raf2)
+    }
+  }, [pack])
+
+  useEffect(() => () => {
+    canvasCleanupRef.current?.()
+    canvasCleanupRef.current = null
+  }, [])
+
+  useEffect(() => {
     let active = true
     const finish = () => { if (active) setFontReady(true) }
     document.fonts.load('24px HomeHand').then(finish, finish)
@@ -796,8 +825,58 @@ export default function App() {
       deskLampOn,
       focusId,
       sfxEnabled,
+      quality,
+      contextLost,
+      loseWebglContext: () => loseContextForQaRef.current?.() ?? false,
     })
-  }, [atmosphereMode, atmospherePreset, weather, deskLampOn, focusId, sfxEnabled])
+  }, [atmosphereMode, atmospherePreset, weather, deskLampOn, focusId, sfxEnabled, quality, contextLost])
+
+  const navigatePromoRef = useRef(navigate)
+  navigatePromoRef.current = navigate
+
+  useEffect(() => {
+    if (!promoMode) return
+    const w = window as unknown as { __PAPER_HOME_PROMO__?: Record<string, unknown> }
+    w.__PAPER_HOME_PROMO__ = {
+      getState: () => ({
+        ready,
+        busy: busyRef.current,
+        place,
+        atmospherePreset,
+        weather,
+        deskLampOn,
+        focusId,
+        galleryIndex,
+        quality,
+      }),
+      navigate: (target: Place) => navigatePromoRef.current(target, { skipOpenSound: true }),
+      setAtmosphere: (mode: AtmosphereMode) => setAtmosphereMode(mode),
+      setWeather: (mode: WeatherMode) => {
+        weatherRef.current = mode
+        setWeather(mode)
+      },
+      setDeskLamp: (on: boolean) => {
+        userTouchedLampRef.current = true
+        deskLampOnRef.current = on
+        setDeskLampOn(on)
+      },
+      setFocus: (id: FocusSubPoseId | null) => {
+        focusIdRef.current = id
+        setFocusId(id)
+      },
+      setGalleryIndex: (index: number) => setGalleryIndex(index),
+      setHallProgress: (value: number) => {
+        const clamped = Math.max(0, Math.min(1, value))
+        progress.current = clamped
+        const el = root.current
+        if (el) {
+          el.scrollTop = clamped * Math.max(0, el.scrollHeight - el.clientHeight)
+        }
+      },
+      setReduced: (value: boolean) => setReduced(value),
+      getCanvas: () => document.querySelector<HTMLCanvasElement>('.world canvas'),
+    }
+  }, [promoMode, ready, place, atmospherePreset, weather, deskLampOn, focusId, galleryIndex, quality])
 
   useEffect(() => {
     if (!atmoPopoverOpen) return
@@ -1569,12 +1648,33 @@ export default function App() {
     [ready],
   )
 
+  const handleSelectQuality = useCallback((next: Quality) => {
+    saveQualityPreference(next)
+    setQuality(next)
+  }, [])
+
+  const handleRecoverContextLoss = useCallback(() => {
+    const stalePack = prevPackRef.current
+    prevPackRef.current = null
+    if (stalePack) disposeResourcePack(stalePack)
+    clearResourcePacks()
+    saveQualityPreference('low')
+    setPack(null)
+    setQuality('low')
+    setContextLost(false)
+    setReady(false)
+    setLoadError('')
+    setRetryTarget(null)
+    setCanvasKey((k) => k + 1)
+    setRetry((r) => r + 1)
+  }, [])
+
   const activeAtmoMeta =
     ATMOSPHERE_OPTIONS.find((o) => o.id === atmospherePreset) ?? ATMOSPHERE_OPTIONS[1]
 
   return (
     <div
-      className={`home-app place-${place} atmo-${atmospherePreset} weather-${weather} ${reduced ? 'reduced-motion' : ''} ${busy || anyModalOpen ? 'walking-paused' : ''} ${busy ? 'traveling' : ''}`}
+      className={`home-app place-${place} atmo-${atmospherePreset} weather-${weather} ${reduced ? 'reduced-motion' : ''} ${busy || anyModalOpen ? 'walking-paused' : ''} ${busy ? 'traveling' : ''} ${promoMode ? 'promo-clean' : ''}`}
       ref={root}
       onScroll={onWalkScroll}
       onKeyDown={(e) => {
@@ -1595,14 +1695,40 @@ export default function App() {
       {place === 'hall' && <div className="walk-track" aria-hidden="true" />}
       <div className="world">
         <SceneBoundary onFailure={() => setReady(true)}>
-          {fontReady && pack && (
+          {fontReady && pack && !contextLost && (
             <Canvas
+              key={canvasKey}
               role="img"
               aria-label="自然白昼中的住宅与庭院，可进入走廊及作品室、创作手记、关于我三个房间"
               shadows="percentage"
               dpr={[1, 1.5]}
               camera={{ ...initialCamera, near: 0.05, far: 200 }}
               gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
+              onCreated={({ gl }) => {
+                canvasCleanupRef.current?.()
+                const dom = gl.domElement
+                const onLost = (event: Event) => {
+                  event.preventDefault()
+                  setContextLost(true)
+                }
+                dom.addEventListener('webglcontextlost', onLost, false)
+                loseContextForQaRef.current = qaEnabled
+                  ? () => {
+                      const ext = gl.getContext().getExtension('WEBGL_lose_context')
+                      if (ext) {
+                        ext.loseContext()
+                        return true
+                      }
+                      const evt = new Event('webglcontextlost', { cancelable: true })
+                      dom.dispatchEvent(evt)
+                      return true
+                    }
+                  : null
+                canvasCleanupRef.current = () => {
+                  dom.removeEventListener('webglcontextlost', onLost, false)
+                  loseContextForQaRef.current = null
+                }
+              }}
               fallback={
                 <div className="scene-fallback">
                   小屋三维场景。使用「小屋地图」也可浏览所有房间。
@@ -1775,7 +1901,7 @@ export default function App() {
               className={`quality-option ${quality === 'high' ? 'active' : ''}`}
               aria-pressed={quality === 'high'}
               disabled={busy}
-              onClick={() => setQuality('high')}
+              onClick={() => handleSelectQuality('high')}
             >
               <span className="quality-label-full">细致画质</span>
               <span className="quality-label-short" aria-hidden="true">细致</span>
@@ -1785,7 +1911,7 @@ export default function App() {
               className={`quality-option ${quality === 'low' ? 'active' : ''}`}
               aria-pressed={quality === 'low'}
               disabled={busy}
-              onClick={() => setQuality('low')}
+              onClick={() => handleSelectQuality('low')}
             >
               <span className="quality-label-full">兼容画质</span>
               <span className="quality-label-short" aria-hidden="true">兼容</span>
@@ -2355,12 +2481,32 @@ export default function App() {
           )}
         </nav>
 
-        {!ready && !loadError && (
+        {!ready && !loadError && !contextLost && (
           <div className="loading-note" role="status">
             {preparing || `正在准备小屋与庭院… ${Math.round(loadProgress * 100)}%`}
           </div>
         )}
-        {loadError && (
+        {contextLost && (
+          <div className="load-error context-lost-card" role="alertdialog" aria-labelledby="webgl-lost-title">
+            <h2 id="webgl-lost-title">三维画面暂时中断</h2>
+            <p>
+              当前浏览器的图形显存暂时被释放或设备内存偏紧，切换至轻量的「兼容画质」可以更流畅地打开小屋。
+            </p>
+            <div className="context-lost-actions">
+              <button type="button" onClick={handleRecoverContextLoss}>
+                切换兼容画质并重试
+              </button>
+              <button
+                type="button"
+                className="context-lost-secondary"
+                onClick={() => setMapOpen(true)}
+              >
+                用小屋地图浏览
+              </button>
+            </div>
+          </div>
+        )}
+        {loadError && !contextLost && (
           <div className="load-error" role="alert">
             <p>{loadError}</p>
             <button
