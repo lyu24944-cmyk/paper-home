@@ -14,6 +14,7 @@ import {
 import { Canvas } from '@react-three/fiber'
 import gsap from 'gsap'
 import { CameraController, World, doorStops, type CameraHandle } from './World'
+import type { PromoCameraWaypoint } from './Camera'
 import {
   ATMOSPHERE_OPTIONS,
   DEFAULT_NOW_NOTES,
@@ -25,7 +26,7 @@ import {
 } from './atmosphere'
 import { rooms, type Place } from './content'
 import { qaEnabled } from './diagnostics'
-import { layout, stopProgress, type FocusSubPoseId, type TransitionState } from './layout'
+import { layout, roomPoint, stopProgress, type FocusSubPoseId, type TransitionState } from './layout'
 import { clearResourcePacks, disposeResourcePack, loadResources, type Quality, type ResourcePack } from './resources'
 import { resolveInitialQuality, saveQualityPreference } from './lib/quality'
 import { RenderPipeline } from './RenderPipeline'
@@ -872,6 +873,30 @@ export default function App() {
         if (el) {
           el.scrollTop = clamped * Math.max(0, el.scrollHeight - el.clientHeight)
         }
+      },
+      jumpToPlace: async (target: Place) => {
+        camera.current?.clearPromoOverride?.()
+        setFocusId(null)
+        setStudyQuote(null)
+        if (target !== 'yard' && target !== 'hall') {
+          progress.current = stopProgress(doorStops.find((d) => d.id === target)!.depth)
+        } else {
+          progress.current = 0
+        }
+        await prepare.current?.()
+        setPlace(target)
+        await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))
+        camera.current?.snapPlace?.(target)
+      },
+      glideCamera: async (from: PromoCameraWaypoint | null, to: PromoCameraWaypoint, durationSec: number, ease = 'power1.inOut') => {
+        await camera.current?.glidePromo?.(from, to, durationSec, ease)
+      },
+      clearCamera: () => {
+        camera.current?.clearPromoOverride?.()
+      },
+      roomPoint: (id: Place, p: [number, number, number]) => {
+        const pt = roomPoint(id, p)
+        return [pt.x, pt.y, pt.z] as [number, number, number]
       },
       setReduced: (value: boolean) => setReduced(value),
       getCanvas: () => document.querySelector<HTMLCanvasElement>('.world canvas'),
