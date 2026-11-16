@@ -1,4 +1,4 @@
-import {browserExecutable,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
+import {browserExecutable,browserTestArgs,browserTestUrl,browserTestTimeout,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -54,7 +54,7 @@ async function main() {
     const browser = await chromium.launch({
     ...browserExecutable(),
     headless: true,
-    args: ['--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'],
+    args: browserTestArgs(['--enable-gpu-rasterization']),
   })
 
   try {
@@ -62,7 +62,7 @@ async function main() {
     const context = await browser.newContext({ viewport: { width: 1366, height: 860 } })
     const page = await context.newPage()
 
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' })
+    await page.goto(browserTestUrl(BASE_URL), { waitUntil: 'domcontentloaded' })
     await waitIdle(page, 'yard')
 
     // Enable reduced motion for snappy navigation in tests
@@ -106,9 +106,9 @@ async function main() {
 
     // 3. Yard tactile bench focus
     await page.getByRole('button', { name: '坐上木椅' }).click()
-    await page.waitForSelector('.bench-card', { state: 'visible', timeout: 5000 })
+    await page.waitForSelector('.bench-card', { state: 'visible', timeout: browserTestTimeout(5000) })
     await page.getByRole('button', { name: '起身看全院' }).click()
-    await page.waitForSelector('.bench-card', { state: 'hidden', timeout: 5000 })
+    await page.waitForSelector('.bench-card', { state: 'hidden', timeout: browserTestTimeout(5000) })
 
     // 4. Yard mailbox jumps to Blank room and opens Guestbox + Now notes
     await page.getByRole('button', { name: '寄语信箱' }).click()
@@ -121,7 +121,7 @@ async function main() {
     await page.getByRole('radio', { name: /夜灯共鸣/ }).click()
     await page.getByLabel('访客寄语短句').fill('今晚窗里的绿台灯很温暖')
     await page.getByRole('button', { name: '盖章留念' }).click()
-    await page.waitForSelector('.guest-stamp-list li', { timeout: 5000 })
+    await page.waitForSelector('.guest-stamp-list li', { timeout: browserTestTimeout(5000) })
     const stampText = await page.locator('.guest-stamp-list li').first().textContent()
     assert(
       stampText?.includes('今晚窗里的绿台灯很温暖'),
@@ -138,7 +138,7 @@ async function main() {
     assert(initialPressed !== afterPressed, 'Desk lamp toggle did not change aria-pressed state')
 
     await page.getByRole('button', { name: '抽一张书架灵感签' }).click()
-    await page.waitForSelector('.quote-card blockquote', { state: 'visible', timeout: 5000 })
+    await page.waitForSelector('.quote-card blockquote', { state: 'visible', timeout: browserTestTimeout(5000) })
     const quoteText = await page.locator('.quote-card blockquote').textContent()
     assert(Boolean(quoteText && quoteText.length > 4), 'Expected non-empty study quote')
 
@@ -153,7 +153,7 @@ async function main() {
     const compactTrigger = page.locator('.atmo-compact-trigger')
     assert(await compactTrigger.isVisible(), 'Expected compact atmosphere trigger on mobile')
     await compactTrigger.click()
-    await page.waitForSelector('.atmo-popover', { state: 'visible', timeout: 3000 })
+    await page.waitForSelector('.atmo-popover', { state: 'visible', timeout: browserTestTimeout(3000) })
     await page.locator('.atmo-popover-btn', { hasText: '晴昼' }).click()
     assert(
       (await page.locator('.home-app').getAttribute('class'))?.includes('atmo-daylight'),

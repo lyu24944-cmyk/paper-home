@@ -1,4 +1,4 @@
-import {browserExecutable,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
+import {browserExecutable,browserTestArgs,browserTestUrl,browserTestTimeout,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -8,7 +8,7 @@ import { chromium } from '@playwright/test'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
 const PORT = await freePort()
-const BASE_URL = `http://127.0.0.1:${PORT}/?qa=1`
+const BASE_URL = browserTestUrl(`http://127.0.0.1:${PORT}/?qa=1`)
 
 function assert(condition, message) {
   if (!condition) {
@@ -76,15 +76,21 @@ async function main() {
     const browser = await chromium.launch({
     ...browserExecutable(),
     headless: true,
-    args: ['--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'],
+    args: browserTestArgs(['--enable-gpu-rasterization']),
   })
 
   const runtimeErrors = []
+  let context, page
+  const evidenceDir = path.join(rootDir, '.qa', 'sound-verify')
+  fs.mkdirSync(evidenceDir, { recursive: true })
 
   try {
     await waitForServer(`http://127.0.0.1:${PORT}`)
-    const context = await browser.newContext({ viewport: { width: 1366, height: 860 } })
-    const page = await context.newPage()
+    context = await browser.newContext({ viewport: { width: 1366, height: 860 } })
+    // DOM/canvas snapshots can themselves synchronize software WebGL work.
+    // Keep action/network tracing lightweight; capture an image only on failure.
+    await context.tracing.start({ screenshots: false, snapshots: false, sources: true })
+    page = await context.newPage()
 
     page.on('pageerror', (err) => {
       runtimeErrors.push(`pageerror: ${err.message}`)
@@ -97,6 +103,7 @@ async function main() {
 
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' })
     await waitIdle(page, 'yard')
+    console.log('[sound-verify] renderer:', await page.evaluate(() => window.__HOME_QA__?.renderer))
 
     // 1. Default SFX button state is active
     const sfxBtn = page.locator('.sfx-button')
@@ -148,15 +155,15 @@ async function main() {
 
     // 5. Map unfold & modal-close
     await page.locator('.map-button').click()
-    await page.waitForSelector('.map-dialog', { state: 'visible', timeout: 5000 })
+    await page.waitForSelector('.map-dialog', { state: 'visible', timeout: browserTestTimeout(5000) })
     await assertLastSound(page, 'map-unfold', 'Map unfold')
     await page.locator('.map-dialog .dialog-close').click()
-    await page.waitForSelector('.map-dialog', { state: 'hidden', timeout: 5000 })
+    await page.waitForSelector('.map-dialog', { state: 'hidden', timeout: browserTestTimeout(5000) })
     await assertLastSound(page, 'modal-close', 'Map close')
 
     // 6. Navigate to Study via map -> test desk lamp, bookshelf quote slip, and directory drawer
     await page.locator('.map-button').click()
-    await page.waitForSelector('.plan-study', { state: 'visible', timeout: 5000 })
+    await page.waitForSelector('.plan-study', { state: 'visible', timeout: browserTestTimeout(5000) })
     await page.locator('.plan-study').click()
     await waitIdle(page, 'study')
 
@@ -176,7 +183,7 @@ async function main() {
     )
 
     await page.getByRole('button', { name: '抽一张书架灵感签' }).click()
-    await page.waitForSelector('.quote-card', { state: 'visible', timeout: 5000 })
+    await page.waitForSelector('.quote-card', { state: 'visible', timeout: browserTestTimeout(5000) })
     assert((await readQaAudio(page)).lastSound === 'paper-flip', 'Expected paper-flip sound for study quote')
     await page.getByRole('button', { name: '合上灵感签' }).click()
     assert((await readQaAudio(page)).lastSound === 'modal-close', 'Expected modal-close for quote dismiss')
@@ -186,24 +193,24 @@ async function main() {
     await dirToggle.click()
     await page.waitForSelector('#room-directory', {
       state: dirWasExpanded ? 'hidden' : 'visible',
-      timeout: 5000,
+      timeout: browserTestTimeout(5000),
     })
     await assertLastSound(page, 'drawer-slide', 'Directory toggle 1')
     await dirToggle.click()
     await page.waitForSelector('#room-directory', {
       state: dirWasExpanded ? 'visible' : 'hidden',
-      timeout: 5000,
+      timeout: browserTestTimeout(5000),
     })
     await assertLastSound(page, 'drawer-slide', 'Directory toggle 2')
 
     // 7. Navigate to Blank room -> guestbox ink stamp
     await page.locator('.map-button').click()
-    await page.waitForSelector('.plan-blank', { state: 'visible', timeout: 5000 })
+    await page.waitForSelector('.plan-blank', { state: 'visible', timeout: browserTestTimeout(5000) })
     await page.locator('.plan-blank').click()
     await waitIdle(page, 'blank')
 
     await page.locator('.tactile-bar').getByRole('button', { name: /桌面近况与寄语匣/ }).click()
-    await page.waitForSelector('.guestbox-card', { state: 'visible', timeout: 5000 })
+    await page.waitForSelector('.guestbox-card', { state: 'visible', timeout: browserTestTimeout(5000) })
     await page.getByRole('radio', { name: /夜灯共鸣/ }).click()
     assert((await readQaAudio(page)).lastSound === 'ui-switch', 'Expected ui-switch for mood radio')
     await page.getByLabel('访客寄语短句').fill('听见纸张与盖章的轻响')
@@ -228,9 +235,9 @@ async function main() {
 
     const countWhenMuted = qa.soundCount
     await page.locator('.map-button').click()
-    await page.waitForSelector('.map-dialog', { state: 'visible', timeout: 5000 })
+    await page.waitForSelector('.map-dialog', { state: 'visible', timeout: browserTestTimeout(5000) })
     await page.locator('.map-dialog .dialog-close').click()
-    await page.waitForSelector('.map-dialog', { state: 'hidden', timeout: 5000 })
+    await page.waitForSelector('.map-dialog', { state: 'hidden', timeout: browserTestTimeout(5000) })
     await page.getByRole('button', { name: '天色：晨雾' }).click()
 
     qa = await readQaAudio(page)
@@ -275,7 +282,11 @@ async function main() {
     console.log('  - door knock + open, footsteps, 4-atmo/rain, map unfold, study lamp, quote flip, drawer slide, ink stamp verified')
     console.log('  - mute toggle suppresses DOM/handler SFX and persists across reload')
     console.log('  - mobile 390x844 footer buttons fit cleanly with zero horizontal overflow')
+  } catch (error) {
+    if (page) await page.screenshot({ path: path.join(evidenceDir, 'failure.png'), timeout: 10000 }).catch(() => {})
+    throw error
   } finally {
+    if (context) await context.tracing.stop({ path: path.join(evidenceDir, 'trace.zip') }).catch(() => {})
     await browser.close()
     try {
       await stopProcess(server)

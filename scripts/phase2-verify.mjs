@@ -1,4 +1,4 @@
-import {browserExecutable,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
+import {browserExecutable,browserTestArgs,browserTestUrl,browserTestTimeout,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
@@ -72,7 +72,7 @@ async function main() {
     const browser = await chromium.launch({
     ...browserExecutable(),
     headless: true,
-    args: ['--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'],
+    args: browserTestArgs(['--enable-gpu-rasterization']),
   })
 
   const runtimeErrors = []
@@ -95,7 +95,7 @@ async function main() {
     })
 
     await page.emulateMedia({ reducedMotion: 'reduce' })
-    await page.goto(`${BASE_URL}/?qa`, { waitUntil: 'domcontentloaded' })
+    await page.goto(browserTestUrl(`${BASE_URL}/?qa`), { waitUntil: 'domcontentloaded' })
     await waitIdle(page, 'yard')
 
     // 1. Seed & publish one gallery project via Local Edit Mode
@@ -185,7 +185,7 @@ async function main() {
     assert.equal(savedMeta.height, 1560)
 
     await vPage.locator('.postcard-dialog .dialog-close').click()
-    await vPage.waitForSelector('.postcard-dialog', { state: 'hidden', timeout: 5000 })
+    await vPage.waitForSelector('.postcard-dialog', { state: 'hidden', timeout: browserTestTimeout(5000) })
 
     // 3. Open published project in Gallery -> capture project-specific postcard & deep link
     await vPage.locator('.map-button').click()
@@ -232,7 +232,7 @@ async function main() {
 
     // Close modal & verify live in-tab hashchange deep link (#room=study&at=golden&focus=study-shelf&lamp=1)
     await deepPage.keyboard.press('Escape')
-    await deepPage.waitForSelector('dialog.project-detail-dialog[open]', { state: 'hidden', timeout: 5000 })
+    await deepPage.waitForSelector('dialog.project-detail-dialog[open]', { state: 'hidden', timeout: browserTestTimeout(5000) })
     await deepPage.evaluate(() => {
       window.location.hash = '#room=study&at=golden&focus=study-shelf&lamp=1'
     })

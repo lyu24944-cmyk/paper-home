@@ -1,4 +1,4 @@
-import {browserExecutable,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
+import {browserExecutable,browserTestArgs,browserTestUrl,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import crypto from 'node:crypto'
@@ -839,7 +839,7 @@ const results = { checks: [], errors: [], passed: false }
 const browser = await chromium.launch({
   ...browserExecutable(),
   headless: true,
-  args: ['--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'],
+  args: browserTestArgs(['--enable-gpu-rasterization']),
 })
 
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 })
@@ -884,7 +884,7 @@ async function goRoom(place) {
 try {
   // Use reduced motion to keep automated navigation fast and deterministic
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.goto(`http://127.0.0.1:${SITE_PORT}/?qa`)
+  await page.goto(browserTestUrl(`http://127.0.0.1:${SITE_PORT}/?qa`))
   await idle('yard')
 
   // Check 1: Empty visitor state & retired example items

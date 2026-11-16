@@ -1,4 +1,4 @@
-import {browserExecutable,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
+import {browserExecutable,browserTestArgs,browserTestUrl,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -79,7 +79,7 @@ async function startSeededServer(tag) {
 }
 
 const serverHandle = await startSeededServer('polish');
-const browser = await chromium.launch({ ...browserExecutable(), headless: process.env.QA_HEADFUL !== '1', args: ['--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'] });
+const browser = await chromium.launch({ ...browserExecutable(), headless: process.env.QA_HEADFUL !== '1', args: browserTestArgs(['--enable-gpu-rasterization']) });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, reducedMotion: 'reduce' });
 const errors = [], results = { viewports: [], operations: [], errors };
 page.on('pageerror', e => errors.push(e.message));
@@ -92,7 +92,7 @@ async function go(place) {
   await idle(place);
 }
 try {
-  await page.goto(serverHandle.url); await idle('yard');
+  await page.goto(browserTestUrl(serverHandle.url)); await idle('yard');
   for (const [width, height] of [[1440,900],[2560,1440],[768,1024],[390,844],[640,900],[390,650],[640,800]]) {
     await page.setViewportSize({ width, height }); await page.waitForTimeout(500);
     await go('yard'); await page.screenshot({ path: `${dir}/yard-${width}x${height}.png` });

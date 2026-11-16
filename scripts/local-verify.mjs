@@ -1,4 +1,4 @@
-import {browserExecutable,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
+import {browserExecutable,browserTestArgs,browserTestUrl,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import fs from 'node:fs'
@@ -145,7 +145,7 @@ async function run() {
         browser = await chromium.launch({
       ...browserExecutable(),
       headless: true,
-      args: ['--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'],
+      args: browserTestArgs(['--enable-gpu-rasterization']),
     })
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
     const page = await context.newPage()
@@ -163,7 +163,7 @@ async function run() {
     })
 
     await page.emulateMedia({ reducedMotion: 'reduce' })
-    await page.goto(`http://127.0.0.1:${DEV_PORT}/?qa`)
+    await page.goto(browserTestUrl(`http://127.0.0.1:${DEV_PORT}/?qa`))
     await waitIdle(page, 'yard')
 
     // 1. Visitor clean empty baseline without auth

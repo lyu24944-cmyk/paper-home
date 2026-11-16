@@ -12,6 +12,26 @@ export function browserExecutable() {
   const chrome='C:/Program Files/Google/Chrome/Application/chrome.exe'
   return process.platform==='win32'&&fs.existsSync(chrome)?{executablePath:chrome}:{}
 }
+// Hosted Linux runners have no physical GPU. Select ANGLE's software backend
+// explicitly instead of requesting hardware rasterization from that runner.
+export function browserTestArgs(extra = []) {
+  const base = ['--enable-webgl', '--ignore-gpu-blocklist']
+  return process.env.QA_SOFTWARE_WEBGL === '1'
+    ? [...base, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', ...extra.filter(arg => arg !== '--enable-gpu-rasterization')]
+    : [...base, ...extra]
+}
+// Functional flows do not measure visual quality. On software-only CI, use the
+// product's compatible tier; explicit high/low visual checks keep their URL.
+export function browserTestUrl(url) {
+  const selected = new URL(url)
+  if (process.env.QA_SOFTWARE_WEBGL === '1' && !selected.searchParams.has('quality')) selected.searchParams.set('quality', 'low')
+  return selected.href
+}
+export function browserTestTimeout(timeout) {
+  // Readiness checks must allow the same driver round-trip budget as click().
+  // This is not an FPS or interaction-latency assertion.
+  return process.env.QA_SOFTWARE_WEBGL === '1' ? Math.max(timeout, 30_000) : timeout
+}
 export async function freePort() {
   const server=net.createServer()
   await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve)})
