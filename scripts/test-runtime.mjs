@@ -10,7 +10,10 @@ export function browserExecutable() {
     return {executablePath:process.env.QA_CHROME_PATH}
   }
   const chrome='C:/Program Files/Google/Chrome/Application/chrome.exe'
-  return process.platform==='win32'&&fs.existsSync(chrome)?{executablePath:chrome}:{}
+  if(process.platform==='win32'&&fs.existsSync(chrome))return {executablePath:chrome}
+  // Match the full Chrome browser used on Windows. The standalone headless
+  // shell stalls input/compositing with this WebGL scene on hosted Linux.
+  return process.env.QA_SOFTWARE_WEBGL==='1'?{channel:'chromium'}:{}
 }
 // Hosted Linux runners have no physical GPU. Select ANGLE's software backend
 // explicitly instead of requesting hardware rasterization from that runner.
