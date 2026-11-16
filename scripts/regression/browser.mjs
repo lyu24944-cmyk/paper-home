@@ -1,4 +1,4 @@
-import {browserExecutable,browserTestArgs} from '../test-runtime.mjs'
+import {browserExecutable,browserTestArgs,browserTestHeadless} from '../test-runtime.mjs'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -25,7 +25,7 @@ export async function startBrowserTest({lan=false}={}) {
   let browser
   try {
     await server.listen()
-    browser = await chromium.launch({ ...browserExecutable(), headless: true, args: browserTestArgs() })
+    browser = await chromium.launch({ ...browserExecutable(), headless: browserTestHeadless(), args: browserTestArgs() })
     const ip=lan?(Object.values(os.networkInterfaces()).flat().find(x=>x.family==='IPv4'&&!x.internal&&x.address.startsWith('10.'))?.address || Object.values(os.networkInterfaces()).flat().find(x=>x.family==='IPv4'&&!x.internal)?.address):'127.0.0.1'
     return { browser, store, dataDir, url: `http://${ip}:${port}/?qa=1&quality=low`, close: async () => { await browser.close(); await server.close() } }
   } catch (err) { await browser?.close(); await server.close(); throw err }

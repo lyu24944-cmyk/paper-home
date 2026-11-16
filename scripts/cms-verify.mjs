@@ -1,4 +1,4 @@
-import {browserExecutable,browserTestArgs,browserTestUrl,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
+import {browserExecutable,browserTestArgs,browserTestHeadless,browserTestUrl,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import crypto from 'node:crypto'
@@ -838,7 +838,7 @@ await new Promise((r) => siteServer.listen(SITE_PORT, '127.0.0.1', r))
 const results = { checks: [], errors: [], passed: false }
 const browser = await chromium.launch({
   ...browserExecutable(),
-  headless: true,
+  headless: browserTestHeadless(),
   args: browserTestArgs(['--enable-gpu-rasterization']),
 })
 

@@ -1,4 +1,4 @@
-import {browserExecutable,browserTestArgs,browserTestUrl,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
+import {browserExecutable,browserTestArgs,browserTestHeadless,browserTestUrl,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -79,7 +79,7 @@ async function startSeededServer(tag) {
 }
 
 const serverHandle = await startSeededServer('polish');
-const browser = await chromium.launch({ ...browserExecutable(), headless: process.env.QA_HEADFUL !== '1', args: browserTestArgs(['--enable-gpu-rasterization']) });
+const browser = await chromium.launch({ ...browserExecutable(), headless: browserTestHeadless(process.env.QA_HEADFUL !== '1'), args: browserTestArgs(['--enable-gpu-rasterization']) });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, reducedMotion: 'reduce' });
 const errors = [], results = { viewports: [], operations: [], errors };
 page.on('pageerror', e => errors.push(e.message));

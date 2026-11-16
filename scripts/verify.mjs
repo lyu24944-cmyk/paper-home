@@ -1,4 +1,4 @@
-import {browserExecutable,browserTestArgs,browserTestUrl,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
+import {browserExecutable,browserTestArgs,browserTestHeadless,browserTestUrl,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import {chromium} from '@playwright/test';
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -29,7 +29,7 @@ async function startSeededServer(){
  return{url:`http://127.0.0.1:${port}/?qa`,close:()=>server.close()};
 }
 const serverHandle=await startSeededServer(),url=serverHandle.url;
-const browser=await chromium.launch({...browserExecutable(),headless:true,args:browserTestArgs(['--enable-gpu-rasterization'])});
+const browser=await chromium.launch({...browserExecutable(),headless:browserTestHeadless(),args:browserTestArgs(['--enable-gpu-rasterization'])});
 const context=await browser.newContext({viewport:{width:1440,height:900},deviceScaleFactor:1,recordVideo:{dir:dir+'/video',size:{width:1440,height:900}}});
 const page=await context.newPage(),errors=[],results={transitions:[],operations:[],viewports:[],errors};
 page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});

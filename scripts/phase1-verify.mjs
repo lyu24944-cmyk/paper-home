@@ -1,4 +1,4 @@
-import {browserExecutable,browserTestArgs,browserTestUrl,browserTestTimeout,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
+import {browserExecutable,browserTestArgs,browserTestHeadless,browserTestUrl,browserTestTimeout,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -53,7 +53,7 @@ async function main() {
 
     const browser = await chromium.launch({
     ...browserExecutable(),
-    headless: true,
+    headless: browserTestHeadless(),
     args: browserTestArgs(['--enable-gpu-rasterization']),
   })
 
