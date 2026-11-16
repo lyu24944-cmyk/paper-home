@@ -25,6 +25,7 @@ try {
         await page.locator('.project-detail-dialog[open]').getByRole('button',{name:'拍明信片',exact:true}).click()
         const hash=await page.locator('.postcard-deeplink-box code').textContent()
         assert(hash.includes('room=gallery'),hash);assert(hash.includes('item=starter-cottage-example'),hash)
+        await page.close()
         const cold=await app.browser.newPage({viewport:{width:1366,height:860},reducedMotion:'reduce'})
         try{
           await cold.goto(app.url+hash.trim());await idle(cold)
@@ -34,6 +35,7 @@ try {
           await cold.locator('.note-detail-dialog[open]').getByRole('button',{name:'拍明信片',exact:true}).click()
           const noteHash=(await cold.locator('.postcard-deeplink-box code').textContent()).trim()
           assert(noteHash.includes('room=study'));assert(noteHash.includes('item=how-to-customize-your-cottage'))
+          await cold.close()
           const noteCold=await app.browser.newPage({reducedMotion:'reduce'})
           try{
             await noteCold.goto(app.url+noteHash);await idle(noteCold)
@@ -41,7 +43,7 @@ try {
             assert((await noteCold.locator('.home-app').getAttribute('class')).includes('place-study'))
           }finally{await noteCold.close()}
 
-        }finally{await cold.close()}
+        }finally{if(!cold.isClosed())await cold.close()}
 
       }else{
         await page.goto(app.url+'#yard');await idle(page)
@@ -51,7 +53,7 @@ try {
         assert.equal(await page.evaluate(()=>window.__HOME_QA__.weather),'clear')
       }
       console.log(`F0${id} PASS`)
-    }catch(e){failures.push(`F0${id}: ${e.message}`);console.log(`F0${id} FAIL`,e.message)}finally{await page.close()}
+    }catch(e){failures.push(`F0${id}: ${e.message}`);console.log(`F0${id} FAIL`,e.message)}finally{if(!page.isClosed())await page.close()}
   }
 }finally{await app.close()}
 assert.deepEqual(failures,[])
