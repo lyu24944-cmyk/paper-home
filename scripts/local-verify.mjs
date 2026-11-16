@@ -284,7 +284,7 @@ async function run() {
     const visitorContext = await browser.newContext({ viewport: { width: 1280, height: 800 } })
     const visitorPage = await visitorContext.newPage()
     await visitorPage.emulateMedia({ reducedMotion: 'reduce' })
-    await visitorPage.goto(`http://127.0.0.1:${DEV_PORT}/?qa`)
+    await visitorPage.goto(browserTestUrl(`http://127.0.0.1:${DEV_PORT}/?qa`))
     await waitIdle(visitorPage, 'yard')
     assert(await visitorPage.getByRole('heading', { name: '欢迎来到松果小屋。' }).isVisible())
     await goRoom(visitorPage, 'gallery')
@@ -325,7 +325,7 @@ async function run() {
     STATIC_PORT = typeof staticAddr === 'object' && staticAddr ? staticAddr.port : STATIC_PORT
     const snapPage = await browser.newPage({ viewport: { width: 1280, height: 800 } })
     await snapPage.emulateMedia({ reducedMotion: 'reduce' })
-    await snapPage.goto(`http://127.0.0.1:${STATIC_PORT}/?qa`)
+    await snapPage.goto(browserTestUrl(`http://127.0.0.1:${STATIC_PORT}/?qa`))
     await waitIdle(snapPage, 'yard')
     assert(await snapPage.getByRole('heading', { name: '欢迎来到松果小屋。' }).isVisible())
     await snapPage.getByRole('button', { name: /小屋地图/ }).click()

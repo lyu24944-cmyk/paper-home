@@ -134,7 +134,7 @@ async function main() {
     })
 
     await vPage.emulateMedia({ reducedMotion: 'reduce' })
-    await vPage.goto(`${BASE_URL}/?qa`, { waitUntil: 'domcontentloaded' })
+    await vPage.goto(browserTestUrl(`${BASE_URL}/?qa`), { waitUntil: 'domcontentloaded' })
     await waitIdle(vPage, 'yard')
 
     // 2. Capture WebGL postcard directly from Yard (night + rain)
@@ -219,7 +219,7 @@ async function main() {
       if (msg.type() === 'error') runtimeErrors.push(`deep console.error: ${msg.text()}`)
     })
     await deepPage.emulateMedia({ reducedMotion: 'reduce' })
-    await deepPage.goto(`${BASE_URL}/?qa${itemDeepHash}`, { waitUntil: 'domcontentloaded' })
+    await deepPage.goto(browserTestUrl(`${BASE_URL}/?qa${itemDeepHash}`), { waitUntil: 'domcontentloaded' })
     await waitIdle(deepPage, 'gallery')
 
     const appCls = await deepPage.locator('.home-app').getAttribute('class')
