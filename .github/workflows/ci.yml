@@ -9,7 +9,7 @@ on:
         required: true
         default: full
         type: choice
-        options: [full, interactions]
+        options: [full, interactions, remaining]
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -37,14 +37,19 @@ jobs:
       - name: Diagnose interactions only (not the full release gate)
         if: github.event_name == 'workflow_dispatch' && inputs.verification == 'interactions'
         run: xvfb-run --auto-servernum --server-args="-screen 0 2560x1600x24" npm run check:interactions
+      - name: Diagnose remaining five gates (not the full release gate)
+        if: github.event_name == 'workflow_dispatch' && inputs.verification == 'remaining'
+        run: xvfb-run --auto-servernum --server-args="-screen 0 2560x1600x24" node scripts/ci-verify.mjs --remaining
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: verification-evidence
           path: |
             .qa/ci-results.json
+            .qa/ci-remaining-results.json
             .qa/sound-verify/
             .qa/polish/after/verification.json
+            .qa/polish/after/edge-cases.json
             .qa/polish/after/failure.png
             .qa/regression/
             .qa/phase2-verify/downloads/
