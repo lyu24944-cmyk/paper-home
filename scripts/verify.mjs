@@ -34,14 +34,42 @@ const context=await browser.newContext({viewport:{width:1440,height:900},deviceS
 const page=await context.newPage(),errors=[],results={transitions:[],operations:[],viewports:[],errors};
 page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
 const status=()=>page.evaluate(()=>({hash:location.hash,busy:!!document.querySelector('.traveling'),qa:window.__HOME_QA__}));
+const softwareRenderer=process.env.QA_SOFTWARE_WEBGL==='1';
+async function observeTransition(target){
+ await page.evaluate(target=>{
+  const record=window.__VERIFY_TRANSITION__={samples:[],completed:false};
+  const fractions=[.25,.5,.75];
+  const read=(fraction,actualProgress)=>{
+   const qa=window.__HOME_QA__;
+   return{fraction,actualProgress,at:performance.now(),hash:location.hash,busy:!!document.querySelector('.traveling'),qa:{position:qa?.position?.slice(),quaternion:qa?.quaternion?.slice(),fov:qa?.fov,transition:qa?.transition?{...qa.transition}:null}};
+  };
+  const tick=()=>{
+   const completed=location.hash==='#'+target&&!document.querySelector('.traveling');
+   const progress=completed?1:window.__HOME_QA__?.transition?.progress;
+   if(typeof progress==='number')while(fractions.length&&progress>=fractions[0])record.samples.push(read(fractions.shift(),progress));
+   record.completed=completed;
+   if(!completed)requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+ },target);
+}
 async function idle(place){await page.waitForFunction(p=>location.hash==='#'+p&&!document.querySelector('.traveling')&&!document.querySelector('.loading-note'),place,{timeout:45000});await page.waitForTimeout(350)}
 async function go(target,label,quartiles=true){
  const from=(await status()).hash.slice(1),name={yard:'小院',hall:'走廊',gallery:'作品室',study:'创作手记',blank:'关于我'}[target];
  if(from===target)return;
  await page.getByRole('button',{name:'小屋地图',exact:true}).click();
- const origin=await status();await page.getByRole('button',{name:new RegExp('^'+name)}).click();
+ const origin=await status();if(quartiles&&softwareRenderer)await observeTransition(target);await page.getByRole('button',{name:new RegExp('^'+name)}).click();
  const samples=[{fraction:0,...origin}];
- if(quartiles){await page.screenshot({path:dir+'/'+label+'-000.png'});for(const fraction of [.25,.5,.75]){
+ if(quartiles&&softwareRenderer){
+  await page.screenshot({path:dir+'/'+label+'-000.png'});
+  await page.waitForFunction(()=>window.__VERIFY_TRANSITION__?.completed,null,{timeout:45000});
+  const observed=await page.evaluate(()=>window.__VERIFY_TRANSITION__.samples);
+  assert.deepEqual(observed.map(row=>row.fraction),[.25,.5,.75]);
+  assert(observed.some(row=>row.actualProgress>0&&row.actualProgress<1),'Expected an actual intermediate rendered transition frame');
+  assert(observed.every((row,i)=>row.actualProgress>=row.fraction&&(!i||row.actualProgress>=observed[i-1].actualProgress)),'Transition samples must progress monotonically');
+  assert(observed.every(row=>row.qa.position?.length===3&&row.qa.position.every(Number.isFinite)&&row.qa.quaternion?.length===4&&row.qa.quaternion.every(Number.isFinite)),'Transition camera samples must be finite');
+  samples.push(...observed);
+ }else if(quartiles){await page.screenshot({path:dir+'/'+label+'-000.png'});for(const fraction of [.25,.5,.75]){
   await page.waitForFunction(f=>window.__HOME_QA__?.transition?.progress>=f,fraction,{timeout:40000});const value=await status();samples.push({fraction,...value});await page.screenshot({path:dir+'/'+label+'-'+String(fraction*100).padStart(3,'0')+'.png'});
  }}
  await idle(target);const endpoint=await status();samples.push({fraction:1,...endpoint});

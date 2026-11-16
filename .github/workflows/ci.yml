@@ -1,5 +1,15 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      verification:
+        description: "Full release gate or an explicit interaction-only diagnostic"
+        required: true
+        default: full
+        type: choice
+        options: [full, interactions]
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -22,7 +32,11 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Verify clean checkout serially
+        if: github.event_name != 'workflow_dispatch' || inputs.verification == 'full'
         run: xvfb-run --auto-servernum --server-args="-screen 0 2560x1600x24" npm run check:ci
+      - name: Diagnose interactions only (not the full release gate)
+        if: github.event_name == 'workflow_dispatch' && inputs.verification == 'interactions'
+        run: xvfb-run --auto-servernum --server-args="-screen 0 2560x1600x24" npm run check:interactions
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -30,6 +44,8 @@ jobs:
           path: |
             .qa/ci-results.json
             .qa/sound-verify/
+            .qa/polish/after/verification.json
+            .qa/polish/after/failure.png
             .qa/regression/
             .qa/phase2-verify/downloads/
           retention-days: 7
