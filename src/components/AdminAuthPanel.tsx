@@ -26,6 +26,7 @@ export function AdminAuthPanel({
   const [expanded, setExpanded] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [pin,setPin]=useState('')
   const [busy, setBusy] = useState(false)
   const [cleaning, setCleaning] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -61,7 +62,8 @@ export function AdminAuthPanel({
     setError('')
     setMessage('')
     try {
-      await enterLocalOwnerMode()
+      await enterLocalOwnerMode(pin)
+      setPin('')
       await onSignedIn()
       setMessage('已进入本地编辑模式，修改会保存在本机 local-data/。')
     } catch (err) {
@@ -175,10 +177,10 @@ export function AdminAuthPanel({
           <button
             type="button"
             className="cms-primary-btn"
-            disabled={busy || !backendHealth.writable}
+            disabled={busy || (!backendHealth.writable && !backendHealth.pinRequired)}
             onClick={() => void handleEnterLocalOwner()}
           >
-            {busy ? '正在进入…' : backendHealth.writable ? '进入编辑模式' : '仅本机可编辑'}
+            {busy ? '正在进入…' : backendHealth.pinRequired && !backendHealth.writable ? '使用 PIN 进入编辑' : backendHealth.writable ? '进入编辑模式' : '仅本机可编辑'}
           </button>
         ) : (
           <button
@@ -194,9 +196,14 @@ export function AdminAuthPanel({
         )}
       </div>
 
+      {isLocalStudio && !adminEmail && backendHealth.pinRequired && !backendHealth.writable && (
+        <label className="cms-field">局域网编辑 PIN
+          <input type="password" value={pin} autoComplete="off" onChange={e=>setPin(e.target.value)} />
+        </label>
+      )}
       {isLocalStudio && !adminEmail && (
         <p className="admin-auth-hint">
-          {backendHealth.writable
+          {backendHealth.pinRequired ? '输入本地服务的 PIN 后，可在此设备编辑；会话一小时后到期。' : backendHealth.writable
             ? '无需云端账号：作品、手记、图片与演示视频会直接保存在本机 local-data/ 目录；未点击发布的草稿不会在访客模式出现。'
             : '当前通过非本机地址访问，仅允许访客只读浏览；请在电脑本机（127.0.0.1 / localhost）开启编辑。'}
         </p>

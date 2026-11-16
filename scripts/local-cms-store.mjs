@@ -1,3 +1,4 @@
+import { atomicDirectory } from './atomic-directory.mjs'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -206,6 +207,17 @@ function createSampleSvg(title, subtitle, accentColor, bgTop, bgBottom) {
 export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'local-data') } = {}) {
   const cottagePath = path.join(dataDir, 'cottage.json')
   const mediaDir = path.join(dataDir, 'media')
+  const uploadsPath=path.join(dataDir,'.uploads.json')
+  const uploadTTL=24*3600_000
+  const readUploads=()=>fs.existsSync(uploadsPath)?JSON.parse(fs.readFileSync(uploadsPath,'utf8')):{}
+  const writeUploads=leases=>{fs.mkdirSync(dataDir,{recursive:true});fs.writeFileSync(uploadsPath,JSON.stringify(leases))}
+  const touchUpload=(id,complete)=>{
+    const leases=readUploads()
+    if(leases[id]?.cancelled && leases[id].expiresAt>Date.now())throw httpError(409,'上传已取消')
+    leases[id]={expiresAt:Date.now()+uploadTTL,complete,cancelled:false}
+    writeUploads(leases)
+  }
+
 
   function resolveMediaPath(relPath) {
     if (typeof relPath !== 'string' || !relPath.trim()) {
@@ -388,7 +400,8 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
     }
 
     if (sweepOrphans && fs.existsSync(mediaDir)) {
-      const staleBefore = Date.now() - 24 * 60 * 60 * 1000
+      const staleBefore = Date.now() - uploadTTL
+      const leases=readUploads()
       for (const kindDir of ['videos', 'images']) {
         const root = path.join(mediaDir, kindDir)
         if (!fs.existsSync(root)) continue
@@ -396,19 +409,21 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
           const dir = path.join(root, assetFolder)
           try {
             if (!fs.statSync(dir).isDirectory()) continue
+            if(db.assets[assetFolder] || isAssetReferenced(db,assetFolder) || (leases[assetFolder]?.expiresAt>Date.now() && !leases[assetFolder].cancelled))continue
             for (const fileName of fs.readdirSync(dir)) {
-              if (!fileName.endsWith('.part')) continue
               const full = path.join(dir, fileName)
               if (fs.statSync(full).mtimeMs < staleBefore) {
-                fs.rmSync(full, { force: true })
+                if(fs.statSync(full).isFile()){fs.rmSync(full, { force: true });cleaned++}
               }
             }
             if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir)
-          } catch {
-            // Ignore partial cleanup errors on orphan directories.
+          } catch(error) {
+            errors.push(`${assetFolder}: ${error instanceof Error?error.message:String(error)}`)
           }
         }
       }
+      for(const [id,lease] of Object.entries(leases))if(lease.expiresAt<=Date.now())delete leases[id]
+      writeUploads(leases)
     }
 
     return { cleaned, remaining: errors.length, errors }
@@ -564,6 +579,7 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
     const relPath = `${kindDir}/${assetId}/${filename}`
     const fullPath = resolveMediaPath(relPath)
     fs.mkdirSync(path.dirname(fullPath), { recursive: true })
+    touchUpload(assetId,true)
     fs.writeFileSync(fullPath, buffer)
     return relPath
   }
@@ -577,6 +593,7 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
     const partPath = resolveMediaPath(partRel)
     const finalPath = resolveMediaPath(finalRel)
     fs.mkdirSync(path.dirname(partPath), { recursive: true })
+    touchUpload(assetId,false)
     if (reset && fs.existsSync(partPath)) fs.rmSync(partPath, { force: true })
     const isFirstChunk = reset || !fs.existsSync(partPath)
     if (isFirstChunk && mimeType && !hasValidMagicBytes(buffer, mimeType)) {
@@ -590,6 +607,7 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
     }
     if (finalize) {
       fs.renameSync(partPath, finalPath)
+      touchUpload(assetId,true)
       return { relPath: finalRel, byteSize: stat.size }
     }
     return { relPath: partRel, byteSize: stat.size }
@@ -597,12 +615,20 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
 
   function abortVideoUpload(assetId) {
     if (!isValidUuid(assetId)) return
-    const dir = resolveMediaPath(`videos/${assetId}/_`).replace(/[\\/]_$/, '')
-    if (!fs.existsSync(dir)) return
-    for (const name of fs.readdirSync(dir)) {
-      if (name.endsWith('.part')) fs.rmSync(path.join(dir, name), { force: true })
+    const db=readDb()
+    if(db.assets[assetId] || isAssetReferenced(db,assetId))return
+    const leases=readUploads()
+    leases[assetId]={cancelled:true,complete:false,expiresAt:Date.now()+uploadTTL}
+    writeUploads(leases)
+    for(const kind of ['videos','images']){
+      const dir=resolveMediaPath(`${kind}/${assetId}/_`).replace(/[\\/]_$/, '')
+      if(!fs.existsSync(dir))continue
+      for(const name of fs.readdirSync(dir)){
+        const file=path.join(dir,name)
+        if(fs.statSync(file).isFile())fs.rmSync(file,{force:true})
+      }
+      if(fs.readdirSync(dir).length===0)fs.rmdirSync(dir)
     }
-    if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir)
   }
 
   function mutate(action, payload = {}) {
@@ -690,9 +716,16 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
       }
     }
 
+    const versioned = /^(project|note|profile|settings)\./.test(action)
+    const creating = (action === 'project.save_draft' || action === 'note.save_draft') && !payload.id
+    const version = action.endsWith('.reorder') ? payload.expectedOrderVersion : payload.expectedVersion
+    if (versioned && (!Number.isSafeInteger(version) || version > 2147483647 || (creating ? version !== 0 : version <= 0))) {
+      return { status:400, body:{ ok:false, code:'VALIDATION_ERROR', error:'版本号必须为正整数；新草稿版本必须为 0。' } }
+    }
+
     if (action === 'settings.save') {
       const expectedVersion = payload.expectedVersion
-      if (Number.isInteger(expectedVersion) && expectedVersion !== db.siteSettingsVersion) {
+      if (expectedVersion !== db.siteSettingsVersion) {
         return {
           status: 409,
           body: {
@@ -1152,8 +1185,32 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
   function exportStaticSnapshot(outSnapshotDir) {
     const db = readDb()
     const base = buildPublicCottage()
-    const mediaOutDir = path.join(outSnapshotDir, 'media')
-    fs.rmSync(outSnapshotDir, { recursive: true, force: true })
+    const target=path.resolve(outSnapshotDir)
+    const containsData=path.relative(target,dataDir)
+    if (target===path.resolve(rootDir) || containsData==='' || (!containsData.startsWith('..'+path.sep) && !path.isAbsolute(containsData))) throw new Error('导出目录包含私有数据，拒绝覆盖')
+    const expectedKinds=new Map()
+    const expect=(id,kind)=>{
+      if(!id)return
+      if(expectedKinds.has(id)&&expectedKinds.get(id)!==kind)throw new Error(`素材类型引用冲突: ${id}`)
+      expectedKinds.set(id,kind)
+    }
+    for(const item of [...base.projects,...base.notes,...(base.profile?[base.profile]:[])]){
+      for(const key of ['coverAssetId','avatarAssetId'])expect(item[key],'image')
+      for(const key of ['galleryAssetIds','imageAssetIds'])for(const id of item[key]??[])expect(id,'image')
+      expect(item.videoAssetId,'video')
+    }
+    for(const [id,kind] of expectedKinds){
+      const asset=db.assets[id]
+      if(!asset||asset.status!=='ready'||asset.kind!==kind)throw new Error(`公开素材缺失、类型错误或非 ready: ${id}`)
+      for(const rel of [asset.displayPath,...(asset.thumbPath?[asset.thumbPath]:[])]){
+        const file=resolveMediaPath(rel)
+        if(!fs.existsSync(file)||!fs.statSync(file).isFile()||fs.statSync(file).size===0)throw new Error(`素材文件缺失: ${id}`)
+        const within=path.relative(fs.realpathSync(mediaDir),fs.realpathSync(file))
+        if(within.startsWith('..'+path.sep)||path.isAbsolute(within))throw new Error(`素材文件路径越界: ${id}`)
+      }
+    }
+    return atomicDirectory(target,(stage)=>{
+    const mediaOutDir = path.join(stage, 'media')
     fs.mkdirSync(mediaOutDir, { recursive: true })
 
     const neededIds = [
@@ -1166,9 +1223,9 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
     const mediaRootPrefix = path.resolve(mediaOutDir) + path.sep
     for (const id of [...new Set(neededIds)]) {
       const asset = db.assets[id]
-      if (!asset || asset.status !== 'ready') continue
+      if (!asset || asset.status !== 'ready') throw new Error(`素材未就绪: ${id}`)
       const displaySrc = resolveMediaPath(asset.displayPath)
-      if (!fs.existsSync(displaySrc)) continue
+      if (!fs.existsSync(displaySrc)) throw new Error(`素材文件缺失: ${id}`)
 
       const displayDest = path.resolve(mediaOutDir, asset.displayPath)
       if (!displayDest.startsWith(mediaRootPrefix)) {
@@ -1207,12 +1264,13 @@ export function createLocalCmsStore(rootDir, { dataDir = path.join(rootDir, 'loc
       siteSettings: base.siteSettings,
       signedUrls: staticSignedUrls,
     }
-    fs.writeFileSync(path.join(outSnapshotDir, 'cottage.json'), JSON.stringify(payload, null, 2), 'utf8')
+    fs.writeFileSync(path.join(stage, 'cottage.json'), JSON.stringify(payload, null, 2), 'utf8')
     return {
       projectCount: base.projects.length,
       noteCount: base.notes.length,
       assetCount: Object.keys(staticSignedUrls).length,
     }
+    })
   }
 
   async function seedNeutralSample({ force = false } = {}) {

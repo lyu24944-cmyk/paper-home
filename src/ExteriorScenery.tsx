@@ -1,3 +1,4 @@
+import { applyFoliageSelection } from './lib/foliage'
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import {
@@ -260,6 +261,7 @@ function prepareVegetalMaterial(mat: Material): {
   depthMaterial?: MeshDepthMaterial
 } {
   const cloned = mat.clone()
+  if (cloned.userData.clusterCards) applyFoliageSelection(cloned)
   if (cloned instanceof MeshStandardMaterial) {
     if (cloned.transparent || cloned.alphaTest > 0) {
       cloned.transparent = false
@@ -274,6 +276,7 @@ function prepareVegetalMaterial(mat: Material): {
             side: DoubleSide,
           })
         : undefined
+      if (dm && cloned.userData.clusterCards) applyFoliageSelection(dm)
       return { material: cloned, depthMaterial: dm }
     }
   }

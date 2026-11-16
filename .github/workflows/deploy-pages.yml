@@ -1,59 +1,65 @@
 name: Deploy Paper Home to GitHub Pages
-
 on:
   workflow_dispatch:
     inputs:
+      content_source:
+        description: "Content source (required; sources never fall back to each other)"
+        required: true
+        type: choice
+        options: [local, supabase]
       allow_sample_fallback:
-        description: "Allow seeding starter sample content if local-data/cottage.json is missing"
+        description: "Use an explicit local demo instead of site-content (local source only)"
         required: false
         type: boolean
         default: false
-
 permissions:
   contents: read
   pages: write
   id-token: write
-
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: false
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      PAPER_HOME_FORCE_LOCAL: "1"
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Verify snapshot data source
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Select committed local public snapshot
+        if: inputs.content_source == 'local' && !inputs.allow_sample_fallback
+        run: echo "PAPER_HOME_SNAPSHOT_DIR=$GITHUB_WORKSPACE/site-content" >> "$GITHUB_ENV"
+      - name: Generate explicit local demo
+        if: inputs.content_source == 'local' && inputs.allow_sample_fallback
+        env:
+          LOCAL_CMS_DATA_DIR: ${{ runner.temp }}/paper-home-demo
         run: |
-          if [ ! -f "local-data/cottage.json" ]; then
-            if [ "${{ inputs.allow_sample_fallback }}" = "true" ]; then
-              echo "local-data/cottage.json missing; seeding neutral starter sample via init:sample"
-              npm run init:sample
-            else
-              echo "::error::Missing local-data/cottage.json. Publish and stage local-data/ first, or re-run with allow_sample_fallback=true for a demo build."
-              exit 1
-            fi
+          npm run init:sample
+          npm run export:public -- --source local --out "$RUNNER_TEMP/public-snapshot"
+          echo "PAPER_HOME_SNAPSHOT_DIR=$RUNNER_TEMP/public-snapshot" >> "$GITHUB_ENV"
+      - name: Export Supabase published content using public endpoints
+        if: inputs.content_source == 'supabase'
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY }}
+          DEMO_SELECTED: ${{ inputs.allow_sample_fallback }}
+        run: |
+          if [ "$DEMO_SELECTED" = "true" ]; then
+            echo "::error::The demo option is only valid for the local source."
+            exit 1
           fi
-
-      - name: Build static cottage snapshot
+          npm run export:public -- --source supabase --out "$RUNNER_TEMP/public-snapshot"
+          echo "PAPER_HOME_SNAPSHOT_DIR=$RUNNER_TEMP/public-snapshot" >> "$GITHUB_ENV"
+      - name: Validate selected snapshot and build
         run: npm run build:local
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist
-
   deploy:
     environment:
       name: github-pages

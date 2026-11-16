@@ -96,12 +96,24 @@ export async function uploadMediaAndRegister(supabase, adminUserId, {
     : (mimeType === 'image/jpeg' ? 'jpg' : mimeType === 'image/png' ? 'png' : 'webp')
   const displayPath = `${kind}s/${id}/${kind === 'video' ? `demo.${ext}` : `display.${ext}`}`
   const displayBuf = fs.readFileSync(displayAbsPath)
+  if (thumbAbsPath && !fs.existsSync(thumbAbsPath)) throw new Error(`Missing thumbnail: ${thumbAbsPath}`)
+  const totalBytes = displayBuf.byteLength + (thumbAbsPath ? fs.statSync(thumbAbsPath).size : 0)
+  const { data: existing, error: readError } = await supabase.from('media_assets').select('*').eq('id',id).maybeSingle()
+  if (readError) throw readError
+  if (existing) {
+    if (existing.status !== 'ready' || existing.kind !== kind || existing.mime_type !== mimeType ||
+        existing.display_path !== displayPath || Number(existing.byte_size) !== totalBytes) {
+      throw new Error(`Registered media ${id} is incompatible or scheduled for deletion; use a new asset ID.`)
+    }
+    // Registered IDs are immutable: never overwrite binary data or reset deletion state.
+    return 0
+  }
 
   const { error: upErr } = await supabase.storage
     .from('cottage-media')
     .upload(displayPath, displayBuf, {
       contentType: mimeType,
-      upsert: true,
+      upsert: false,
       cacheControl: '3600',
     })
   if (upErr) throw upErr
@@ -118,13 +130,13 @@ export async function uploadMediaAndRegister(supabase, adminUserId, {
       .from('cottage-media')
       .upload(thumbPath, thumbBuf, {
         contentType: thumbMime,
-        upsert: true,
+        upsert: false,
         cacheControl: '3600',
       })
     if (thumbErr) throw thumbErr
   }
 
-  const { error: dbErr } = await supabase.from('media_assets').upsert(
+  const { error: dbErr } = await supabase.from('media_assets').insert(
     {
       id,
       kind,
@@ -139,7 +151,6 @@ export async function uploadMediaAndRegister(supabase, adminUserId, {
       original_filename: originalFilename,
       created_by: adminUserId,
     },
-    { onConflict: 'id' },
   )
   if (dbErr) throw dbErr
   return displayBuf.byteLength + thumbSize

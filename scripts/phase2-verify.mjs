@@ -1,3 +1,4 @@
+import {browserExecutable,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
@@ -11,7 +12,7 @@ const rootDir = path.resolve(__dirname, '..')
 const qaOutDir = path.join(rootDir, '.qa', 'phase2-verify')
 const localDataDir = path.join(qaOutDir, 'local-data')
 const downloadDir = path.join(qaOutDir, 'downloads')
-const PORT = 4334
+const PORT = await freePort()
 const BASE_URL = `http://127.0.0.1:${PORT}`
 
 fs.rmSync(qaOutDir, { recursive: true, force: true })
@@ -56,23 +57,20 @@ async function main() {
     .toBuffer()
 
   const viteBin = path.join(rootDir, 'node_modules', 'vite', 'bin', 'vite.js')
-  const server = spawn(
+  const server = trackProcess(spawn(
     process.execPath,
     [viteBin, '--host', '127.0.0.1', '--port', String(PORT), '--strictPort'],
     {
       cwd: rootDir,
       env: {
-        ...process.env,
-        PAPER_HOME_FORCE_LOCAL: '1',
-        LOCAL_CMS_DATA_DIR: localDataDir,
+        ...isolatedLocalEnv(localDataDir),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
-  )
+  ))
 
-  const chromePath = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
-  const browser = await chromium.launch({
-    ...(fs.existsSync(chromePath) ? { executablePath: chromePath } : {}),
+    const browser = await chromium.launch({
+    ...browserExecutable(),
     headless: true,
     args: ['--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'],
   })
@@ -158,8 +156,8 @@ async function main() {
     assert.equal(meta.height, 1560, `Expected postcard height 1560, got ${meta.height}`)
 
     // Ensure WebGL snapshot actually rendered varied pixels (not solid flat blank)
-    const stats = await sharp(pngBytes).stats()
-    assert(stats.channels[0].stdev > 8, `Postcard PNG seems blank/flat (stdev=${stats.channels[0].stdev})`)
+    const stats = await sharp(pngBytes).extract({left:120,top:120,width:840,height:600}).stats()
+    assert(stats.channels.slice(0,3).every(channel=>channel.stdev>8), `Postcard PNG seems blank/flat (stdev=${stats.channels[0].stdev})`)
 
     // Live greeting update regenerates card cleanly
     await vPage.locator('#postcard-message-input').fill('在夜雨中的小院檐下寄出一张明信片。')
@@ -276,7 +274,7 @@ async function main() {
   } finally {
     await browser.close()
     try {
-      server.kill()
+      await stopProcess(server)
     } catch {
       // ignore
     }

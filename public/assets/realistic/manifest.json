@@ -1,5 +1,5 @@
 {
-  "generated": "2026-11-15T12:24:07.921Z",
+  "generated": "2026-11-16T06:06:25.619Z",
   "records": [
     {
       "name": "brick",
@@ -211,15 +211,15 @@
       "lod": [
         {
           "level": "high",
-          "triangles": 15963,
-          "bytes": 1448988,
-          "sha256": "5ee0fdf28dff1db689008a686632be34180b12fc8966b4541c82937826c1c5e7"
+          "triangles": 15413,
+          "bytes": 3966708,
+          "sha256": "6a3e92542e412c7979b8c433682998e69d40bc5c9c0733c8997e3a8eeb03c757"
         },
         {
           "level": "low",
-          "triangles": 7099,
-          "bytes": 552448,
-          "sha256": "d520badac9e8542acc743ab9ae466a2b0b049da5f5685c4da8425c2825b1e9bb"
+          "triangles": 6511,
+          "bytes": 1129884,
+          "sha256": "c2c4f81d361873f65650687daef21e42542dc48aef7916f7ab404bedc74bcb3d"
         }
       ],
       "assets": [
@@ -315,15 +315,15 @@
       "lod": [
         {
           "level": "high",
-          "triangles": 5949,
-          "bytes": 1133120,
-          "sha256": "643e335d88d7bedd0d200e0149f114f3a07e5e2326c9d806e9cc5b5fd90d679c"
+          "triangles": 5919,
+          "bytes": 1856448,
+          "sha256": "54d9174d01e54d2466757743b834b306bdb8e489e668b744ed2dc9a211347d2e"
         },
         {
           "level": "low",
-          "triangles": 2613,
-          "bytes": 403252,
-          "sha256": "158fffe36022fd9ed62038a29e6fab57addf7a61bd8dbdf4ea43352a5ab2c316"
+          "triangles": 2363,
+          "bytes": 511004,
+          "sha256": "90a29e3a0850d034479f337b0398619fc0040a9af162a72334d4f04fec94d9c6"
         }
       ],
       "assets": [
@@ -503,15 +503,15 @@
       "lod": [
         {
           "level": "high",
-          "triangles": 4655,
-          "bytes": 1131532,
-          "sha256": "8eb8822a5948aacad5cd9a2056c27d8282526f5443d8eb122a34cf819633e0d6"
+          "triangles": 4313,
+          "bytes": 3272860,
+          "sha256": "1eec00421d5bb1638ed8a42a1a72205743b318140bef6b315a511f70ebc28d8f"
         },
         {
           "level": "low",
-          "triangles": 2581,
-          "bytes": 369548,
-          "sha256": "aab0186313b48299e2a1429d7daf54e5948a8e86ac56be3ea6f87a66edb06fc2"
+          "triangles": 2189,
+          "bytes": 542240,
+          "sha256": "14a9c14f816528085192d18b800f00f3c63499e81a7eff5958dafa0ba20d7ca5"
         }
       ],
       "assets": [
@@ -1237,23 +1237,23 @@
     },
     {
       "filename": "island_tree_01-high.glb",
-      "bytes": 1448988,
-      "sha256": "5ee0fdf28dff1db689008a686632be34180b12fc8966b4541c82937826c1c5e7"
+      "bytes": 3966708,
+      "sha256": "6a3e92542e412c7979b8c433682998e69d40bc5c9c0733c8997e3a8eeb03c757"
     },
     {
       "filename": "island_tree_01-low.glb",
-      "bytes": 552448,
-      "sha256": "d520badac9e8542acc743ab9ae466a2b0b049da5f5685c4da8425c2825b1e9bb"
+      "bytes": 1129884,
+      "sha256": "c2c4f81d361873f65650687daef21e42542dc48aef7916f7ab404bedc74bcb3d"
     },
     {
       "filename": "island_tree_02-high.glb",
-      "bytes": 1133120,
-      "sha256": "643e335d88d7bedd0d200e0149f114f3a07e5e2326c9d806e9cc5b5fd90d679c"
+      "bytes": 1856448,
+      "sha256": "54d9174d01e54d2466757743b834b306bdb8e489e668b744ed2dc9a211347d2e"
     },
     {
       "filename": "island_tree_02-low.glb",
-      "bytes": 403252,
-      "sha256": "158fffe36022fd9ed62038a29e6fab57addf7a61bd8dbdf4ea43352a5ab2c316"
+      "bytes": 511004,
+      "sha256": "90a29e3a0850d034479f337b0398619fc0040a9af162a72334d4f04fec94d9c6"
     },
     {
       "filename": "periwinkle_plant-high.glb",
@@ -1407,13 +1407,13 @@
     },
     {
       "filename": "tree_small_02-high.glb",
-      "bytes": 1131532,
-      "sha256": "8eb8822a5948aacad5cd9a2056c27d8282526f5443d8eb122a34cf819633e0d6"
+      "bytes": 3272860,
+      "sha256": "1eec00421d5bb1638ed8a42a1a72205743b318140bef6b315a511f70ebc28d8f"
     },
     {
       "filename": "tree_small_02-low.glb",
-      "bytes": 369548,
-      "sha256": "aab0186313b48299e2a1429d7daf54e5948a8e86ac56be3ea6f87a66edb06fc2"
+      "bytes": 542240,
+      "sha256": "14a9c14f816528085192d18b800f00f3c63499e81a7eff5958dafa0ba20d7ca5"
     },
     {
       "filename": "wood-color-1k.webp",

@@ -1,0 +1,1722 @@
+{
+  "date": "2026-11-16",
+  "node": "v24.16.0",
+  "platform": "Windows PowerShell",
+  "findings": [
+    {
+      "id": "F01",
+      "priority": "P0",
+      "status": "通过",
+      "file": "scripts/private-data-guard.mjs",
+      "line": 42,
+      "cause": "Vite 静态路由绕过 CMS 鉴权读取私有数据。",
+      "trigger": "LAN 无 PIN 请求普通/编码/@fs/链接路径及自定义数据目录。",
+      "fix": "静态服务前 canonical 路径拦截，追加默认 deny 规则，拒绝 public/输出内数据目录。",
+      "test": "node scripts/regression/f01-security.mjs"
+    },
+    {
+      "id": "F02",
+      "priority": "P0",
+      "status": "通过",
+      "file": "supabase/migrations/202611160001_safe_media_cleanup.sql",
+      "line": 102,
+      "cause": "引用检查与文件删除、元数据确认分离，失败会误删或假报成功。",
+      "trigger": "入队后保存引用、并发 worker、Storage 停机、数据库删除触发器失败、租约重领。",
+      "fix": "SQL 写入协调锁、引用触发器、deleting 状态、token 领取/确认/失败重试；旧异常引用阻断清理。",
+      "test": "node scripts/regression/f02-cleanup.mjs"
+    },
+    {
+      "id": "F03",
+      "priority": "P0",
+      "status": "通过",
+      "file": "src/components/LazyModalBoundary.tsx",
+      "line": 5,
+      "cause": "lazy import 拒绝会向根组件冒泡导致白屏。",
+      "trigger": "分别阻断详情、编辑、明信片模块请求。",
+      "fix": "各类懒弹窗独立边界，关闭释放锁并恢复焦点，显式重新加载入口。",
+      "test": "node scripts/regression/f03-lazy.mjs"
+    },
+    {
+      "id": "F04",
+      "priority": "P1",
+      "status": "通过",
+      "file": "scripts/foliage-bake.mjs",
+      "line": 5,
+      "cause": "整组减面使大量叶片丢失，形成碎点。",
+      "trigger": "四方向原始树冠遮罩、high/low 庭院/木椅/窗外/夜雨和三轮性能。",
+      "fix": "离线叶簇卡片保留原树种/位置/木质枝干，严格面数预算，顶点阶段剔除未选视角。",
+      "test": "node scripts/regression/f04-trees.mjs",
+      "limitation": "庭院冷启动 FPS 仅旧版 75.01%；树冠、面数预算与全路线性能门槛通过不能推导每个阶段无回归。"
+    },
+    {
+      "id": "F05",
+      "priority": "P1",
+      "status": "通过",
+      "file": "src/App.tsx",
+      "line": 738,
+      "cause": "过渡忙时丢弃新 hash，旧房间又覆写 URL。",
+      "trigger": "进入过渡时注入带天气、灯光、item/focus 的新深链。",
+      "fix": "保留最新完整请求，以请求身份防止旧任务清空新请求，待过渡/内容就绪后执行。",
+      "test": "node scripts/regression/f05-f07-routing.mjs"
+    },
+    {
+      "id": "F06",
+      "priority": "P1",
+      "status": "通过",
+      "file": "src/App.tsx",
+      "line": 1705,
+      "cause": "分享房间取自拍摄相机，关联跳转后与内容所属房间不同。",
+      "trigger": "书房手记→作品→明信片，以及作品→手记；分别冷启动链接。",
+      "fix": "分享种类由 gallery/study 目标区分，携带 item/标题/所属房间，拍摄地点独立。",
+      "test": "node scripts/regression/f05-f07-routing.mjs"
+    },
+    {
+      "id": "F07",
+      "priority": "P1",
+      "status": "通过",
+      "file": "src/lib/deeplink.ts",
+      "line": 104,
+      "cause": "晴天被省略，接收者保存的雨天覆盖链接。",
+      "trigger": "保存 rain 后打开新生成的 clear 分享。",
+      "fix": "新链接明确序列化 clear/rain，保留旧链接的缺省语义。",
+      "test": "node scripts/regression/f05-f07-routing.mjs"
+    },
+    {
+      "id": "F08",
+      "priority": "P1",
+      "status": "通过",
+      "file": "src/components/MediaPickers.tsx",
+      "line": 35,
+      "cause": "常驻编辑器接收旧异步上传/保存结果，污染新会话。",
+      "trigger": "保留真实上传响应，关闭编辑器、新建表单后再释放旧响应。",
+      "fix": "编辑器按会话卸载、记录 key 隔离；异步 alive/取消检查；迟到资产引用感知回收。",
+      "test": "node scripts/regression/f08-session.mjs"
+    },
+    {
+      "id": "F09",
+      "priority": "P1",
+      "status": "通过",
+      "file": "src/lib/media.ts",
+      "line": 360,
+      "cause": "视频检查阶段尚无 controller，取消后迟到结果仍启动上传。",
+      "trigger": "延迟真实 MP4 元信息解析，检查期间取消。",
+      "fix": "校验 AbortSignal、generation 失效、迟到 controller 取消；本地/TUS 启动、恢复、登记均检查取消。",
+      "test": "node scripts/regression/f09-cancel.mjs"
+    },
+    {
+      "id": "F10",
+      "priority": "P1",
+      "status": "通过",
+      "file": "src/Camera.tsx",
+      "line": 29,
+      "cause": "隐藏页面只 kill tween，留下中间位置和已聚焦状态。",
+      "trigger": "聚焦 120 ms 后隐藏页面；另测 resize 与轻柔模式切换。",
+      "fix": "保存目标并完成到当前尺寸下的确定终点，同步清理 tween。",
+      "test": "node scripts/regression/f10-focus.mjs"
+    },
+    {
+      "id": "F11",
+      "priority": "P1",
+      "status": "通过",
+      "file": "supabase/migrations/202611160002_required_versions.sql",
+      "line": 2,
+      "cause": "缺省/coercion 与 SQL NULL 比较允许绕过版本检查，超范围值触发数据库错误。",
+      "trigger": "缺失、NULL、0、负数、小数、字符串、超 int32 版本；合法过期版本。",
+      "fix": "HTTP 统一正 int32 版本，创建严格 0；非法 400、过期 409；SQL 显式拒绝 NULL 并明确比较。",
+      "test": "node scripts/regression/f11-versions.mjs"
+    },
+    {
+      "id": "F12",
+      "priority": "P1",
+      "status": "通过",
+      "file": "scripts/sync-supabase.mjs",
+      "line": 63,
+      "cause": "同 slug 复用云端 ID，却把本地 ID 写进手记关联。",
+      "trigger": "云端同 slug 不同 ID；分别跳过和 --force 导入。",
+      "fix": "全部项目先预检 ID 映射，统一重写手记草稿与发布快照，映射失败先于内容写入。",
+      "test": "node scripts/regression/f12-sync.mjs"
+    },
+    {
+      "id": "F13",
+      "priority": "P1",
+      "status": "通过",
+      "file": "supabase/migrations/202611160003_transactional_import.sql",
+      "line": 2,
+      "cause": "直接 upsert 不更新版本，媒体 upsert 可覆盖已登记二进制/删除状态。",
+      "trigger": "导入前取得版本，再并发编辑后导入；重复导入；已登记媒体再次同步。",
+      "fix": "service-only 事务 RPC 校验预检版本，递增内容/排序版本与时间；媒体身份不可覆盖。",
+      "test": "node scripts/regression/f13-import.mjs"
+    },
+    {
+      "id": "F14",
+      "priority": "P1",
+      "status": "通过",
+      "file": "src/lib/media.ts",
+      "line": 16,
+      "cause": "清缓存不使在途请求失效，旧 finally 还可能移除新任务。",
+      "trigger": "旧签名挂起→清 admin 缓存→新请求→乱序完成。",
+      "fix": "public/admin 独立 epoch，结果写入与 finally 同时检查任务身份。",
+      "test": "node scripts/regression/f14-cache.mjs"
+    },
+    {
+      "id": "F15",
+      "priority": "P1",
+      "status": "通过",
+      "file": "scripts/local-cms-store.mjs",
+      "line": 1185,
+      "cause": "导出跳过缺失素材并覆盖完整旧产物，Windows 目录替换可能失败；Vite 在 writeBundle 前清空 outDir，独立导出原子化不足以保护旧完整构建。",
+      "trigger": "缺失/错误类型/非 ready/缺缩略图；瞬时和永久 EPERM 更名注入；实际 Vite 缺素材、编译失败、预检后删除源文件。",
+      "fix": "验证公开引用闭包及文件后暂存、原子替换和失败恢复；configResolved 在 Vite 清空输出前验证不可变快照并备份完整旧输出，构建/渲染失败或未完成时恢复，清理暂存；恢复受阻时保留唯一完整副本并报路径。",
+      "test": "node scripts/regression/f15-export.mjs",
+      "tests": [
+        {
+          "command": "node scripts/regression/f15-export.mjs",
+          "exitCode": 0
+        },
+        {
+          "command": "node scripts/regression/f15-build.mjs",
+          "exitCode": 0
+        },
+        {
+          "command": "node scripts/regression/f15-atomic-io.mjs",
+          "exitCode": 0
+        }
+      ],
+      "relatedFiles": [
+        "scripts/local-cms-plugin.mjs",
+        "scripts/private-data-guard.mjs",
+        "scripts/public-snapshot.mjs",
+        "scripts/regression/f15-build.mjs"
+      ]
+    },
+    {
+      "id": "F16",
+      "priority": "P1",
+      "status": "通过",
+      "file": "scripts/local-sessions.mjs",
+      "line": 3,
+      "cause": "LAN PIN 仅在请求头中，图片/视频无法使用该鉴权，缺少界面入口和会话。",
+      "trigger": "真实 LAN 地址登录、草稿图/视频 Range、退出、错误 PIN 限流、网络失败及迟到 health。",
+      "fix": "一小时随机 HttpOnly/SameSite=Strict Cookie，登录/退出失效缓存，CLI PIN 头兼容，不持久保存 PIN。",
+      "test": "node scripts/regression/f16-lan.mjs"
+    },
+    {
+      "id": "F17",
+      "priority": "P2",
+      "status": "通过",
+      "file": "scripts/local-cms-store.mjs",
+      "line": 210,
+      "cause": "仅清理 .part，最终孤儿文件残留；清理错误容易被忽略。",
+      "trigger": "24 小时最终文件、活动租约、finalize 后取消、迟到写入、坏链接遍历错误、HTTP 200 带 errors。",
+      "fix": "上传租约/完成状态/取消墓碑；宽限期回收并排除引用；错误返回且界面保留重试、不宣布成功。",
+      "test": "node scripts/regression/f17-orphans.mjs"
+    },
+    {
+      "id": "F18",
+      "priority": "P2",
+      "status": "通过",
+      "file": "scripts/local-cms-plugin.mjs",
+      "line": 165,
+      "cause": "suffix 被当成从 0 开始的闭区间。",
+      "trigger": "bytes=-10、超大 suffix、0-0、开放结尾、越界、多区间逐字节比对。",
+      "fix": "分别解析闭区间/开放结尾/suffix；越界 416，多区间忽略 Range 返回完整 200。",
+      "test": "node scripts/regression/f18-range.mjs"
+    },
+    {
+      "id": "F19",
+      "priority": "P2",
+      "status": "通过",
+      "file": "scripts/test-runtime.mjs",
+      "line": 25,
+      "cause": "依赖历史 .qa/seed、可选跳过视频、固定 Chrome 路径/端口和退出清理不统一。",
+      "trigger": "无私有配置与历史 .qa 的新检出；8 MiB MP4 分片及 TUS 重试。",
+      "fix": "跟踪 7490 字节 MP4，以合法 free box 扩展为 8 MiB；共享浏览器选择、动态端口及进程清理。",
+      "test": "node scripts/regression/f19-fixture.mjs"
+    },
+    {
+      "id": "F20",
+      "priority": "P2",
+      "status": "通过",
+      "file": "scripts/check-assets.mjs",
+      "line": 7,
+      "cause": "只检查哈希、Mock 遮盖真实 SQL/Edge、宽泛错误白名单及 Node 环境不匹配。",
+      "trigger": "不可解码但哈希匹配的 GLB、真实 Supabase 故障注入、无私有输入的完整 CI 链。",
+      "fix": "资源解码/树冠基准/照片 ROI；按请求和次数验收；真实 Auth/RLS/Storage/Edge、配置及 Edge 类型、Node 24 CI。",
+      "test": "node scripts/regression/f20-gates.mjs"
+    },
+    {
+      "id": "F21",
+      "priority": "P2",
+      "status": "通过",
+      "file": "scripts/export-public.mjs",
+      "line": 13,
+      "cause": "Pages 读取被忽略的 local-data，缺失来源静默空导出；签名 URL 不能持久发布，Git 换行破坏哈希。",
+      "trigger": "缺失来源、显式空快照、local/supabase 公开导出和构建、autocrlf=true 实际检出。",
+      "fix": "显式来源、独立 site-content、公开接口下载并改写媒体、哈希清单与字节保留属性；Pages 必选且不回退。",
+      "test": "node scripts/regression/f21-sources.mjs"
+    }
+  ],
+  "commands": [
+    {
+      "command": "npx tsc --noEmit",
+      "exitCode": 0,
+      "log": "C:\\Users\\Administrator\\Videos\\video\\paper-home\\.qa\\final-latest\\01.log",
+      "scope": "早前验收记录，本次未重复执行"
+    },
+    {
+      "command": "npm run assets:verify",
+      "exitCode": 0,
+      "log": "C:\\Users\\Administrator\\Videos\\video\\paper-home\\.qa\\final-latest\\06.log",
+      "scope": "早前验收记录，本次未重复执行"
+    },
+    {
+      "command": "npm run check:camera",
+      "exitCode": 0,
+      "durationSeconds": 0.85,
+      "log": "C:\\Users\\Administrator\\Videos\\video\\paper-home\\.qa\\final-verification\\03.log",
+      "scope": "早前验收记录，本次未重复执行"
+    },
+    {
+      "command": "npm run check:sound",
+      "exitCode": 0,
+      "durationSeconds": 33.94,
+      "log": "C:\\Users\\Administrator\\Videos\\video\\paper-home\\.qa\\final-verification\\04.log",
+      "scope": "早前验收记录，本次未重复执行"
+    },
+    {
+      "command": "npm run check:phase1",
+      "exitCode": 0,
+      "durationSeconds": 24.25,
+      "log": "C:\\Users\\Administrator\\Videos\\video\\paper-home\\.qa\\final-verification\\05.log",
+      "scope": "早前验收记录，本次未重复执行"
+    },
+    {
+      "command": "npm run check:phase2",
+      "exitCode": 0,
+      "durationSeconds": 52.39,
+      "log": "C:\\Users\\Administrator\\Videos\\video\\paper-home\\.qa\\final-verification\\06.log",
+      "scope": "早前验收记录，本次未重复执行"
+    },
+    {
+      "command": "npm run check:local",
+      "exitCode": 0,
+      "log": ".qa/f15-local-final.log",
+      "scope": "交接已有：最后 F15 补修后通过，本次未重复执行"
+    },
+    {
+      "command": "npm run check:cms",
+      "exitCode": 0,
+      "durationSeconds": 61.54,
+      "log": "C:\\Users\\Administrator\\Videos\\video\\paper-home\\.qa\\final-verification\\08.log",
+      "scope": "早前验收记录，本次未重复执行"
+    },
+    {
+      "command": "npm run check:polish",
+      "exitCode": 0,
+      "log": "C:\\Users\\Administrator\\Videos\\video\\paper-home\\.qa\\final-recovery\\01.log",
+      "scope": "早前验收记录，本次未重复执行"
+    },
+    {
+      "command": "npm run check:interactions",
+      "exitCode": 0,
+      "log": "C:\\Users\\Administrator\\Videos\\video\\paper-home\\.qa\\final-recovery\\02.log",
+      "scope": "早前验收记录，本次未重复执行"
+    },
+    {
+      "finishedAt": "2026-11-16T08:13:07.8446135Z",
+      "log": ".qa/final-f15-closure/build-normal.log",
+      "command": "npm run build (normal environment)",
+      "startedAt": "2026-11-16T08:12:48.9881778Z",
+      "exitCode": 0,
+      "durationSeconds": 18.856,
+      "scope": "本次最后 F15 补修后执行"
+    },
+    {
+      "log": ".qa/final-f15-closure/build-local.log",
+      "startedAt": "2026-11-16T08:13:07.9592752Z",
+      "command": "npm run build:local (isolated explicit source)",
+      "finishedAt": "2026-11-16T08:13:26.1334695Z",
+      "source": "copied explicit public site-content",
+      "exitCode": 0,
+      "forceLocal": true,
+      "durationSeconds": 18.174,
+      "scope": "本次最后 F15 补修后执行"
+    },
+    {
+      "command": "npm run check:edge-cases",
+      "exitCode": 0,
+      "log": "C:\\Users\\Administrator\\Videos\\video\\paper-home\\.qa\\final-recovery\\05.log",
+      "scope": "早前验收记录，本次未重复执行"
+    },
+    {
+      "command": "npm run check:config",
+      "exitCode": 0,
+      "log": "C:\\Users\\Administrator\\Videos\\video\\paper-home\\.qa\\final-latest\\02.log",
+      "scope": "早前验收记录，本次未重复执行"
+    },
+    {
+      "command": "npm run check:edge",
+      "exitCode": 0,
+      "log": "C:\\Users\\Administrator\\Videos\\video\\paper-home\\.qa\\final-latest\\03.log",
+      "scope": "早前验收记录，本次未重复执行"
+    },
+    {
+      "exitCode": 0,
+      "startedAt": "2026-11-16T08:07:25.1512141Z",
+      "command": "npm run check:regressions",
+      "finishedAt": "2026-11-16T08:12:38.6852054Z",
+      "log": ".qa/final-f15-closure/regressions.log",
+      "durationSeconds": 313.534,
+      "scope": "本次最后 F15 补修后执行"
+    },
+    {
+      "command": "npm run check:supabase",
+      "exitCode": 0,
+      "log": ".qa/f15-supabase-final.log",
+      "scope": "交接已有：最后 F15 补修后通过，本次未重复执行"
+    }
+  ],
+  "regressions": [
+    {
+      "name": "f01-security",
+      "exitCode": 0,
+      "durationMs": 1422
+    },
+    {
+      "name": "f02-cleanup",
+      "exitCode": 0,
+      "durationMs": 3093
+    },
+    {
+      "name": "f03-lazy",
+      "exitCode": 0,
+      "durationMs": 32331
+    },
+    {
+      "name": "f04-trees",
+      "exitCode": 0,
+      "durationMs": 1032
+    },
+    {
+      "name": "f04-browser",
+      "exitCode": 0,
+      "durationMs": 36769
+    },
+    {
+      "name": "f05-f07-routing",
+      "exitCode": 0,
+      "durationMs": 51745
+    },
+    {
+      "name": "f08-session",
+      "exitCode": 0,
+      "durationMs": 25124
+    },
+    {
+      "name": "f09-cancel",
+      "exitCode": 0,
+      "durationMs": 27535
+    },
+    {
+      "name": "f10-focus",
+      "exitCode": 0,
+      "durationMs": 25711
+    },
+    {
+      "name": "f11-versions",
+      "exitCode": 0,
+      "durationMs": 1598
+    },
+    {
+      "name": "f12-sync",
+      "exitCode": 0,
+      "durationMs": 404
+    },
+    {
+      "name": "f13-import",
+      "exitCode": 0,
+      "durationMs": 1478
+    },
+    {
+      "name": "f14-cache",
+      "exitCode": 0,
+      "durationMs": 328
+    },
+    {
+      "name": "f15-export",
+      "exitCode": 0,
+      "durationMs": 358
+    },
+    {
+      "name": "f15-build",
+      "exitCode": 0,
+      "durationMs": 988
+    },
+    {
+      "name": "f15-atomic-io",
+      "exitCode": 0,
+      "durationMs": 1131
+    },
+    {
+      "name": "f16-lan",
+      "exitCode": 0,
+      "durationMs": 708
+    },
+    {
+      "name": "f16-lan-ui",
+      "exitCode": 0,
+      "durationMs": 24262
+    },
+    {
+      "name": "f17-orphans",
+      "exitCode": 0,
+      "durationMs": 348
+    },
+    {
+      "name": "f17-cleanup-ui",
+      "exitCode": 0,
+      "durationMs": 23380
+    },
+    {
+      "name": "f18-range",
+      "exitCode": 0,
+      "durationMs": 631
+    },
+    {
+      "name": "f19-fixture",
+      "exitCode": 0,
+      "durationMs": 69
+    },
+    {
+      "name": "f20-gates",
+      "exitCode": 0,
+      "durationMs": 286
+    },
+    {
+      "name": "f21-sources",
+      "exitCode": 0,
+      "durationMs": 858
+    },
+    {
+      "name": "f21-git",
+      "exitCode": 0,
+      "durationMs": 420
+    },
+    {
+      "name": "gpu-resources",
+      "exitCode": 0,
+      "durationMs": 50940
+    }
+  ],
+  "cleanCi": [
+    {
+      "name": "TypeScript",
+      "exitCode": 0,
+      "durationMs": 5142
+    },
+    {
+      "name": "check-assets",
+      "exitCode": 0,
+      "durationMs": 5669
+    },
+    {
+      "name": "camera-check",
+      "exitCode": 0,
+      "durationMs": 459
+    },
+    {
+      "name": "sound-verify",
+      "exitCode": 0,
+      "durationMs": 32759
+    },
+    {
+      "name": "phase1-verify",
+      "exitCode": 0,
+      "durationMs": 23909
+    },
+    {
+      "name": "phase2-verify",
+      "exitCode": 0,
+      "durationMs": 52136
+    },
+    {
+      "name": "local-verify",
+      "exitCode": 0,
+      "durationMs": 58994
+    },
+    {
+      "name": "cms-verify",
+      "exitCode": 0,
+      "durationMs": 62280
+    },
+    {
+      "name": "polish-check",
+      "exitCode": 0,
+      "durationMs": 210417
+    },
+    {
+      "name": "verify",
+      "exitCode": 0,
+      "durationMs": 181459
+    },
+    {
+      "name": "normal build",
+      "exitCode": 0,
+      "durationMs": 4402
+    },
+    {
+      "name": "isolated local build",
+      "exitCode": 0,
+      "durationMs": 4240
+    },
+    {
+      "name": "edge cases",
+      "exitCode": 0,
+      "durationMs": 41899
+    },
+    {
+      "name": "config types",
+      "exitCode": 0,
+      "durationMs": 1118
+    },
+    {
+      "name": "Edge types",
+      "exitCode": 0,
+      "durationMs": 3980
+    },
+    {
+      "name": "F01-F21 regressions",
+      "exitCode": 0,
+      "durationMs": 257354
+    },
+    {
+      "name": "real Supabase",
+      "exitCode": 0,
+      "durationMs": 109414
+    }
+  ],
+  "cleanSupplement": "F15 PASS: transient rename retries and permanent replacement failure preserve complete output\r\nF17 PASS: 24h final-file sweep, active lease protection and cancellation tombstones\r\nF21 PASS: Git checkout with autocrlf preserves committed snapshot bytes and hashes\r\nF17 PASS: HTTP 200 with cleanup errors shows an error, retains retry and never announces success\r\n",
+  "performance": {
+    "baseline": [
+      {
+        "summary": {
+          "samples": 2422,
+          "durationMs": 75199.39999998803,
+          "averageFPS": 32.20770378487575,
+          "p50ms": 33.29999999998836,
+          "p95ms": 58.5,
+          "p99ms": 75,
+          "maxMs": 83.39999999999418,
+          "over33ms": 784,
+          "over50ms": 226,
+          "over100ms": 0
+        },
+        "renderer": "ANGLE (AMD, AMD Radeon 780M Graphics (0x00001900) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "triangles": 83027,
+        "phases": {
+          "yard": {
+            "samples": 173,
+            "durationMs": 4000.7999999880776,
+            "averageFPS": 43.24135172978293,
+            "p50ms": 25,
+            "p95ms": 41.70000000000073,
+            "p99ms": 50,
+            "maxMs": 50,
+            "over33ms": 17,
+            "over50ms": 0,
+            "over100ms": 0
+          },
+          "entry": {
+            "samples": 191,
+            "durationMs": 5358.200000000001,
+            "averageFPS": 35.646299130304946,
+            "p50ms": 25,
+            "p95ms": 50.20000000000073,
+            "p99ms": 66.70000000000073,
+            "maxMs": 75,
+            "over33ms": 42,
+            "over50ms": 13,
+            "over100ms": 0
+          },
+          "walking": {
+            "samples": 762,
+            "durationMs": 24507.899999999998,
+            "averageFPS": 31.09201522774289,
+            "p50ms": 33.299999999995634,
+            "p95ms": 66.59999999999854,
+            "p99ms": 75,
+            "maxMs": 83.19999999999709,
+            "over33ms": 278,
+            "over50ms": 83,
+            "over100ms": 0
+          },
+          "first-gallery": {
+            "samples": 175,
+            "durationMs": 5758.200000000004,
+            "averageFPS": 30.39144176999755,
+            "p50ms": 33.299999999995634,
+            "p95ms": 66.59999999999854,
+            "p99ms": 75.19999999999709,
+            "maxMs": 83.30000000000291,
+            "over33ms": 67,
+            "over50ms": 22,
+            "over100ms": 0
+          },
+          "first-study": {
+            "samples": 230,
+            "durationMs": 7658.199999999997,
+            "averageFPS": 30.033167062756274,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.59999999999854,
+            "p99ms": 75,
+            "maxMs": 83.29999999999563,
+            "over33ms": 90,
+            "over50ms": 26,
+            "over100ms": 0
+          },
+          "first-blank": {
+            "samples": 224,
+            "durationMs": 7174.799999999996,
+            "averageFPS": 31.220382449685026,
+            "p50ms": 33.30000000000291,
+            "p95ms": 58.40000000000873,
+            "p99ms": 75,
+            "maxMs": 75,
+            "over33ms": 72,
+            "over50ms": 25,
+            "over100ms": 0
+          },
+          "return-yard": {
+            "samples": 274,
+            "durationMs": 8133.200000000012,
+            "averageFPS": 33.68907687011258,
+            "p50ms": 25.09999999999127,
+            "p95ms": 58.39999999999418,
+            "p99ms": 74.89999999999418,
+            "maxMs": 83.30000000000291,
+            "over33ms": 70,
+            "over50ms": 21,
+            "over100ms": 0
+          },
+          "repeat-study": {
+            "samples": 267,
+            "durationMs": 8149.799999999988,
+            "averageFPS": 32.76154016049478,
+            "p50ms": 25.10000000000582,
+            "p95ms": 58.39999999999418,
+            "p99ms": 66.80000000000291,
+            "maxMs": 75.10000000000582,
+            "over33ms": 86,
+            "over50ms": 20,
+            "over100ms": 0
+          },
+          "return-hall": {
+            "samples": 126,
+            "durationMs": 4458.300000000003,
+            "averageFPS": 28.261893546867622,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.79999999998836,
+            "p99ms": 75,
+            "maxMs": 83.39999999999418,
+            "over33ms": 62,
+            "over50ms": 16,
+            "over100ms": 0
+          }
+        }
+      },
+      {
+        "summary": {
+          "samples": 2420,
+          "durationMs": 75468.00000004769,
+          "averageFPS": 32.066571261971575,
+          "p50ms": 33.200000000004366,
+          "p95ms": 66.59999999999854,
+          "p99ms": 75,
+          "maxMs": 100,
+          "over33ms": 783,
+          "over50ms": 236,
+          "over100ms": 0
+        },
+        "renderer": "ANGLE (AMD, AMD Radeon 780M Graphics (0x00001900) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "triangles": 83027,
+        "phases": {
+          "yard": {
+            "samples": 170,
+            "durationMs": 3994.4000000476844,
+            "averageFPS": 42.55958341627543,
+            "p50ms": 25,
+            "p95ms": 41.70000000000073,
+            "p99ms": 50.099999999998545,
+            "maxMs": 58.30000000000291,
+            "over33ms": 16,
+            "over50ms": 2,
+            "over100ms": 0
+          },
+          "entry": {
+            "samples": 193,
+            "durationMs": 5424.899999999998,
+            "averageFPS": 35.57669265792919,
+            "p50ms": 25,
+            "p95ms": 58.29999999999927,
+            "p99ms": 66.79999999999927,
+            "maxMs": 75.20000000000073,
+            "over33ms": 43,
+            "over50ms": 10,
+            "over100ms": 0
+          },
+          "walking": {
+            "samples": 767,
+            "durationMs": 24482.9,
+            "averageFPS": 31.327988105984176,
+            "p50ms": 33.299999999995634,
+            "p95ms": 66.60000000000218,
+            "p99ms": 75,
+            "maxMs": 75.10000000000582,
+            "over33ms": 262,
+            "over50ms": 85,
+            "over100ms": 0
+          },
+          "first-gallery": {
+            "samples": 171,
+            "durationMs": 5808.199999999997,
+            "averageFPS": 29.44113494714371,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.69999999999709,
+            "p99ms": 75,
+            "maxMs": 83.20000000000437,
+            "over33ms": 67,
+            "over50ms": 23,
+            "over100ms": 0
+          },
+          "first-study": {
+            "samples": 227,
+            "durationMs": 7708.199999999997,
+            "averageFPS": 29.449158039490424,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.69999999999709,
+            "p99ms": 75.09999999999854,
+            "maxMs": 100,
+            "over33ms": 93,
+            "over50ms": 28,
+            "over100ms": 0
+          },
+          "first-blank": {
+            "samples": 223,
+            "durationMs": 7216.5,
+            "averageFPS": 30.901406498995357,
+            "p50ms": 33.30000000000291,
+            "p95ms": 58.5,
+            "p99ms": 74.90000000000873,
+            "maxMs": 83.30000000000291,
+            "over33ms": 79,
+            "over50ms": 25,
+            "over100ms": 0
+          },
+          "return-yard": {
+            "samples": 273,
+            "durationMs": 8141.5,
+            "averageFPS": 33.531904440213715,
+            "p50ms": 25.10000000000582,
+            "p95ms": 58.39999999999418,
+            "p99ms": 66.80000000000291,
+            "maxMs": 75.09999999999127,
+            "over33ms": 77,
+            "over50ms": 24,
+            "over100ms": 0
+          },
+          "repeat-study": {
+            "samples": 268,
+            "durationMs": 8166.400000000009,
+            "averageFPS": 32.817398119122224,
+            "p50ms": 25.10000000000582,
+            "p95ms": 58.40000000000873,
+            "p99ms": 75,
+            "maxMs": 75.10000000000582,
+            "over33ms": 84,
+            "over50ms": 22,
+            "over100ms": 0
+          },
+          "return-hall": {
+            "samples": 128,
+            "durationMs": 4525,
+            "averageFPS": 28.287292817679557,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.70000000001164,
+            "p99ms": 75,
+            "maxMs": 75,
+            "over33ms": 62,
+            "over50ms": 17,
+            "over100ms": 0
+          }
+        }
+      },
+      {
+        "summary": {
+          "samples": 2416,
+          "durationMs": 75169.20000000001,
+          "averageFPS": 32.140823635212286,
+          "p50ms": 33.19999999999709,
+          "p95ms": 66.59999999999127,
+          "p99ms": 75,
+          "maxMs": 108.40000000000146,
+          "over33ms": 787,
+          "over50ms": 236,
+          "over100ms": 1
+        },
+        "renderer": "ANGLE (AMD, AMD Radeon 780M Graphics (0x00001900) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "triangles": 83027,
+        "phases": {
+          "yard": {
+            "samples": 169,
+            "durationMs": 3995.5999999999985,
+            "averageFPS": 42.29652617879669,
+            "p50ms": 25,
+            "p95ms": 41.79999999999927,
+            "p99ms": 50.10000000000218,
+            "maxMs": 50.10000000000218,
+            "over33ms": 18,
+            "over50ms": 2,
+            "over100ms": 0
+          },
+          "entry": {
+            "samples": 191,
+            "durationMs": 5408.200000000001,
+            "averageFPS": 35.316741244776445,
+            "p50ms": 25,
+            "p95ms": 58.20000000000073,
+            "p99ms": 66.70000000000073,
+            "maxMs": 66.70000000000073,
+            "over33ms": 46,
+            "over50ms": 13,
+            "over100ms": 0
+          },
+          "walking": {
+            "samples": 769,
+            "durationMs": 24482.899999999998,
+            "averageFPS": 31.409677775100175,
+            "p50ms": 33.299999999995634,
+            "p95ms": 66.69999999999709,
+            "p99ms": 75,
+            "maxMs": 91.59999999999854,
+            "over33ms": 257,
+            "over50ms": 80,
+            "over100ms": 0
+          },
+          "first-gallery": {
+            "samples": 174,
+            "durationMs": 5733.200000000004,
+            "averageFPS": 30.349543012628178,
+            "p50ms": 33.30000000000291,
+            "p95ms": 58.400000000001455,
+            "p99ms": 75,
+            "maxMs": 75.09999999999854,
+            "over33ms": 80,
+            "over50ms": 23,
+            "over100ms": 0
+          },
+          "first-study": {
+            "samples": 227,
+            "durationMs": 7699.799999999996,
+            "averageFPS": 29.48128522818776,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.69999999999709,
+            "p99ms": 75,
+            "maxMs": 108.40000000000146,
+            "over33ms": 93,
+            "over50ms": 28,
+            "over100ms": 1
+          },
+          "first-blank": {
+            "samples": 220,
+            "durationMs": 7233.300000000003,
+            "averageFPS": 30.414886704547015,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.60000000000582,
+            "p99ms": 74.90000000000873,
+            "maxMs": 91.69999999999709,
+            "over33ms": 82,
+            "over50ms": 25,
+            "over100ms": 0
+          },
+          "return-yard": {
+            "samples": 275,
+            "durationMs": 8141.5,
+            "averageFPS": 33.7775594177977,
+            "p50ms": 25.10000000000582,
+            "p95ms": 58.30000000000291,
+            "p99ms": 66.60000000000582,
+            "maxMs": 66.69999999999709,
+            "over33ms": 79,
+            "over50ms": 24,
+            "over100ms": 0
+          },
+          "repeat-study": {
+            "samples": 269,
+            "durationMs": 8158.199999999997,
+            "averageFPS": 32.97295972150721,
+            "p50ms": 25.10000000000582,
+            "p95ms": 58.39999999999418,
+            "p99ms": 75,
+            "maxMs": 75.09999999999127,
+            "over33ms": 77,
+            "over50ms": 22,
+            "over100ms": 0
+          },
+          "return-hall": {
+            "samples": 122,
+            "durationMs": 4316.5,
+            "averageFPS": 28.2636395227615,
+            "p50ms": 33.30000000000291,
+            "p95ms": 74.89999999999418,
+            "p99ms": 83.30000000000291,
+            "maxMs": 83.40000000000873,
+            "over33ms": 55,
+            "over50ms": 19,
+            "over100ms": 0
+          }
+        }
+      }
+    ],
+    "current": [
+      {
+        "summary": {
+          "samples": 2319,
+          "durationMs": 75584.09999998807,
+          "averageFPS": 30.681055936372413,
+          "p50ms": 33.29999999999927,
+          "p95ms": 66.60000000000582,
+          "p99ms": 75,
+          "maxMs": 91.70000000001164,
+          "over33ms": 881,
+          "over50ms": 267,
+          "over100ms": 0
+        },
+        "renderer": "ANGLE (AMD, AMD Radeon 780M Graphics (0x00001900) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "triangles": 82477,
+        "phases": {
+          "yard": {
+            "samples": 124,
+            "durationMs": 4002.2999999880776,
+            "averageFPS": 30.982185243577288,
+            "p50ms": 33.29999999999927,
+            "p95ms": 66.59999999999854,
+            "p99ms": 74.89999999999782,
+            "maxMs": 75.10000000000218,
+            "over33ms": 41,
+            "over50ms": 16,
+            "over100ms": 0
+          },
+          "entry": {
+            "samples": 177,
+            "durationMs": 5433.100000000002,
+            "averageFPS": 32.57808617547992,
+            "p50ms": 33.29999999999927,
+            "p95ms": 58.30000000000291,
+            "p99ms": 66.70000000000073,
+            "maxMs": 66.70000000000073,
+            "over33ms": 53,
+            "over50ms": 14,
+            "over100ms": 0
+          },
+          "walking": {
+            "samples": 768,
+            "durationMs": 24474.600000000002,
+            "averageFPS": 31.37947096173175,
+            "p50ms": 33.299999999995634,
+            "p95ms": 66.69999999999709,
+            "p99ms": 75.09999999999854,
+            "maxMs": 83.30000000000291,
+            "over33ms": 273,
+            "over50ms": 87,
+            "over100ms": 0
+          },
+          "first-gallery": {
+            "samples": 169,
+            "durationMs": 5724.799999999996,
+            "averageFPS": 29.520681945220815,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.69999999999709,
+            "p99ms": 75,
+            "maxMs": 83.30000000000291,
+            "over33ms": 77,
+            "over50ms": 22,
+            "over100ms": 0
+          },
+          "first-study": {
+            "samples": 224,
+            "durationMs": 7724.799999999996,
+            "averageFPS": 28.997514498757265,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.70000000000437,
+            "p99ms": 75,
+            "maxMs": 83.40000000000146,
+            "over33ms": 101,
+            "over50ms": 29,
+            "over100ms": 0
+          },
+          "first-blank": {
+            "samples": 216,
+            "durationMs": 7108.200000000012,
+            "averageFPS": 30.387439858191897,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.5,
+            "p99ms": 75.10000000000582,
+            "maxMs": 91.70000000001164,
+            "over33ms": 79,
+            "over50ms": 26,
+            "over100ms": 0
+          },
+          "return-yard": {
+            "samples": 263,
+            "durationMs": 8316.599999999991,
+            "averageFPS": 31.62349998797589,
+            "p50ms": 33.29999999998836,
+            "p95ms": 58.40000000000873,
+            "p99ms": 74.90000000000873,
+            "maxMs": 75,
+            "over33ms": 95,
+            "over50ms": 29,
+            "over100ms": 0
+          },
+          "repeat-study": {
+            "samples": 254,
+            "durationMs": 8341.5,
+            "averageFPS": 30.450158844332556,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.69999999999709,
+            "p99ms": 75.09999999999127,
+            "maxMs": 75.10000000000582,
+            "over33ms": 100,
+            "over50ms": 27,
+            "over100ms": 0
+          },
+          "return-hall": {
+            "samples": 124,
+            "durationMs": 4458.199999999997,
+            "averageFPS": 27.81391593019606,
+            "p50ms": 33.30000000000291,
+            "p95ms": 74.90000000000873,
+            "p99ms": 75.09999999999127,
+            "maxMs": 75.10000000000582,
+            "over33ms": 62,
+            "over50ms": 17,
+            "over100ms": 0
+          }
+        }
+      },
+      {
+        "summary": {
+          "samples": 2301,
+          "durationMs": 75335.10000003575,
+          "averageFPS": 30.543531501237908,
+          "p50ms": 33.29999999999927,
+          "p95ms": 66.60000000000582,
+          "p99ms": 75,
+          "maxMs": 83.5,
+          "over33ms": 865,
+          "over50ms": 262,
+          "over100ms": 0
+        },
+        "renderer": "ANGLE (AMD, AMD Radeon 780M Graphics (0x00001900) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "triangles": 82477,
+        "phases": {
+          "yard": {
+            "samples": 127,
+            "durationMs": 3978.3000000357642,
+            "averageFPS": 31.92318326894862,
+            "p50ms": 33.29999999999927,
+            "p95ms": 66.70000000000073,
+            "p99ms": 66.79999999999927,
+            "maxMs": 66.80000000000291,
+            "over33ms": 40,
+            "over50ms": 17,
+            "over100ms": 0
+          },
+          "entry": {
+            "samples": 170,
+            "durationMs": 5366.5,
+            "averageFPS": 31.678002422435476,
+            "p50ms": 33.29999999999927,
+            "p95ms": 58.39999999999782,
+            "p99ms": 74.90000000000146,
+            "maxMs": 75,
+            "over33ms": 58,
+            "over50ms": 17,
+            "over100ms": 0
+          },
+          "walking": {
+            "samples": 751,
+            "durationMs": 24457.799999999996,
+            "averageFPS": 30.705950657867845,
+            "p50ms": 33.299999999995634,
+            "p95ms": 66.69999999999709,
+            "p99ms": 75,
+            "maxMs": 83.5,
+            "over33ms": 283,
+            "over50ms": 81,
+            "over100ms": 0
+          },
+          "first-gallery": {
+            "samples": 169,
+            "durationMs": 5749.9000000000015,
+            "averageFPS": 29.39181550983495,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.60000000000582,
+            "p99ms": 75,
+            "maxMs": 75,
+            "over33ms": 74,
+            "over50ms": 19,
+            "over100ms": 0
+          },
+          "first-study": {
+            "samples": 224,
+            "durationMs": 7716.500000000007,
+            "averageFPS": 29.02870472364411,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.59999999999854,
+            "p99ms": 75.10000000000582,
+            "maxMs": 83.40000000000146,
+            "over33ms": 97,
+            "over50ms": 30,
+            "over100ms": 0
+          },
+          "first-blank": {
+            "samples": 220,
+            "durationMs": 7249.899999999994,
+            "averageFPS": 30.34524614132611,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.69999999999709,
+            "p99ms": 74.90000000000873,
+            "maxMs": 75.10000000000582,
+            "over33ms": 81,
+            "over50ms": 24,
+            "over100ms": 0
+          },
+          "return-yard": {
+            "samples": 263,
+            "durationMs": 8166.600000000006,
+            "averageFPS": 32.204344525261405,
+            "p50ms": 33.19999999999709,
+            "p95ms": 58.40000000000873,
+            "p99ms": 66.70000000001164,
+            "maxMs": 75.09999999999127,
+            "over33ms": 80,
+            "over50ms": 26,
+            "over100ms": 0
+          },
+          "repeat-study": {
+            "samples": 257,
+            "durationMs": 8308.099999999991,
+            "averageFPS": 30.933667144112405,
+            "p50ms": 33.30000000000291,
+            "p95ms": 58.40000000000873,
+            "p99ms": 66.80000000000291,
+            "maxMs": 83.39999999999418,
+            "over33ms": 93,
+            "over50ms": 32,
+            "over100ms": 0
+          },
+          "return-hall": {
+            "samples": 120,
+            "durationMs": 4341.5,
+            "averageFPS": 27.64021651502937,
+            "p50ms": 33.30000000000291,
+            "p95ms": 75,
+            "p99ms": 83.40000000000873,
+            "maxMs": 83.40000000000873,
+            "over33ms": 59,
+            "over50ms": 16,
+            "over100ms": 0
+          }
+        }
+      },
+      {
+        "summary": {
+          "samples": 2309,
+          "durationMs": 75308.50000000003,
+          "averageFPS": 30.660549605954166,
+          "p50ms": 33.29999999999927,
+          "p95ms": 66.60000000000582,
+          "p99ms": 75,
+          "maxMs": 83.5,
+          "over33ms": 874,
+          "over50ms": 264,
+          "over100ms": 0
+        },
+        "renderer": "ANGLE (AMD, AMD Radeon 780M Graphics (0x00001900) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "triangles": 82477,
+        "phases": {
+          "yard": {
+            "samples": 127,
+            "durationMs": 3976.5999999999985,
+            "averageFPS": 31.936830458180367,
+            "p50ms": 33.19999999999709,
+            "p95ms": 66.59999999999854,
+            "p99ms": 66.89999999999782,
+            "maxMs": 66.90000000000146,
+            "over33ms": 41,
+            "over50ms": 17,
+            "over100ms": 0
+          },
+          "entry": {
+            "samples": 175,
+            "durationMs": 5366.600000000002,
+            "averageFPS": 32.6091007341706,
+            "p50ms": 25.099999999998545,
+            "p95ms": 58.400000000001455,
+            "p99ms": 66.70000000000073,
+            "maxMs": 66.80000000000291,
+            "over33ms": 58,
+            "over50ms": 16,
+            "over100ms": 0
+          },
+          "walking": {
+            "samples": 749,
+            "durationMs": 24474.499999999996,
+            "averageFPS": 30.60328096590329,
+            "p50ms": 33.299999999995634,
+            "p95ms": 66.69999999999709,
+            "p99ms": 75,
+            "maxMs": 83.5,
+            "over33ms": 296,
+            "over50ms": 84,
+            "over100ms": 0
+          },
+          "first-gallery": {
+            "samples": 168,
+            "durationMs": 5708.200000000004,
+            "averageFPS": 29.43134438176656,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.69999999999709,
+            "p99ms": 75,
+            "maxMs": 75,
+            "over33ms": 72,
+            "over50ms": 22,
+            "over100ms": 0
+          },
+          "first-study": {
+            "samples": 225,
+            "durationMs": 7708.200000000004,
+            "averageFPS": 29.1896940920059,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.69999999999709,
+            "p99ms": 75,
+            "maxMs": 83.39999999999418,
+            "over33ms": 95,
+            "over50ms": 28,
+            "over100ms": 0
+          },
+          "first-blank": {
+            "samples": 218,
+            "durationMs": 7083.199999999997,
+            "averageFPS": 30.7770499209397,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.59999999999127,
+            "p99ms": 75,
+            "maxMs": 75.10000000000582,
+            "over33ms": 80,
+            "over50ms": 25,
+            "over100ms": 0
+          },
+          "return-yard": {
+            "samples": 264,
+            "durationMs": 8224.899999999994,
+            "averageFPS": 32.09765468273173,
+            "p50ms": 33.19999999999709,
+            "p95ms": 58.40000000000873,
+            "p99ms": 75,
+            "maxMs": 83.30000000000291,
+            "over33ms": 84,
+            "over50ms": 28,
+            "over100ms": 0
+          },
+          "repeat-study": {
+            "samples": 258,
+            "durationMs": 8324.900000000009,
+            "averageFPS": 30.9913632596187,
+            "p50ms": 33.30000000000291,
+            "p95ms": 66.59999999999127,
+            "p99ms": 74.80000000000291,
+            "maxMs": 83.39999999999418,
+            "over33ms": 93,
+            "over50ms": 28,
+            "over100ms": 0
+          },
+          "return-hall": {
+            "samples": 125,
+            "durationMs": 4441.399999999994,
+            "averageFPS": 28.14427883099927,
+            "p50ms": 33.30000000000291,
+            "p95ms": 74.89999999999418,
+            "p99ms": 75,
+            "maxMs": 75,
+            "over33ms": 55,
+            "over50ms": 16,
+            "over100ms": 0
+          }
+        }
+      }
+    ],
+    "criteria": {
+      "fpsMinimumRatio": 0.9,
+      "p95MaximumRatio": 1.1
+    },
+    "medians": {
+      "baseline": {
+        "averageFPS": 32.140823635212286,
+        "p95ms": 66.59999999999127
+      },
+      "current": {
+        "averageFPS": 30.660549605954166,
+        "p95ms": 66.60000000000582
+      }
+    },
+    "fpsRatio": 0.953944116490021,
+    "p95Ratio": 1.0000000000002185,
+    "passed": true,
+    "phaseMedians": {
+      "yard": {
+        "baselineFPS": 42.55958341627543,
+        "currentFPS": 31.92318326894862,
+        "retained": 0.7500821367706506
+      },
+      "entry": {
+        "baselineFPS": 35.57669265792919,
+        "currentFPS": 32.57808617547992,
+        "retained": 0.9157142989293312
+      },
+      "walking": {
+        "baselineFPS": 31.327988105984176,
+        "currentFPS": 30.705950657867845,
+        "retained": 0.9801443537959749
+      },
+      "first-gallery": {
+        "baselineFPS": 30.349543012628178,
+        "currentFPS": 29.43134438176656,
+        "retained": 0.9697458828134723
+      },
+      "first-study": {
+        "baselineFPS": 29.48128522818776,
+        "currentFPS": 29.02870472364411,
+        "retained": 0.984648549035748
+      },
+      "first-blank": {
+        "baselineFPS": 30.901406498995357,
+        "currentFPS": 30.387439858191897,
+        "retained": 0.9833675324513087
+      },
+      "return-yard": {
+        "baselineFPS": 33.68907687011258,
+        "currentFPS": 32.09765468273173,
+        "retained": 0.9527614783415841
+      },
+      "repeat-study": {
+        "baselineFPS": 32.817398119122224,
+        "currentFPS": 30.933667144112405,
+        "retained": 0.9425996244988052
+      },
+      "return-hall": {
+        "baselineFPS": 28.2636395227615,
+        "currentFPS": 27.81391593019606,
+        "retained": 0.984088263218781
+      }
+    }
+  },
+  "initialPerformance": {
+    "baseline": {
+      "averageFPS": 31.737144267350633,
+      "p95ms": 66.59999999999854
+    },
+    "current": {
+      "averageFPS": 28.45385285557601,
+      "p95ms": 66.80000000000291
+    }
+  },
+  "trees": [
+    {
+      "id": "island_tree_01",
+      "level": "high",
+      "triangles": 15413,
+      "budget": 16000,
+      "scores": [
+        0.8513120899718838,
+        0.8433168556750994,
+        0.8272941176470588,
+        0.835334011529332
+      ],
+      "minimumIoU": 0.8272941176470588,
+      "oldTriangles": 15963,
+      "oldBytes": 1448988,
+      "bytes": 3966708
+    },
+    {
+      "id": "island_tree_01",
+      "level": "low",
+      "triangles": 6511,
+      "budget": 7200,
+      "scores": [
+        0.8006661191714572,
+        0.7918688462806802,
+        0.776881545566903,
+        0.7833794648741268
+      ],
+      "minimumIoU": 0.776881545566903,
+      "oldTriangles": 7099,
+      "oldBytes": 552448,
+      "bytes": 1129884
+    },
+    {
+      "id": "island_tree_02",
+      "level": "high",
+      "triangles": 5919,
+      "budget": 6000,
+      "scores": [
+        0.8554858604618565,
+        0.8313274589870334,
+        0.8252586790445798,
+        0.8226281075596145
+      ],
+      "minimumIoU": 0.8226281075596145,
+      "oldTriangles": 5949,
+      "oldBytes": 1133120,
+      "bytes": 1856448
+    },
+    {
+      "id": "island_tree_02",
+      "level": "low",
+      "triangles": 2363,
+      "budget": 2600,
+      "scores": [
+        0.7890898090884646,
+        0.7572676402347482,
+        0.7530002790957299,
+        0.7580763046338255
+      ],
+      "minimumIoU": 0.7530002790957299,
+      "oldTriangles": 2613,
+      "oldBytes": 403252,
+      "bytes": 511004
+    },
+    {
+      "id": "tree_small_02",
+      "level": "high",
+      "triangles": 4313,
+      "budget": 4800,
+      "scores": [
+        0.8710826210826211,
+        0.8195359495846463,
+        0.8079211286758456,
+        0.8214375313597592
+      ],
+      "minimumIoU": 0.8079211286758456,
+      "oldTriangles": 4655,
+      "oldBytes": 1131532,
+      "bytes": 3272860
+    },
+    {
+      "id": "tree_small_02",
+      "level": "low",
+      "triangles": 2189,
+      "budget": 2200,
+      "scores": [
+        0.7959487757731959,
+        0.7186876925865506,
+        0.7195167987919969,
+        0.7412364945978391
+      ],
+      "minimumIoU": 0.7186876925865506,
+      "oldTriangles": 2581,
+      "oldBytes": 369548,
+      "bytes": 542240
+    }
+  ],
+  "assetBytes": {
+    "before": 36979587,
+    "after": 43219843
+  },
+  "gpuResources": {
+    "samples": [
+      {
+        "memory": {
+          "geometries": 130,
+          "textures": 97
+        },
+        "programs": 58,
+        "dpr": 1
+      },
+      {
+        "memory": {
+          "geometries": 130,
+          "textures": 97
+        },
+        "programs": 58,
+        "dpr": 1
+      },
+      {
+        "memory": {
+          "geometries": 130,
+          "textures": 97
+        },
+        "programs": 58,
+        "dpr": 1
+      },
+      {
+        "memory": {
+          "geometries": 130,
+          "textures": 97
+        },
+        "programs": 58,
+        "dpr": 1
+      }
+    ],
+    "recovered": {
+      "memory": {
+        "geometries": 130,
+        "textures": 97
+      },
+      "programs": 57,
+      "dpr": 1
+    },
+    "errors": []
+  },
+  "notVerified": [
+    "iOS Safari / Android 真机自动播放及低显存设备",
+    "生产数据库迁移与真实内容同步",
+    "远端 GitHub Actions / Pages 发布"
+  ],
+  "cleanCiScope": {
+    "revision": "最后 F15 Vite 预检补修之前",
+    "steps": 17,
+    "npmCiExitCode": 0,
+    "checkCiExitCode": 0,
+    "log": ".qa/clean-ci.log",
+    "evidence": ".qa/clean-ci-evidence/ci-results.json",
+    "latestFullChainRerun": false,
+    "platform": "Windows 本机干净副本；非远端 GitHub Ubuntu 实跑"
+  },
+  "cleanTargeted": {
+    "root": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\paper-home-clean-current-e9cceebb42a24f70a15b512913ce59a0",
+    "copiedFiles": [
+      {
+        "matches": true,
+        "sha256": "BCDEE3A89C8076E378A7C76CB9B06466D74BE2CE45EB4AC534B392FC51AE8C43",
+        "file": "scripts/local-cms-plugin.mjs"
+      },
+      {
+        "matches": true,
+        "sha256": "ECCA64DF4921977C004B18CF7E5D7F36C98F9A635EE3838A76A848C86911742E",
+        "file": "scripts/private-data-guard.mjs"
+      },
+      {
+        "matches": true,
+        "sha256": "174B8F84FC543D395730796A62305ED8E9E374489293909F230F3B49C5C954BD",
+        "file": "scripts/public-snapshot.mjs"
+      },
+      {
+        "matches": true,
+        "sha256": "52D697948D006B247438DE32CF14E933FBF6DB317D977378596BC650C43D7D17",
+        "file": "scripts/regression/f15-build.mjs"
+      },
+      {
+        "matches": true,
+        "sha256": "3220741F20A326036F10DB36B7CE4D317A7591C870E273EF87AFB522CB2DC81E",
+        "file": "scripts/regression/f21-sources.mjs"
+      },
+      {
+        "matches": true,
+        "sha256": "41495A262F4BB940AD7463716028E18D329B7B238FD3FA407911975C38ECA3F1",
+        "file": "scripts/check-regressions.mjs"
+      }
+    ],
+    "commands": [
+      {
+        "exitCode": 0,
+        "log": ".qa/final-f15-closure/clean-f15-build.log",
+        "finishedAt": "2026-11-16T08:13:36.1124421Z",
+        "command": "node scripts/regression/f15-build.mjs",
+        "startedAt": "2026-11-16T08:13:34.9490947Z"
+      },
+      {
+        "exitCode": 0,
+        "log": ".qa/final-f15-closure/clean-f21-sources.log",
+        "finishedAt": "2026-11-16T08:13:37.0450392Z",
+        "command": "node scripts/regression/f21-sources.mjs",
+        "startedAt": "2026-11-16T08:13:36.1329085Z"
+      },
+      {
+        "exitCode": 0,
+        "log": ".qa/final-f15-closure/clean-config.log",
+        "finishedAt": "2026-11-16T08:13:38.9283566Z",
+        "command": "npm run check:config",
+        "startedAt": "2026-11-16T08:13:37.0494795Z"
+      }
+    ],
+    "privateEnvironmentFiles": 0,
+    "scope": "Latest F15 targeted validation only; earlier full CI has not been repeated",
+    "historicalQaCopied": false,
+    "localDataCopied": false
+  },
+  "finalClosure": {
+    "status": "本次授权的验收及报告收尾完成；庭院性能限制保留",
+    "date": "2026-11-16",
+    "regressionCount": 26,
+    "regressionPassed": 26,
+    "regressionRun": {
+      "exitCode": 0,
+      "startedAt": "2026-11-16T08:07:25.1512141Z",
+      "command": "npm run check:regressions",
+      "finishedAt": "2026-11-16T08:12:38.6852054Z"
+    },
+    "builds": [
+      {
+        "finishedAt": "2026-11-16T08:13:07.8446135Z",
+        "log": ".qa/final-f15-closure/build-normal.log",
+        "command": "npm run build (normal environment)",
+        "startedAt": "2026-11-16T08:12:48.9881778Z",
+        "exitCode": 0
+      },
+      {
+        "log": ".qa/final-f15-closure/build-local.log",
+        "startedAt": "2026-11-16T08:13:07.9592752Z",
+        "command": "npm run build:local (isolated explicit source)",
+        "finishedAt": "2026-11-16T08:13:26.1334695Z",
+        "source": "copied explicit public site-content",
+        "exitCode": 0,
+        "forceLocal": true
+      }
+    ],
+    "sourceHashes": [
+      {
+        "file": "scripts/local-cms-plugin.mjs",
+        "sha256": "bcdee3a89c8076e378a7c76cb9b06466d74be2ce45eb4ac534b392fc51ae8c43"
+      },
+      {
+        "file": "scripts/private-data-guard.mjs",
+        "sha256": "ecca64df4921977c004b18cf7e5d7f36c98f9a635ee3838a76a848c86911742e"
+      },
+      {
+        "file": "scripts/public-snapshot.mjs",
+        "sha256": "174b8f84fc543d395730796a62305ed8e9e374489293909f230f3b49c5c954bd"
+      },
+      {
+        "file": "scripts/regression/f15-build.mjs",
+        "sha256": "52d697948d006b247438de32cf14e933fbf6db317d977378596bc650c43d7d17"
+      },
+      {
+        "file": "scripts/regression/f21-sources.mjs",
+        "sha256": "3220741f20a326036f10db36b7ce4d317a7591c870e273ef87afb522cb2dc81e"
+      },
+      {
+        "file": "scripts/check-regressions.mjs",
+        "sha256": "41495a262f4bb940ad7463716028e18d329b7b238fd3fa407911975c38eca3f1"
+      }
+    ],
+    "performanceRerun": false,
+    "performanceScope": "沿用此前同机旧新各三次交替测量；最后 F15 补修仅 Node 构建生命周期，无渲染修改。",
+    "limitations": [
+      "庭院冷启动 FPS 仅旧版 75.01%",
+      "最新代码仅干净副本定向补测，未重跑完整 17 步干净 CI"
+    ],
+    "safetyEvidence": ".qa/final-f15-closure/final-checks.json"
+  }
+}

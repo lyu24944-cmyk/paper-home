@@ -45,6 +45,8 @@ export function NoteEditorModal({
   onConflict: (conflict: ConflictContext) => void
   onClose: () => void
 }) {
+  const alive = useRef(true)
+  useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
   const uid = useId()
   const [current, setCurrent] = useState<AdminNote | null>(initialNote)
   const [title, setTitle] = useState('')
@@ -153,6 +155,7 @@ export function NoteEditorModal({
         `正文摘要：${latest.draft.body.slice(0, 160) || '（空）'}`,
       ],
       onUseCloud: () => {
+        if (!alive.current) return
         syncFromNote(latest)
         onSaved(latest, 0)
         setSaveError('')
@@ -168,6 +171,7 @@ export function NoteEditorModal({
     }
     const draft = buildDraftPayload()
     const res = await saveNoteDraftApi(current?.id ?? null, current?.version ?? 0, draft)
+    if (!alive.current) return null
     if (res.item) {
       setCurrent(res.item)
       onSaved(res.item, res.pendingCleanupCount, notifyAction)
@@ -186,6 +190,7 @@ export function NoteEditorModal({
         setSaveStatus(isCloudConfigured ? '手记草稿已保存到云端。' : '手记草稿已保存到本机。')
       }
     } catch (err) {
+      if (!alive.current) return
       if (err instanceof ConflictError) {
         raiseNoteConflict(err as ConflictError<AdminNote>)
       } else {
@@ -211,12 +216,14 @@ export function NoteEditorModal({
       const saved = await saveDraftInternal()
       if (!saved) return
       const pubRes = await publishNoteApi(saved.id, saved.version)
+      if (!alive.current) return
       if (pubRes.item) {
         setCurrent(pubRes.item)
         onSaved(pubRes.item, pubRes.pendingCleanupCount, 'publish')
         setSaveStatus(wasPublished ? '手记更新已发布。' : '手记已发布到创作手记。')
       }
     } catch (err) {
+      if (!alive.current) return
       if (err instanceof ConflictError) {
         raiseNoteConflict(err as ConflictError<AdminNote>)
       } else {
@@ -234,12 +241,14 @@ export function NoteEditorModal({
     setSaveStatus('')
     try {
       const res = await unpublishNoteApi(current.id, current.version)
+      if (!alive.current) return
       if (res.item) {
         setCurrent(res.item)
         onSaved(res.item, res.pendingCleanupCount, 'unpublish')
         setSaveStatus('已撤回发布，草稿内容仍已保留。')
       }
     } catch (err) {
+      if (!alive.current) return
       if (err instanceof ConflictError) {
         raiseNoteConflict(err as ConflictError<AdminNote>)
       } else {
@@ -256,10 +265,12 @@ export function NoteEditorModal({
     setDeleteError('')
     try {
       const res = await deleteNoteApi(current.id, current.version)
+      if (!alive.current) return
       setConfirmDeleteOpen(false)
       onDeleted(current.id, res.pendingCleanupCount)
       onClose()
     } catch (err) {
+      if (!alive.current) return
       if (err instanceof ConflictError) {
         setConfirmDeleteOpen(false)
         raiseNoteConflict(err as ConflictError<AdminNote>)
@@ -272,6 +283,7 @@ export function NoteEditorModal({
   }
 
   function handleClose() {
+    alive.current = false
     flushSessionCandidates()
     onClose()
   }

@@ -1,3 +1,4 @@
+import {browserExecutable,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import fs from 'node:fs'
@@ -47,19 +48,17 @@ async function waitForHttp(url, timeoutMs = 20000) {
 
 function startViteDevServer() {
   const viteBin = path.join(rootDir, 'node_modules', 'vite', 'bin', 'vite.js')
-  const proc = spawn(
+  const proc = trackProcess(spawn(
     process.execPath,
     [viteBin, '--host', '127.0.0.1', '--port', String(DEV_PORT), '--strictPort'],
     {
       cwd: rootDir,
       env: {
-        ...process.env,
-        PAPER_HOME_FORCE_LOCAL: '1',
-        LOCAL_CMS_DATA_DIR: localDataDir,
+        ...isolatedLocalEnv(localDataDir),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
-  )
+  ))
   let stderr = ''
   proc.stderr.on('data', (chunk) => {
     stderr += chunk.toString()
@@ -68,23 +67,6 @@ function startViteDevServer() {
     proc,
     getStderr: () => stderr,
   }
-}
-
-async function stopProcess(proc) {
-  if (!proc || proc.exitCode !== null || proc.signalCode !== null) return
-  await new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(), 3000)
-    proc.once('close', () => {
-      clearTimeout(timer)
-      resolve()
-    })
-    try {
-      proc.kill()
-    } catch {
-      clearTimeout(timer)
-      resolve()
-    }
-  })
 }
 
 function createStaticServer(dir, port) {
@@ -160,9 +142,8 @@ async function run() {
     assert.equal(health.writable, true)
     results.checks.push('local studio health check passed cleanly without cloud env')
 
-    const chromePath = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
-    browser = await chromium.launch({
-      ...(fs.existsSync(chromePath) ? { executablePath: chromePath } : {}),
+        browser = await chromium.launch({
+      ...browserExecutable(),
       headless: true,
       args: ['--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'],
     })
@@ -225,8 +206,8 @@ async function run() {
     })
     await ed.getByText(/已上传 1 张图片/).waitFor({ timeout: 15000 })
 
-    const demoVideoPath = path.join(rootDir, '.qa', 'seed', 'cottage-demo.mp4')
-    if (fs.existsSync(demoVideoPath)) {
+    const demoVideoPath = prepareTestVideo(qaOutDir)
+    {
       await ed.locator('.media-picker-block', { hasText: '演示视频' }).locator('input[type="file"]').setInputFiles(demoVideoPath)
       await ed.getByText('视频上传并校验完成。').waitFor({ timeout: 30000 })
       results.checks.push('local chunked video upload succeeded')
@@ -274,7 +255,7 @@ async function run() {
     const okMediaRes = await fetch(`http://127.0.0.1:${DEV_PORT}/__local-cms/media/public/${draftAssetId}/display`)
     assert.equal(okMediaRes.status, 200)
 
-    if (fs.existsSync(demoVideoPath)) {
+    {
       const videoId = adminJson.projects[0].draft.videoAssetId
       const rangeRes = await fetch(`http://127.0.0.1:${DEV_PORT}/__local-cms/media/public/${videoId}/display`, {
         headers: { Range: 'bytes=0-1023' },

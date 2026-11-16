@@ -1,3 +1,4 @@
+import {browserExecutable,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -41,16 +42,19 @@ async function startSeededServer(tag) {
   ];
   for (const item of extras) {
     const saved = await store.mutate('project.save_draft', {
+      expectedVersion: 0,
       title: item.title,
       summary: item.summary,
       body: item.body,
       coverAssetId: item.asset,
       galleryAssetIds: [],
     });
-    await store.mutate('project.publish', {
+    assert.equal(saved.status,200,'Seed project creation must succeed with version 0');
+    const published=await store.mutate('project.publish', {
       id: saved.body.project.id,
       expectedVersion: saved.body.project.version,
     });
+    assert.equal(published.status,200,'Seed publication must succeed');
   }
   const viteBin = path.join(rootDir, 'node_modules', 'vite', 'bin', 'vite.js');
   execFileSync(process.execPath, [viteBin, 'build', '--mode', 'local-export', '--outDir', seedDistDir], {
@@ -75,7 +79,7 @@ async function startSeededServer(tag) {
 }
 
 const serverHandle = await startSeededServer('polish');
-const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: false, args: ['--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'] });
+const browser = await chromium.launch({ ...browserExecutable(), headless: process.env.QA_HEADFUL !== '1', args: ['--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'] });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, reducedMotion: 'reduce' });
 const errors = [], results = { viewports: [], operations: [], errors };
 page.on('pageerror', e => errors.push(e.message));

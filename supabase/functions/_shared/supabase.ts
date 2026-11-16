@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient, type User } from 'jsr:@supabase/supabase-js@2'
+import { createClient, type SupabaseClient, type User } from 'jsr:@supabase/supabase-js@2.119.0'
 import { jsonResponse } from './cors.ts'
 
 export const BUCKET_NAME = 'cottage-media'
@@ -204,6 +204,9 @@ export async function signAssets(
       byPath.set(item.path, item.signedUrl)
     }
   }
+  if (paths.some(path => !byPath.has(path))) {
+    throw new HttpError(500, '公开素材文件或声明的缩略图缺失，请检查存储文件。')
+  }
 
   const expiresAt = Date.now() + expiresIn * 1000
   const result: Record<string, SignedMediaEntry> = {}
@@ -225,57 +228,42 @@ export async function flushCleanupQueue(adminClient: SupabaseClient): Promise<{
   remaining: number
   errors: string[]
 }> {
-  const { data: dueRows, error } = await adminClient
-    .from('media_cleanup_queue')
-    .select('id, asset_id, storage_paths, attempts')
-    .lte('next_retry_at', new Date().toISOString())
-    .order('created_at', { ascending: true })
-    .limit(50)
-
-  if (error) {
-    return { cleaned: 0, remaining: -1, errors: [error.message] }
-  }
-
-  let cleaned = 0
   const errors: string[] = []
-
-  for (const row of dueRows ?? []) {
-    const paths = (row.storage_paths as string[]).filter(Boolean)
-    if (paths.length === 0) {
-      await adminClient.from('media_cleanup_queue').delete().eq('id', row.id)
-      if (row.asset_id) {
-        await adminClient.from('media_assets').delete().eq('id', row.asset_id).eq('status', 'pending_delete')
-      }
-      cleaned += 1
-      continue
+  let cleaned = 0
+  const paused = typeof Deno !== 'undefined' && Deno.env.get('CMS_MEDIA_CLEANUP_ENABLED') === '0'
+  if (!paused) {
+    // Missing RPC/migration fails closed: never fall back to unclaimed Storage deletion.
+    const { data: dueRows, error } = await adminClient.rpc('claim_media_cleanup', { p_limit: 50 })
+    if (error) {
+      return { cleaned: 0, remaining: -1, errors: [error.message] }
     }
-
-    const { error: rmErr } = await adminClient.storage.from(BUCKET_NAME).remove(paths)
-    if (!rmErr) {
-      await adminClient.from('media_cleanup_queue').delete().eq('id', row.id)
-      if (row.asset_id) {
-        await adminClient.from('media_assets').delete().eq('id', row.asset_id).eq('status', 'pending_delete')
-      }
-      cleaned += 1
-    } else {
-      const nextRetry = new Date(Date.now() + 5 * 60 * 1000).toISOString()
-      await adminClient
-        .from('media_cleanup_queue')
-        .update({
-          attempts: (row.attempts ?? 0) + 1,
-          last_error: rmErr.message,
-          next_retry_at: nextRetry,
+    for (const row of dueRows ?? []) {
+      try {
+        const paths = (row.storage_paths as string[]).filter(Boolean)
+        if (paths.length > 0) {
+          const { error: removeError } = await adminClient.storage.from(BUCKET_NAME).remove(paths)
+          if (removeError) throw new Error(removeError.message)
+        }
+        const { data: finished, error: finishError } = await adminClient.rpc('finish_media_cleanup', {
+          p_queue_id: row.id, p_claim_token: row.claim_token,
         })
-        .eq('id', row.id)
-      errors.push(rmErr.message)
+        if (finishError || finished !== true) throw new Error(finishError?.message || 'Cleanup claim is no longer owned')
+        cleaned += 1
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Media cleanup failed'
+        errors.push(message)
+        const { data: recorded, error: retryError } = await adminClient.rpc('fail_media_cleanup', {
+          p_queue_id: row.id, p_claim_token: row.claim_token, p_error: message,
+        })
+        if (retryError || recorded !== true) errors.push(retryError?.message || 'Cleanup retry state could not be recorded')
+      }
     }
   }
+  const { count, error: countError } = await adminClient
+    .from('media_cleanup_queue').select('id', { count: 'exact', head: true })
+  if (countError) errors.push(countError.message)
+  return { cleaned, remaining: countError ? -1 : (count ?? 0), errors }
 
-  const { count } = await adminClient
-    .from('media_cleanup_queue')
-    .select('id', { count: 'exact', head: true })
-
-  return { cleaned, remaining: count ?? 0, errors }
 }
 
 export function cleanContactLinks(raw: unknown): { label: string; url: string }[] {

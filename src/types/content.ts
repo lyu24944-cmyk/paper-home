@@ -26,7 +26,7 @@ export interface SignedMediaEntry {
 export interface MediaAsset {
   id: string
   kind: 'image' | 'video'
-  status: 'uploading' | 'ready' | 'pending_delete'
+  status: 'uploading' | 'ready' | 'pending_delete' | 'deleting'
   mimeType: string
   byteSize: number
   width: number | null
@@ -142,6 +142,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettingsPayload = {
 }
 
 export interface LocalStudioHealth {
+  pinRequired?: boolean
   mode: BackendMode
   writable: boolean
   isLoopback: boolean

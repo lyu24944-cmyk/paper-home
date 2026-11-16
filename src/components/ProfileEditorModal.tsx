@@ -37,6 +37,8 @@ export function ProfileEditorModal({
   onConflict: (conflict: ConflictContext) => void
   onClose: () => void
 }) {
+  const alive = useRef(true)
+  useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
   const uid = useId()
   const [current, setCurrent] = useState<AdminProfile | null>(initialProfile)
   const [displayName, setDisplayName] = useState('')
@@ -187,6 +189,7 @@ export function ProfileEditorModal({
         `简介摘要：${latest.draft.bio.slice(0, 120) || '（未填写）'}`,
       ],
       onUseCloud: () => {
+        if (!alive.current) return
         syncFromProfile(latest)
         onSaved(latest, 0)
         setSaveError('')
@@ -203,6 +206,7 @@ export function ProfileEditorModal({
       return null
     }
     const res = await saveProfileDraftApi(current?.version ?? 1, draft)
+    if (!alive.current) return null
     if (res.item) {
       setCurrent(res.item)
       onSaved(res.item, res.pendingCleanupCount, notifyAction)
@@ -221,6 +225,7 @@ export function ProfileEditorModal({
         setSaveStatus('个人资料草稿已保存。')
       }
     } catch (err) {
+      if (!alive.current) return
       if (err instanceof ConflictError) {
         raiseProfileConflict(err as ConflictError<AdminProfile>)
       } else {
@@ -245,12 +250,14 @@ export function ProfileEditorModal({
       const saved = await saveDraftInternal()
       if (!saved) return
       const res = await publishProfileApi(saved.version)
+      if (!alive.current) return
       if (res.item) {
         setCurrent(res.item)
         onSaved(res.item, res.pendingCleanupCount, 'publish')
         setSaveStatus('“关于我”公开内容已更新。')
       }
     } catch (err) {
+      if (!alive.current) return
       if (err instanceof ConflictError) {
         raiseProfileConflict(err as ConflictError<AdminProfile>)
       } else {
@@ -268,12 +275,14 @@ export function ProfileEditorModal({
     setSaveStatus('')
     try {
       const res = await unpublishProfileApi(current.version)
+      if (!alive.current) return
       if (res.item) {
         setCurrent(res.item)
         onSaved(res.item, res.pendingCleanupCount, 'unpublish')
         setSaveStatus('已撤回公开展示；未填写状态下访客将看到简洁的待完善提示。')
       }
     } catch (err) {
+      if (!alive.current) return
       if (err instanceof ConflictError) {
         raiseProfileConflict(err as ConflictError<AdminProfile>)
       } else {
@@ -285,6 +294,7 @@ export function ProfileEditorModal({
   }
 
   function handleClose() {
+    alive.current = false
     flushSessionCandidates()
     onClose()
   }

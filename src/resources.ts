@@ -1,3 +1,4 @@
+import { applyFoliageSelection } from './lib/foliage'
 import {
   TextureLoader,
   SRGBColorSpace,
@@ -117,6 +118,7 @@ export function loadResources(quality: Quality, onProgress?: (v: number) => void
     )
     const loadGltf = (name: string) =>
       gltf.loadAsync(`${base}${name}-${quality}.glb`).then((v) => {
+        v.scene.traverse((obj) => { if (obj instanceof Mesh) { for (const mat of (Array.isArray(obj.material) ? obj.material : [obj.material])) { if (mat.userData.clusterCards) applyFoliageSelection(mat) } } })
         tick()
         return v
       })

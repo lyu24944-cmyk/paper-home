@@ -329,6 +329,13 @@ Deno.serve(async (req) => {
     const action = typeof body.action === 'string' ? body.action : ''
     const payload = body.payload && typeof body.payload === 'object' ? body.payload : {}
 
+    const versioned = /^(project|note|profile|settings)\./.test(action)
+    const creating = (action === 'project.save_draft' || action === 'note.save_draft') && !payload.id
+    const version = action.endsWith('.reorder') ? payload.expectedOrderVersion : payload.expectedVersion
+    if (versioned && (typeof version !== 'number' || !Number.isSafeInteger(version) || version > 2147483647 || (creating ? version !== 0 : version <= 0))) {
+      throw new HttpError(400, '版本号必须为正整数；新草稿版本必须为 0。')
+    }
+
     if (action === 'media.register') {
       return await handleMediaRegister(admin, user.id, payload, req)
     }
@@ -354,7 +361,7 @@ Deno.serve(async (req) => {
         rpcName = 'save_project_draft'
         rpcArgs = {
           p_id: requireOptionalUuid(payload.id, '作品 ID'),
-          p_expected_version: payload.expectedVersion ?? 1,
+          p_expected_version: payload.expectedVersion,
           p_slug: typeof payload.slug === 'string' ? payload.slug : '',
           p_title: payload.title ?? '',
           p_summary: payload.summary ?? '',
@@ -385,7 +392,7 @@ Deno.serve(async (req) => {
         rpcName = 'save_note_draft'
         rpcArgs = {
           p_id: requireOptionalUuid(payload.id, '手记 ID'),
-          p_expected_version: payload.expectedVersion ?? 1,
+          p_expected_version: payload.expectedVersion,
           p_slug: typeof payload.slug === 'string' ? payload.slug : '',
           p_title: payload.title ?? '',
           p_body: payload.body ?? '',

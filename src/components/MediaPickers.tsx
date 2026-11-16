@@ -32,6 +32,7 @@ export function ImageListPicker({
   const latestAssetIdsRef = useRef(assetIds)
   latestAssetIdsRef.current = assetIds
   const uploadingRef = useRef(false)
+  const uploadAbortRef = useRef<AbortController | null>(null)
   const onUploadStateChangeRef = useRef(onUploadStateChange)
   onUploadStateChangeRef.current = onUploadStateChange
   const [uploading, setUploading] = useState(false)
@@ -42,6 +43,7 @@ export function ImageListPicker({
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      uploadAbortRef.current?.abort()
       if (uploadingRef.current) {
         uploadingRef.current = false
         onUploadStateChangeRef.current?.(false)
@@ -51,6 +53,9 @@ export function ImageListPicker({
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return
+    uploadAbortRef.current?.abort()
+    const task = new AbortController()
+    uploadAbortRef.current = task
     uploadingRef.current = true
     setUploading(true)
     onUploadStateChange?.(true)
@@ -63,8 +68,8 @@ export function ImageListPicker({
     for (const file of Array.from(files)) {
       if (!mountedRef.current) break
       try {
-        const { asset } = await processAndUploadImage(file)
-        if (!mountedRef.current) break
+        const { asset } = await processAndUploadImage(file, task.signal)
+        if (!mountedRef.current || task.signal.aborted) break
         onAssetUploaded(asset)
         added.push(asset.id)
       } catch (err) {
@@ -72,7 +77,7 @@ export function ImageListPicker({
       }
     }
 
-    if (!mountedRef.current) return
+    if (!mountedRef.current || task.signal.aborted || uploadAbortRef.current !== task) return
 
     if (added.length > 0) {
       const current = latestAssetIdsRef.current
@@ -173,6 +178,8 @@ export function VideoUploadPicker({
   onAssetUploaded: (asset: MediaAsset) => void
   onUploadStateChange?: (busy: boolean) => void
 }) {
+  const generation = useRef(0)
+  const validationAbort = useRef<AbortController | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const controllerRef = useRef<VideoUploadController | null>(null)
   const mountedRef = useRef(true)
@@ -189,6 +196,8 @@ export function VideoUploadPicker({
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      generation.current++
+      validationAbort.current?.abort()
       if (controllerRef.current) {
         void controllerRef.current.cancel()
         controllerRef.current = null
@@ -201,6 +210,11 @@ export function VideoUploadPicker({
   }, [])
 
   async function beginUpload(file: File) {
+    const task = ++generation.current
+    validationAbort.current?.abort()
+    const abort = new AbortController()
+    validationAbort.current = abort
+    const valid = () => mountedRef.current && generation.current === task && !abort.signal.aborted
     setPendingFile(file)
     setPhase('checking')
     setProgress(0)
@@ -212,7 +226,7 @@ export function VideoUploadPicker({
     try {
       const controller = await createResumableVideoUpload(file, {
         onProgress: (pct, uploaded, total) => {
-          if (!mountedRef.current) return
+          if (!valid()) return
           setPhase('uploading')
           setProgress(pct)
           setStatus(
@@ -220,12 +234,9 @@ export function VideoUploadPicker({
           )
         },
         onSuccess: (asset) => {
+          if (!valid()) return
           controllerRef.current = null
           busyRef.current = false
-          if (!mountedRef.current) {
-            onUploadStateChange?.(false)
-            return
-          }
           setPendingFile(null)
           setPhase('idle')
           setProgress(100)
@@ -236,22 +247,17 @@ export function VideoUploadPicker({
           onUploadStateChange?.(false)
         },
         onError: (msg) => {
+          if (!valid()) return
           controllerRef.current = null
           busyRef.current = false
-          if (!mountedRef.current) {
-            onUploadStateChange?.(false)
-            return
-          }
           setPhase('error')
           setError(msg)
           setStatus('')
           onUploadStateChange?.(false)
         },
-      })
-      if (!mountedRef.current) {
+      }, abort.signal)
+      if (!valid()) {
         void controller.cancel()
-        busyRef.current = false
-        onUploadStateChange?.(false)
         return
       }
       controllerRef.current = controller
@@ -259,12 +265,9 @@ export function VideoUploadPicker({
       setStatus('开始上传视频…')
       controller.start()
     } catch (err) {
+      if (!valid()) return
       controllerRef.current = null
       busyRef.current = false
-      if (!mountedRef.current) {
-        onUploadStateChange?.(false)
-        return
-      }
       setPhase('error')
       setStatus('')
       setError(err instanceof Error ? err.message : '视频校验失败。')
@@ -273,10 +276,11 @@ export function VideoUploadPicker({
   }
 
   async function handleCancel() {
-    await controllerRef.current?.cancel()
+    const task = ++generation.current
+    validationAbort.current?.abort()
+    const controller = controllerRef.current
     controllerRef.current = null
     busyRef.current = false
-    if (!mountedRef.current) return
     setPendingFile(null)
     setPhase('idle')
     setProgress(0)
@@ -284,6 +288,8 @@ export function VideoUploadPicker({
     setStatus('已取消本次视频上传（其余文字内容已保留）。')
     onUploadStateChange?.(false)
     if (inputRef.current) inputRef.current.value = ''
+    await controller?.cancel()
+    if (generation.current !== task) return
   }
 
   return (

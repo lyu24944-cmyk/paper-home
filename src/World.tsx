@@ -1,3 +1,4 @@
+import { applyFoliageSelection } from './lib/foliage'
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Box3, CanvasTexture, CylinderGeometry, DirectionalLight, DoubleSide, Euler, ExtrudeGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshDepthMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PlaneGeometry, Quaternion, RGBADepthPacking, Shape, SRGBColorSpace, Vector3 } from 'three'
@@ -293,7 +294,7 @@ function Plant({pack,at,height=1,tree=false,rotation=0,interactive=true,onTap}:{
     const mats:MeshDepthMaterial[]=[]
     root.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);root.scale.setScalar(scale)
     root.traverse(o=>{if(o instanceof Mesh){o.castShadow=true;o.receiveShadow=true
-      const materials=Array.isArray(o.material)?o.material:[o.material];materials.forEach(m=>{if(m.alphaTest>0){const dm=new MeshDepthMaterial({map:m.map,alphaTest:m.alphaTest,depthPacking:RGBADepthPacking,side:DoubleSide});o.customDepthMaterial=dm;mats.push(dm)}})
+      const materials=Array.isArray(o.material)?o.material:[o.material];materials.forEach(m=>{if(m.alphaTest>0){const dm=new MeshDepthMaterial({map:m.map,alphaTest:m.alphaTest,depthPacking:RGBADepthPacking,side:DoubleSide});if(m.userData.clusterCards)applyFoliageSelection(dm);o.customDepthMaterial=dm;mats.push(dm)}})
     }})
     return {object:root,depthMaterials:mats}
   },[pack,tree,height])

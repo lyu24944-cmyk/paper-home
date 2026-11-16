@@ -10,8 +10,6 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
-const asDrafts = process.argv.includes('--as-drafts')
-const forceOverwrite = process.argv.includes('--force')
 
 function toProjectSnapshotRow(pub) {
   if (!pub) return null
@@ -54,15 +52,135 @@ function toProfileSnapshotRow(pub) {
   }
 }
 
-async function main() {
-  const store = createLocalCmsStore(rootDir)
+export async function syncToSupabase({store,supabase,adminUser,asDrafts=false,forceOverwrite=false}) {
   if (!fs.existsSync(store.cottagePath)) {
     throw new Error('未找到 local-data/cottage.json，请先在本地工作室添加并保存内容后再同步到云端。')
   }
 
   const db = store.readDb()
-  const { supabase, adminEmail, adminPassword } = createAdminSupabaseFromEnv(rootDir)
-  const adminUser = await ensureAdminUser(supabase, adminEmail, adminPassword)
+
+  // Resolve every project before writing anything, including slugs skipped without --force.
+  const existingProjects = new Map()
+  const projectIds = new Map()
+  for (const project of db.projects) {
+    const { data, error } = await supabase.from('projects').select('id,version').eq('slug', project.slug).maybeSingle()
+    if (error) throw error
+    existingProjects.set(project.slug, data)
+    projectIds.set(project.id, data?.id ?? project.id)
+  }
+  const resolveProjectId = (id) => {
+    if (!id) return null
+    if (!projectIds.has(id)) throw new Error(`Unresolved local project reference: ${id}`)
+    return projectIds.get(id)
+  }
+  for (const note of db.notes) {
+    note.draft.projectId = resolveProjectId(note.draft.projectId)
+    if (note.published) note.published.projectId = resolveProjectId(note.published.projectId)
+  }
+
+  // Preflight captures all versions before any media transfer can race an editor.
+  const existingNotes = new Map()
+  for (const note of db.notes) {
+    const {data,error}=await supabase.from('notes').select('id,version').eq('slug',note.slug).maybeSingle()
+    if(error) throw error
+    existingNotes.set(note.slug,data)
+  }
+  const singleton = async (table,id) => {
+    const {data,error}=await supabase.from(table).select('id,version').eq('id',id).maybeSingle()
+    if(error) throw error
+    return data
+  }
+  const existingProfile=await singleton('site_profile','owner')
+  const existingSettings=await singleton('site_settings','main')
+  const {data:orders,error:orderError}=await supabase.from('collection_state').select('key,version')
+  if(orderError) throw orderError
+  const plan={projects:[],notes:[],profile:[],settings:[],orderVersions:Object.fromEntries(orders.map(x=>[x.key,x.version]))}
+
+  for (const project of db.projects) {
+    const existing = existingProjects.get(project.slug)
+    if (existing && !forceOverwrite) {
+      console.log(`Skipped existing project (${project.slug}); pass --force to overwrite.`)
+      continue
+    }
+    const publishItem = !asDrafts && Boolean(project.isPublished && project.published)
+    plan.projects.push({expectedVersion:existing?.version ?? 0,row:{
+        id: existing?.id ?? project.id,
+        slug: project.slug,
+        sort_order: project.sortOrder,
+        is_published: publishItem,
+        published_at: publishItem ? (project.publishedAt ?? new Date().toISOString()) : null,
+        has_unpublished_changes: publishItem ? Boolean(project.hasUnpublishedChanges) : true,
+        draft_title: project.draft.title,
+        draft_summary: project.draft.summary,
+        draft_body: project.draft.body,
+        draft_demo_url: project.draft.demoUrl || '',
+        draft_cover_asset_id: project.draft.coverAssetId ?? null,
+        draft_gallery_asset_ids: project.draft.galleryAssetIds ?? [],
+        draft_video_asset_id: project.draft.videoAssetId ?? null,
+        published_snapshot: publishItem ? toProjectSnapshotRow(project.published) : null,
+    }})
+    console.log(`Prepared project: ${project.draft.title} [${publishItem ? 'published' : 'draft'}]`)
+  }
+
+  for (const note of db.notes) {
+    const existing = existingNotes.get(note.slug)
+    if (existing && !forceOverwrite) {
+      console.log(`Skipped existing note (${note.slug}); pass --force to overwrite.`)
+      continue
+    }
+    const publishItem = !asDrafts && Boolean(note.isPublished && note.published)
+    plan.notes.push({expectedVersion:existing?.version ?? 0,row:{
+        id: existing?.id ?? note.id,
+        slug: note.slug,
+        sort_order: note.sortOrder,
+        is_published: publishItem,
+        published_at: publishItem ? (note.publishedAt ?? new Date().toISOString()) : null,
+        has_unpublished_changes: publishItem ? Boolean(note.hasUnpublishedChanges) : true,
+        draft_title: note.draft.title,
+        draft_body: note.draft.body,
+        draft_project_id: note.draft.projectId ?? null,
+        draft_image_asset_ids: note.draft.imageAssetIds ?? [],
+        draft_video_asset_id: note.draft.videoAssetId ?? null,
+        published_snapshot: publishItem ? toNoteSnapshotRow(note.published) : null,
+    }})
+    console.log(`Prepared note: ${note.draft.title} [${publishItem ? 'published' : 'draft'}]`)
+  }
+
+  const p = db.profile
+  if (p) {
+    const publishProfile = !asDrafts && Boolean(p.isPublished && p.published)
+    plan.profile.push({expectedVersion:existingProfile?.version ?? 0,row:{
+        id: 'owner',
+        is_published: publishProfile,
+        published_at: publishProfile ? (p.publishedAt ?? new Date().toISOString()) : null,
+        has_unpublished_changes: publishProfile ? Boolean(p.hasUnpublishedChanges) : true,
+        draft_display_name: p.draft.displayName || '',
+        draft_bio: p.draft.bio || '',
+        draft_focus_areas: p.draft.focusAreas || '',
+        draft_avatar_asset_id: p.draft.avatarAssetId ?? null,
+        draft_contact_email: p.draft.contactEmail || '',
+        draft_contact_links: p.draft.contactLinks ?? [],
+        draft_now_notes: Array.isArray(p.draft.nowNotes) ? p.draft.nowNotes : [],
+        draft_quotes: Array.isArray(p.draft.quotes) ? p.draft.quotes : [],
+        published_snapshot: publishProfile ? toProfileSnapshotRow(p.published) : null,
+    }})
+    console.log(`Prepared owner profile [${publishProfile ? 'published' : 'draft'}]`)
+  }
+
+  if (db.siteSettings) {
+    const s = db.siteSettings
+    plan.settings.push({expectedVersion:existingSettings?.version ?? 0,row:{
+        id: 'main',
+        home_name: s.homeName || '我的小屋',
+        plaque_title: s.plaqueTitle || '欢迎回家',
+        plaque_subtitle: s.plaqueSubtitle ?? '',
+        yard_heading: s.yardHeading || '来家里坐坐。',
+        yard_subtitle: s.yardSubtitle ?? '',
+        default_atmosphere: s.defaultAtmosphere || 'daylight',
+        default_weather: s.defaultWeather || 'clear',
+    }})
+    console.log(`Prepared site settings (${s.homeName})`)
+  }
 
   for (const asset of Object.values(db.assets)) {
     if (!asset || asset.status !== 'ready') continue
@@ -80,112 +198,18 @@ async function main() {
     console.log(`Synced asset ${asset.id} (${(bytes / 1024).toFixed(1)} KB)`)
   }
 
-  for (const project of db.projects) {
-    const { data: existing } = await supabase.from('projects').select('id').eq('slug', project.slug).maybeSingle()
-    if (existing && !forceOverwrite) {
-      console.log(`Skipped existing project (${project.slug}); pass --force to overwrite.`)
-      continue
-    }
-    const publishItem = !asDrafts && Boolean(project.isPublished && project.published)
-    const { error } = await supabase.from('projects').upsert(
-      {
-        id: existing?.id ?? project.id,
-        slug: project.slug,
-        sort_order: project.sortOrder,
-        is_published: publishItem,
-        published_at: publishItem ? (project.publishedAt ?? new Date().toISOString()) : null,
-        has_unpublished_changes: publishItem ? Boolean(project.hasUnpublishedChanges) : true,
-        draft_title: project.draft.title,
-        draft_summary: project.draft.summary,
-        draft_body: project.draft.body,
-        draft_demo_url: project.draft.demoUrl || '',
-        draft_cover_asset_id: project.draft.coverAssetId ?? null,
-        draft_gallery_asset_ids: project.draft.galleryAssetIds ?? [],
-        draft_video_asset_id: project.draft.videoAssetId ?? null,
-        published_snapshot: publishItem ? toProjectSnapshotRow(project.published) : null,
-      },
-      { onConflict: 'slug' },
-    )
-    if (error) throw error
-    console.log(`Synced project: ${project.draft.title} [${publishItem ? 'published' : 'draft'}]`)
-  }
-
-  for (const note of db.notes) {
-    const { data: existing } = await supabase.from('notes').select('id').eq('slug', note.slug).maybeSingle()
-    if (existing && !forceOverwrite) {
-      console.log(`Skipped existing note (${note.slug}); pass --force to overwrite.`)
-      continue
-    }
-    const publishItem = !asDrafts && Boolean(note.isPublished && note.published)
-    const { error } = await supabase.from('notes').upsert(
-      {
-        id: existing?.id ?? note.id,
-        slug: note.slug,
-        sort_order: note.sortOrder,
-        is_published: publishItem,
-        published_at: publishItem ? (note.publishedAt ?? new Date().toISOString()) : null,
-        has_unpublished_changes: publishItem ? Boolean(note.hasUnpublishedChanges) : true,
-        draft_title: note.draft.title,
-        draft_body: note.draft.body,
-        draft_project_id: note.draft.projectId ?? null,
-        draft_image_asset_ids: note.draft.imageAssetIds ?? [],
-        draft_video_asset_id: note.draft.videoAssetId ?? null,
-        published_snapshot: publishItem ? toNoteSnapshotRow(note.published) : null,
-      },
-      { onConflict: 'slug' },
-    )
-    if (error) throw error
-    console.log(`Synced note: ${note.draft.title} [${publishItem ? 'published' : 'draft'}]`)
-  }
-
-  const p = db.profile
-  if (p) {
-    const publishProfile = !asDrafts && Boolean(p.isPublished && p.published)
-    const { error } = await supabase.from('site_profile').upsert(
-      {
-        id: 'owner',
-        is_published: publishProfile,
-        published_at: publishProfile ? (p.publishedAt ?? new Date().toISOString()) : null,
-        has_unpublished_changes: publishProfile ? Boolean(p.hasUnpublishedChanges) : true,
-        draft_display_name: p.draft.displayName || '',
-        draft_bio: p.draft.bio || '',
-        draft_focus_areas: p.draft.focusAreas || '',
-        draft_avatar_asset_id: p.draft.avatarAssetId ?? null,
-        draft_contact_email: p.draft.contactEmail || '',
-        draft_contact_links: p.draft.contactLinks ?? [],
-        draft_now_notes: Array.isArray(p.draft.nowNotes) ? p.draft.nowNotes : [],
-        draft_quotes: Array.isArray(p.draft.quotes) ? p.draft.quotes : [],
-        published_snapshot: publishProfile ? toProfileSnapshotRow(p.published) : null,
-      },
-      { onConflict: 'id' },
-    )
-    if (error) throw error
-    console.log(`Synced owner profile [${publishProfile ? 'published' : 'draft'}]`)
-  }
-
-  if (db.siteSettings) {
-    const s = db.siteSettings
-    const { error } = await supabase.from('site_settings').upsert(
-      {
-        id: 'main',
-        home_name: s.homeName || '我的小屋',
-        plaque_title: s.plaqueTitle || '欢迎回家',
-        plaque_subtitle: s.plaqueSubtitle ?? '',
-        yard_heading: s.yardHeading || '来家里坐坐。',
-        yard_subtitle: s.yardSubtitle ?? '',
-        default_atmosphere: s.defaultAtmosphere || 'daylight',
-        default_weather: s.defaultWeather || 'clear',
-      },
-      { onConflict: 'id' },
-    )
-    if (error) throw error
-    console.log(`Synced site settings (${s.homeName})`)
-  }
-
+  const {data:result,error}=await supabase.rpc('import_cms_content',{p_plan:plan})
+  if(error) throw error
+  if(!result?.ok) throw new Error(result?.code==='CONFLICT' ? 'Import conflict: content changed after preflight; repeat preflight.' : 'Import transaction rejected')
   console.log('\n[sync:supabase] Done!')
 }
 
-main().catch((err) => {
+async function main(){
+  const {supabase,adminEmail,adminPassword}=createAdminSupabaseFromEnv(rootDir)
+  const adminUser=await ensureAdminUser(supabase,adminEmail,adminPassword)
+  await syncToSupabase({store:createLocalCmsStore(rootDir),supabase,adminUser,asDrafts:process.argv.includes('--as-drafts'),forceOverwrite:process.argv.includes('--force')})
+}
+if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) main().catch((err) => {
   console.error(err)
   process.exit(1)
 })

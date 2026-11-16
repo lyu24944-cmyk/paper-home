@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+const file=new URL('../fixtures/tiny.mp4',import.meta.url)
+assert.ok(fs.existsSync(file),'the MP4 fixture must be tracked and present in a clean checkout')
+const data=fs.readFileSync(file)
+assert.equal(data.subarray(4,8).toString(),'ftyp')
+assert.ok(data.length<128*1024,'fixture stays small')
+const {prepareTestVideo}=await import('../test-runtime.mjs')
+const out=prepareTestVideo(new URL('../../.qa/regression/',import.meta.url))
+const expanded=fs.readFileSync(out)
+assert.equal(expanded.length,8*1024*1024)
+assert.deepEqual(expanded.subarray(0,data.length),data)
+assert.equal(expanded.readUInt32BE(data.length),expanded.length-data.length)
+assert.equal(expanded.subarray(data.length+4,data.length+8).toString(),'free')
+console.log('F19 PASS: tracked MP4 plus valid free box crosses the 6 MiB chunk boundary')

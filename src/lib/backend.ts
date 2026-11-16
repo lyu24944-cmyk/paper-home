@@ -2,10 +2,16 @@ import { isCloudConfigured } from './supabase'
 import type { BackendMode, LocalStudioHealth } from '../types/content'
 
 export const LOCAL_OWNER_STORAGE_KEY = 'paper-home:local-owner-active'
-export const LOCAL_PIN_STORAGE_KEY = 'paper-home:local-pin'
 
 let cachedHealth: LocalStudioHealth | null = null
+let healthEpoch = 0
 let inflightHealth: Promise<LocalStudioHealth> | null = null
+
+export function invalidateBackendHealth() {
+  healthEpoch++
+  cachedHealth=null
+  inflightHealth=null
+}
 
 export function isStaticSnapshotBuild(): boolean {
   return typeof __LOCAL_SNAPSHOT_EXPORT__ !== 'undefined' && Boolean(__LOCAL_SNAPSHOT_EXPORT__)
@@ -21,7 +27,8 @@ export async function resolveBackendHealth(force = false): Promise<LocalStudioHe
   if (!force && cachedHealth) return cachedHealth
   if (!force && inflightHealth) return await inflightHealth
 
-  inflightHealth = (async () => {
+  const epoch=healthEpoch
+  const task = (async () => {
     if (import.meta.env.DEV) {
       try {
         const res = await fetch('/__local-cms/health', { cache: 'no-store' })
@@ -29,14 +36,16 @@ export async function resolveBackendHealth(force = false): Promise<LocalStudioHe
         if (res.ok && ct.includes('application/json')) {
           const data = (await res.json()) as Record<string, unknown>
           if (data.ok === true && data.service === 'paper-home-local-cms') {
-            cachedHealth = {
+            const health: LocalStudioHealth = {
               mode: 'local-studio',
               writable: Boolean(data.writable),
+              pinRequired: Boolean(data.pinRequired),
               isLoopback: Boolean(data.isLoopback),
               hasContent: Boolean(data.hasContent),
               dataDir: typeof data.dataDir === 'string' ? data.dataDir : 'local-data/',
             }
-            return cachedHealth
+            if(epoch===healthEpoch)cachedHealth=health
+            return health
           }
         }
       } catch {
@@ -44,19 +53,21 @@ export async function resolveBackendHealth(force = false): Promise<LocalStudioHe
       }
     }
 
-    cachedHealth = {
+    const health:LocalStudioHealth = {
       mode: 'unconfigured-readonly',
       writable: false,
       isLoopback: false,
       hasContent: false,
     }
-    return cachedHealth
+    if(epoch===healthEpoch)cachedHealth=health
+    return health
   })()
+  inflightHealth=task
 
   try {
-    return await inflightHealth
+    return await task
   } finally {
-    inflightHealth = null
+    if(inflightHealth===task)inflightHealth = null
   }
 }
 
@@ -75,6 +86,7 @@ export function isLocalOwnerActive(): boolean {
 
 export function setLocalOwnerActive(active: boolean) {
   try {
+    sessionStorage.removeItem('paper-home:local-pin')
     if (active) sessionStorage.setItem(LOCAL_OWNER_STORAGE_KEY, '1')
     else sessionStorage.removeItem(LOCAL_OWNER_STORAGE_KEY)
   } catch {
@@ -82,13 +94,6 @@ export function setLocalOwnerActive(active: boolean) {
   }
 }
 
-export function getLocalHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'X-Local-Owner': '1' }
-  try {
-    const pin = sessionStorage.getItem(LOCAL_PIN_STORAGE_KEY)
-    if (pin) headers['X-Local-Pin'] = pin
-  } catch {
-    // Ignore storage read errors.
-  }
-  return headers
+export function getLocalHeaders(): Record<string,string> {
+  return { 'X-Local-Owner':'1' }
 }

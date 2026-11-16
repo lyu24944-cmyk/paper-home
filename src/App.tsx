@@ -72,6 +72,7 @@ import {
 } from './types/content'
 import { Icon } from './components/Icon'
 import { Modal } from './components/Modal'
+import { LazyModalBoundary } from './components/LazyModalBoundary'
 import { AdminAuthPanel } from './components/AdminAuthPanel'
 import { RoomDirectory } from './components/RoomDirectory'
 import type { LinkedNoteRef } from './components/ProjectDetailModal'
@@ -317,6 +318,7 @@ export default function App() {
   )
   const initialDeepLink = useMemo(() => parseDeepLinkHash(), [])
   const richHashActiveRef = useRef(initialDeepLink.isRich)
+  const [pendingHash, setPendingHash] = useState<ReturnType<typeof parseDeepLinkHash> | null>(null)
   const pendingDeepLinkItemRef = useRef<string | null>(initialDeepLink.item)
   const [place, setPlace] = useState<Place>(startingPlace)
   const [opening, setOpening] = useState<Place | null>(null)
@@ -453,10 +455,17 @@ export default function App() {
   const [profileEditorOpen, setProfileEditorOpen] = useState(false)
   const [postcardOpen, setPostcardOpen] = useState(false)
   const [postcardSnapshot, setPostcardSnapshot] = useState<string | null>(null)
-  const [postcardSeedItem, setPostcardSeedItem] = useState<{ slug?: string | null; title: string } | null>(null)
+  const [postcardSeedItem, setPostcardSeedItem] = useState<{ room: Place; slug?: string | null; title: string } | null>(null)
   const [conflict, setConflict] = useState<ConflictContext | null>(null)
 
   const isAdmin = Boolean(adminEmail && adminData)
+  useEffect(() => {
+    if (isAdmin) return
+    setProjectEditorOpen(false)
+    setNoteEditorOpen(false)
+    setProfileEditorOpen(false)
+    setConflict(null)
+  }, [isAdmin])
   const canPersistSiteSettings =
     isAdmin && (backendHealth.mode === 'local-studio' || backendHealth.mode === 'cloud')
   const anyModalOpen =
@@ -470,9 +479,6 @@ export default function App() {
     conflict !== null
   const modalOpenRef = useRef(anyModalOpen)
   modalOpenRef.current = anyModalOpen
-  const projectEditorMounted = useEverTrue(projectEditorOpen)
-  const noteEditorMounted = useEverTrue(noteEditorOpen)
-  const profileEditorMounted = useEverTrue(profileEditorOpen)
   const projectDetailMounted = useEverTrue(viewingProject !== null)
   const noteDetailMounted = useEverTrue(viewingNote !== null)
   const postcardMounted = useEverTrue(postcardOpen)
@@ -701,10 +707,10 @@ export default function App() {
 
   useEffect(() => {
     document.title = `${homeName} · ${rooms.find((r) => r.id === place)?.name}`
-    if (!richHashActiveRef.current) {
+    if (!richHashActiveRef.current && !pendingHash) {
       history.replaceState(null, '', `#${place}`)
     }
-  }, [homeName, place])
+  }, [homeName, place, pendingHash])
 
   useEffect(() => {
     if (!ready || cloudLoading || cloudError || !pendingDeepLinkItemRef.current) return
@@ -722,41 +728,37 @@ export default function App() {
 
   const applyHashDeepLinkRef = useRef<(dl: ReturnType<typeof parseDeepLinkHash>) => void>(() => {})
   applyHashDeepLinkRef.current = (dl) => {
-    if (dl.at) {
-      userTouchedAtmoRef.current = true
-      setAtmosphereMode(dl.at)
-    }
-    if (dl.weather) {
-      userTouchedAtmoRef.current = true
-      setWeather(dl.weather)
-    }
-    if (dl.lamp !== null) {
-      userTouchedLampRef.current = true
-      setDeskLampOn(dl.lamp)
-    }
-    if (dl.room !== placeRef.current) {
-      if (busyRef.current || !ready) return
-      richHashActiveRef.current = dl.isRich
-      pendingFocusAfterNavRef.current = dl.focus
-      pendingDeepLinkItemRef.current = dl.item
-      void navigate(dl.room, { preserveRichHash: dl.isRich, skipOpenSound: true })
+    // Latest complete request wins; never partially apply a request during travel.
+    richHashActiveRef.current = dl.isRich
+    pendingDeepLinkItemRef.current = null
+    setPendingHash(dl)
+  }
+
+  useEffect(() => {
+    const dl = pendingHash
+    if (!dl || busy || !ready) return
+    if (dl.room !== place) {
+      void navigate(dl.room, { preserveRichHash: dl.isRich, skipOpenSound: true, fromHash: true })
       return
     }
-    richHashActiveRef.current = dl.isRich
+    if (dl.item && (cloudLoading || cloudError)) return
+    if (dl.at) { userTouchedAtmoRef.current = true; setAtmosphereMode(dl.at) }
+    if (dl.weather) { userTouchedAtmoRef.current = true; setWeather(dl.weather) }
+    if (dl.lamp !== null) { userTouchedLampRef.current = true; setDeskLampOn(dl.lamp) }
     setFocusId(dl.focus)
-    if (dl.item) {
-      if (dl.room === 'gallery') {
-        const idx = publicData.projects.findIndex((p) => p.slug === dl.item || p.id === dl.item)
-        if (idx >= 0) openPublicProject(idx)
-      } else if (dl.room === 'study') {
-        const idx = publicData.notes.findIndex((n) => n.slug === dl.item || n.id === dl.item)
-        if (idx >= 0) openPublicNote(idx)
-      }
-    } else {
-      setViewingProject(null)
-      setViewingNote(null)
+    setViewingProject(null)
+    setViewingNote(null)
+    if (dl.item && dl.room === 'gallery') {
+      const index = publicData.projects.findIndex(p => p.slug === dl.item || p.id === dl.item)
+      if (index >= 0) openPublicProject(index)
+    } else if (dl.item && dl.room === 'study') {
+      const index = publicData.notes.findIndex(n => n.slug === dl.item || n.id === dl.item)
+      if (index >= 0) openPublicNote(index)
     }
-  }
+    setPendingHash(current => current === dl ? null : current)
+    // navigate/open helpers use this render's current state; all readiness inputs are listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingHash, busy, ready, place, cloudLoading, cloudError, publicData.projects, publicData.notes])
 
   useEffect(() => {
     const onHashChange = () => {
@@ -1196,8 +1198,9 @@ export default function App() {
     }
   }
 
-  async function navigate(target: Place, opts?: { skipOpenSound?: boolean; preserveRichHash?: boolean }) {
+  async function navigate(target: Place, opts?: { skipOpenSound?: boolean; preserveRichHash?: boolean; fromHash?: boolean }) {
     if (busyRef.current || !ready) return
+    if (!opts?.fromHash) setPendingHash(null)
     richHashActiveRef.current = Boolean(opts?.preserveRichHash)
     setStudioMenuOpen(false)
     setAtmoPopoverOpen(false)
@@ -1361,6 +1364,10 @@ export default function App() {
   )
 
   async function handleQuickSignOut() {
+    setProjectEditorOpen(false)
+    setNoteEditorOpen(false)
+    setProfileEditorOpen(false)
+    setConflict(null)
     setSignOutBusy(true)
     try {
       await signOutAdmin()
@@ -1695,14 +1702,14 @@ export default function App() {
 
   const activeDeepLinkOptions = useMemo(
     () => ({
-      room: place,
+      room: postcardSeedItem?.room ?? place,
       item: activeDeepLinkItemSlug,
       at: atmosphereMode,
       weather,
       focus: focusId,
       lamp: place === 'study' ? deskLampOn : undefined,
     }),
-    [place, activeDeepLinkItemSlug, atmosphereMode, weather, focusId, deskLampOn],
+    [place, postcardSeedItem, activeDeepLinkItemSlug, atmosphereMode, weather, focusId, deskLampOn],
   )
 
   const activeDeepLinkHash = useMemo(() => buildDeepLinkHash(activeDeepLinkOptions), [activeDeepLinkOptions])
@@ -1746,7 +1753,7 @@ export default function App() {
   )
 
   const handleOpenPostcard = useCallback(
-    (seed?: { slug?: string | null; title: string } | null) => {
+    (seed?: { room: Place; slug?: string | null; title: string } | null) => {
       if (busyRef.current || !ready) return
       const snap = captureCanvas.current?.() ?? null
       playSound('shutter')
@@ -2940,6 +2947,7 @@ export default function App() {
               publicData.profile,
           )}
           onSignedIn={async () => {
+            clearSignedUrlCache('admin')
             await refreshCloud()
             showToast(
               backendHealth.mode === 'local-studio' ? '已进入本地编辑模式' : '已登录主人管理模式',
@@ -2957,6 +2965,9 @@ export default function App() {
           onRetryCleanup={async () => {
             const res = await cleanupMediaAssetsApi({ sweepOrphans: true })
             setAdminData((prev) => (prev ? { ...prev, pendingCleanupCount: res.remaining } : prev))
+            if (res.errors.length || res.remaining !== 0) {
+              throw new Error(`旧素材尚未全部清理，请重试或检查存储。${res.errors.join('；')}`)
+            }
             showToast('旧素材清理检查完成', 'info')
           }}
           onImportSample={async () => {
@@ -2968,8 +2979,9 @@ export default function App() {
       </Modal>
 
       <Suspense fallback={null}>
-        {projectEditorMounted && (
-          <ProjectEditorModal
+        {projectEditorOpen && (
+          <LazyModalBoundary active={projectEditorOpen} onClose={() => { setProjectEditorOpen(false) }}>
+          <ProjectEditorModal key={editingProject?.id ?? 'new'}
             open={projectEditorOpen}
             initialProject={editingProject}
             assets={adminData?.assets ?? {}}
@@ -2988,10 +3000,12 @@ export default function App() {
             onConflict={(c) => setConflict(c)}
             onClose={() => setProjectEditorOpen(false)}
           />
+          </LazyModalBoundary>
         )}
 
-        {noteEditorMounted && (
-          <NoteEditorModal
+        {noteEditorOpen && (
+          <LazyModalBoundary active={noteEditorOpen} onClose={() => { setNoteEditorOpen(false) }}>
+          <NoteEditorModal key={editingNote?.id ?? 'new'}
             open={noteEditorOpen}
             initialNote={editingNote}
             projects={adminData?.projects ?? []}
@@ -3011,9 +3025,11 @@ export default function App() {
             onConflict={(c) => setConflict(c)}
             onClose={() => setNoteEditorOpen(false)}
           />
+          </LazyModalBoundary>
         )}
 
-        {profileEditorMounted && (
+        {profileEditorOpen && (
+          <LazyModalBoundary active={profileEditorOpen} onClose={() => { setProfileEditorOpen(false) }}>
           <ProfileEditorModal
             open={profileEditorOpen}
             initialProfile={adminData?.profile ?? null}
@@ -3023,9 +3039,11 @@ export default function App() {
             onConflict={(c) => setConflict(c)}
             onClose={() => setProfileEditorOpen(false)}
           />
+          </LazyModalBoundary>
         )}
 
         {projectDetailMounted && (
+          <LazyModalBoundary active={viewingProject !== null} onClose={() => { setViewingProject(null) }}>
           <ProjectDetailModal
             open={viewingProject !== null}
             project={viewingProject?.project ?? null}
@@ -3065,6 +3083,7 @@ export default function App() {
                 ? () => {
                     const pub = publicData.projects.find((p) => p.id === viewingProject.project.id)
                     handleOpenPostcard({
+                      room: 'gallery',
                       slug: pub?.slug || viewingProject.project.id,
                       title: viewingProject.project.title || '作品',
                     })
@@ -3088,9 +3107,11 @@ export default function App() {
             }
             onClose={() => setViewingProject(null)}
           />
+          </LazyModalBoundary>
         )}
 
         {noteDetailMounted && (
+          <LazyModalBoundary active={viewingNote !== null} onClose={() => { setViewingNote(null) }}>
           <NoteDetailModal
             open={viewingNote !== null}
             note={viewingNote?.note ?? null}
@@ -3130,6 +3151,7 @@ export default function App() {
                 ? () => {
                     const pub = publicData.notes.find((n) => n.id === viewingNote.note.id)
                     handleOpenPostcard({
+                      room: 'study',
                       slug: pub?.slug || viewingNote.note.id,
                       title: viewingNote.note.title || '手记',
                     })
@@ -3153,9 +3175,11 @@ export default function App() {
             }
             onClose={() => setViewingNote(null)}
           />
+          </LazyModalBoundary>
         )}
 
         {postcardMounted && (
+          <LazyModalBoundary active={postcardOpen} onClose={() => { setPostcardOpen(false); setPostcardSeedItem(null); setPostcardSnapshot(null) }}>
           <PostcardModal
             open={postcardOpen}
             snapshotDataUrl={postcardSnapshot}
@@ -3177,10 +3201,13 @@ export default function App() {
               setPostcardSnapshot(null)
             }}
           />
+          </LazyModalBoundary>
         )}
 
         {conflictMounted && (
-          <ConflictDialog conflict={conflict} onClose={() => setConflict(null)} />
+          <LazyModalBoundary active={conflict !== null} onClose={() => setConflict(null)}>
+            <ConflictDialog conflict={conflict} onClose={() => setConflict(null)} />
+          </LazyModalBoundary>
         )}
       </Suspense>
       <ToastHost toasts={toasts} onDismiss={dismissToast} />

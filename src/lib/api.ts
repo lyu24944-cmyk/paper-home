@@ -1,6 +1,7 @@
 import { getSupabaseClient, isCloudConfigured, supabaseAnonKey, supabaseUrl } from './supabase'
 import {
   getBackendMode,
+  invalidateBackendHealth,
   getLocalHeaders,
   resolveBackendHealth,
   setLocalOwnerActive,
@@ -287,22 +288,32 @@ export async function signInAdmin(email: string, password: string) {
   return data.session
 }
 
-export async function enterLocalOwnerMode(): Promise<string> {
+export async function enterLocalOwnerMode(pin?: string): Promise<string> {
   const health = await resolveBackendHealth(true)
   if (health.mode !== 'local-studio') {
     throw new ApiError(503, '当前未检测到本地工作室写入服务（请通过 npm run dev 打开）。', 'UNCONFIGURED')
   }
-  if (!health.writable) {
-    throw new ApiError(403, '为保护本机文件安全，仅本机（127.0.0.1 / localhost）允许开启本地编辑模式。', 'FORBIDDEN')
-  }
+  if (health.pinRequired && !health.writable) {
+    const response=await fetch('/__local-cms/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})})
+    if(!response.ok){const body=await response.json();throw new ApiError(response.status,body.error || 'PIN 登录失败')}
+    invalidateBackendHealth()
+    await resolveBackendHealth(true)
+  } else if (!health.writable) throw new ApiError(403,'当前连接不允许本地编辑。','FORBIDDEN')
   setLocalOwnerActive(true)
+  const {clearSignedUrlCache}=await import('./media')
+  clearSignedUrlCache('admin')
   return '本地主人（本机保存）'
 }
 
 export async function signOutAdmin() {
   const mode = await getBackendMode()
   if (mode === 'local-studio') {
+    const response=await fetch('/__local-cms/session',{method:'DELETE'})
+    if(!response.ok)throw new ApiError(response.status,'退出本地会话失败')
+    invalidateBackendHealth()
     setLocalOwnerActive(false)
+    const {clearSignedUrlCache}=await import('./media')
+    clearSignedUrlCache('admin')
     return
   }
   if (!isCloudConfigured) return

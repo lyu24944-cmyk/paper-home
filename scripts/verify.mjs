@@ -1,3 +1,4 @@
+import {browserExecutable,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import {chromium} from '@playwright/test';
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -16,8 +17,10 @@ async function startSeededServer(){
  await fs.rm(seedDataDir,{recursive:true,force:true});
  const store=createLocalCmsStore(rootDir,{dataDir:seedDataDir});await store.seedNeutralSample({force:true});
  for(const item of [{title:'示例作品 · 窗边光影实验',summary:'测试画廊切换。',body:'正文二。',asset:'10000000-0000-4000-8000-000000000102'},{title:'示例作品 · 四时天色手稿',summary:'第三幅作品。',body:'正文三。',asset:'10000000-0000-4000-8000-000000000101'}]){
-  const saved=await store.mutate('project.save_draft',{title:item.title,summary:item.summary,body:item.body,coverAssetId:item.asset,galleryAssetIds:[]});
-  await store.mutate('project.publish',{id:saved.body.project.id,expectedVersion:saved.body.project.version});
+  const saved=await store.mutate('project.save_draft',{expectedVersion:0,title:item.title,summary:item.summary,body:item.body,coverAssetId:item.asset,galleryAssetIds:[]});
+  assert.equal(saved.status,200,'Seed creation must use version zero');
+  const published=await store.mutate('project.publish',{id:saved.body.project.id,expectedVersion:saved.body.project.version});
+  assert.equal(published.status,200,'Seed publication must succeed');
  }
  execFileSync(process.execPath,[path.join(rootDir,'node_modules','vite','bin','vite.js'),'build','--mode','local-export','--outDir',seedDistDir],{cwd:rootDir,env:{...process.env,PAPER_HOME_FORCE_LOCAL:'1',LOCAL_CMS_DATA_DIR:seedDataDir},stdio:'inherit'});
  const server=http.createServer((req,res)=>{const cleanUrl=(req.url||'/').split('?')[0];let filePath=path.join(seedDistDir,cleanUrl==='/'?'index.html':decodeURIComponent(cleanUrl));if(!fsSync.existsSync(filePath)||fsSync.statSync(filePath).isDirectory())filePath=path.join(seedDistDir,'index.html');res.setHeader('Content-Type',MIME[path.extname(filePath).toLowerCase()]||'application/octet-stream');res.end(fsSync.readFileSync(filePath))});
@@ -26,7 +29,7 @@ async function startSeededServer(){
  return{url:`http://127.0.0.1:${port}/?qa`,close:()=>server.close()};
 }
 const serverHandle=await startSeededServer(),url=serverHandle.url;
-const browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true,args:['--enable-webgl','--ignore-gpu-blocklist','--enable-gpu-rasterization']});
+const browser=await chromium.launch({...browserExecutable(),headless:true,args:['--enable-webgl','--ignore-gpu-blocklist','--enable-gpu-rasterization']});
 const context=await browser.newContext({viewport:{width:1440,height:900},deviceScaleFactor:1,recordVideo:{dir:dir+'/video',size:{width:1440,height:900}}});
 const page=await context.newPage(),errors=[],results={transitions:[],operations:[],viewports:[],errors};
 page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});

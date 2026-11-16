@@ -101,8 +101,8 @@ export function buildDeepLinkHash(opts: BuildDeepLinkOptions): string {
   } else if (opts.at === 'daylight') {
     params.set('at', 'daylight')
   }
-  if (opts.weather === 'rain') {
-    params.set('weather', 'rain')
+  if (opts.weather === 'rain' || opts.weather === 'clear') {
+    params.set('weather', opts.weather)
   }
   if (opts.focus && isValidFocusForRoom(opts.focus, opts.room)) {
     params.set('focus', opts.focus)

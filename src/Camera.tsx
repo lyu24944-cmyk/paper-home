@@ -18,6 +18,7 @@ export const CameraController = forwardRef<CameraHandle,{place:Place;busy:boolea
   const {camera:baseCamera,size}=useThree(),camera=baseCamera as PerspectiveCamera
   const active=useRef(false),promoOverride=useRef(false),focusTween=useRef<gsap.core.Tween|null>(null),smooth=useRef(progress.current),tween=useRef<gsap.core.Tween|null>(null),finishSegment=useRef<(()=>void)|null>(null),reducedRef=useRef(reduced)
   const dimensions=useRef(size),galleryRef=useRef({index:galleryIndex,count:galleryCount}),prevFocus=useRef<FocusSubPoseId|null>(null),placeRef=useRef(place),onTransitionRef=useRef(onTransition)
+  const focusTarget=useRef<FocusSubPoseId|null>(focusId)
   dimensions.current=size;reducedRef.current=reduced;galleryRef.current={index:galleryIndex,count:galleryCount};placeRef.current=place;onTransitionRef.current=onTransition
   const apply=(p:CameraPose)=>{camera.position.copy(p.position);camera.quaternion.copy(p.orientation);camera.fov=p.fov;camera.updateProjectionMatrix()}
   const aspect=()=>dimensions.current.width/dimensions.current.height
@@ -25,18 +26,23 @@ export const CameraController = forwardRef<CameraHandle,{place:Place;busy:boolea
     const validFocus=focusPoseForPlace(focus,p)
     return validFocus?focusSubPose(validFocus,aspect()):stablePose(p,progress.current,aspect(),galleryRef.current.index,galleryRef.current.count)
   }
+  const finishFocus=()=>{
+    focusTween.current?.kill();focusTween.current=null
+    apply(targetPoseForCurrent(placeRef.current,focusTarget.current))
+  }
   useLayoutEffect(()=>{
+    if(!active.current&&focusTween.current&&!promoOverride.current)finishFocus()
     if(!active.current&&!focusTween.current&&!promoOverride.current){
       apply(targetPoseForCurrent(place,focusId))
     }
   },[place,size.width,size.height])
   useEffect(()=>{
     const validFocus=focusPoseForPlace(focusId,place)
+    focusTarget.current=validFocus
     if(active.current){prevFocus.current=validFocus;return}
     if(prevFocus.current===validFocus){
       if(reduced&&focusTween.current){
-        focusTween.current.kill();focusTween.current=null
-        apply(targetPoseForCurrent(place,validFocus))
+        finishFocus()
       }
       return
     }
@@ -58,15 +64,12 @@ export const CameraController = forwardRef<CameraHandle,{place:Place;busy:boolea
         camera.fov=start.fov+(dest.fov-start.fov)*value.t
         camera.updateProjectionMatrix()
       },
-      onComplete:()=>{
-        focusTween.current=null
-        apply(dest)
-      },
+      onComplete:finishFocus,
     })
   },[focusId,place,reduced])
   useEffect(()=>{if(reduced&&active.current)finishSegment.current?.()},[reduced])
   useEffect(()=>{
-    const visibility=()=>{if(document.hidden){finishSegment.current?.();focusTween.current?.kill();focusTween.current=null}}
+    const visibility=()=>{if(document.hidden){finishSegment.current?.();if(focusTween.current)finishFocus()}}
     document.addEventListener('visibilitychange',visibility)
     return()=>{document.removeEventListener('visibilitychange',visibility);tween.current?.kill();focusTween.current?.kill();finishSegment.current?.()}
   },[])

@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+import {browserExecutable,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import { chromium } from '@playwright/test';
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
@@ -14,33 +16,28 @@ const dir = path.join(rootDir, '.qa', 'polish', label);
 await fs.mkdir(dir, { recursive: true });
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.webp': 'image/webp', '.png': 'image/png', '.svg': 'image/svg+xml', '.ttf': 'font/ttf', '.woff2': 'font/woff2', '.hdr': 'application/octet-stream', '.glb': 'model/gltf-binary', '.bin': 'application/octet-stream' };
-let staticSrv = null;
-let targetUrl = process.env.QA_URL || `http://127.0.0.1:4319/?qa&quality=${quality}`;
-if (!process.env.QA_URL) {
-  let reachable = false;
-  try { const r = await fetch('http://127.0.0.1:4319/', { signal: AbortSignal.timeout(800) }); reachable = r.ok; } catch {}
-  if (!reachable) {
-    const distDir = path.join(rootDir, 'dist');
-    staticSrv = http.createServer((req, res) => {
-      const cleanUrl = (req.url || '/').split('?')[0];
-      let filePath = path.join(distDir, cleanUrl === '/' ? 'index.html' : decodeURIComponent(cleanUrl));
-      if (!fsSync.existsSync(filePath) || fsSync.statSync(filePath).isDirectory()) filePath = path.join(distDir, 'index.html');
-      res.setHeader('Content-Type', MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream');
-      res.end(fsSync.readFileSync(filePath));
-    });
-    await new Promise((r) => staticSrv.listen(0, '127.0.0.1', r));
-    const addr = staticSrv.address();
-    const port = typeof addr === 'object' && addr ? addr.port : 4319;
-    targetUrl = `http://127.0.0.1:${port}/?qa&quality=${quality}`;
-  }
+let staticSrv = null, browser;
+let targetUrl=process.env.QA_URL;
+try {
+if(!targetUrl){
+  const distDir=path.resolve(rootDir,process.env.QA_DIST_DIR||'dist');
+  assert(fsSync.existsSync(path.join(distDir,'index.html')),'Build output is required for performance measurement');
+  staticSrv=http.createServer((req,res)=>{
+    const cleanUrl=(req.url||'/').split('?')[0];
+    let filePath=path.join(distDir,cleanUrl==='/'?'index.html':decodeURIComponent(cleanUrl));
+    if(!fsSync.existsSync(filePath)||fsSync.statSync(filePath).isDirectory())filePath=path.join(distDir,'index.html');
+    res.setHeader('Content-Type',MIME[path.extname(filePath).toLowerCase()]||'application/octet-stream');res.end(fsSync.readFileSync(filePath));
+  });
+  await new Promise(resolve=>staticSrv.listen(0,'127.0.0.1',resolve));
+  targetUrl=`http://127.0.0.1:${staticSrv.address().port}/?qa&quality=${quality}`;
 }
 
-const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: false, args: ['--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization', `--window-size=${Math.min(width + 30, 2560)},${Math.min(height + 100, 1530)}`] });
+browser = await chromium.launch({ ...browserExecutable(), headless: process.env.QA_HEADFUL !== '1', args: ['--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization', `--window-size=${Math.min(width + 30, 2560)},${Math.min(height + 100, 1530)}`] });
 const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: dpr });
 const errors = [];
 page.on('pageerror', error => errors.push(error.message));
 await page.goto(targetUrl);
-await page.waitForFunction(() => !document.querySelector('.enter-button')?.disabled, { timeout: 120000 });
+await page.waitForFunction(() => Boolean(document.querySelector('.enter-button')) && !document.querySelector('.enter-button').disabled, null, { timeout: 120000 });
 await page.waitForTimeout(1500);
 await page.evaluate(() => {
   const test = window.__WINDOW_TEST__ = { start: performance.now(), phase: 'yard', frames: [], tasks: [], events: [], running: true };
@@ -94,8 +91,11 @@ const result = await page.evaluate(() => {
   const phases = Object.fromEntries([...new Set(test.frames.map(f => f.phase))].map(name => [name, summary(test.frames.filter(f => f.phase === name))]));
   return { summary: summary(test.frames), phases, ...test, appMetrics: window.__HOME_QA__.stop(), snapshot: window.__HOME_QA__, browser: navigator.userAgent, visibility: document.visibilityState };
 });
-Object.assign(result, { headed: true, width, height, deviceScaleFactor: dpr, quality, errors, recording: false, screenshotsDuringMeasurement: false });
+Object.assign(result, { headed: process.env.QA_HEADFUL === '1', width, height, deviceScaleFactor: dpr, quality, errors, recording: false, screenshotsDuringMeasurement: false });
 await fs.writeFile(`${dir}/window-performance-${width}-${quality}-dpr${dpr}.json`, JSON.stringify(result, null, 2));
 console.log(JSON.stringify({ label, width, height, dpr, quality, summary: result.summary, phases: result.phases, renderer: result.snapshot.renderer, errors }, null, 2));
-await browser.close();
-staticSrv?.close();
+assert.deepEqual(errors,[],'Performance run contains runtime errors');
+} finally {
+ await browser?.close();
+ if(staticSrv)await new Promise(resolve=>staticSrv.close(resolve));
+}

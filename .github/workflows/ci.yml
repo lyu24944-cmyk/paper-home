@@ -1,33 +1,30 @@
 name: CI
-
-on:
-  push:
-  pull_request:
-
+on: [push, pull_request]
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PAPER_HOME_FORCE_LOCAL: "1"
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Typecheck
-        run: npx tsc --noEmit
-
-      - name: Verify local assets
-        run: npm run assets:verify
-
-      - name: Check camera geometry & routes
-        run: npm run check:camera
-
-      - name: Build static snapshot
-        run: npm run build:local
+          node-version: "24"
+          cache: npm
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Verify clean checkout serially
+        run: npm run check:ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-evidence
+          path: |
+            .qa/ci-results.json
+            .qa/regression/
+            .qa/phase2-verify/downloads/
+          retention-days: 7

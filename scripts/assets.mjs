@@ -7,8 +7,11 @@ import {ALL_EXTENSIONS} from '@gltf-transform/extensions';
 import {dedup,weld,simplify,prune,textureCompress,meshopt,getBounds} from '@gltf-transform/functions';
 import {MeshoptDecoder,MeshoptEncoder,MeshoptSimplifier} from 'meshoptimizer';
 import {generate1kTextures} from './assets-1k.mjs';
+import {bakeFoliage} from './foliage-bake.mjs';
 const root=process.cwd(), out=path.join(root,'public/assets/realistic'), raw=path.join(root,'.qa/realistic/raw');
 const localRawOnly=process.argv.includes('--local-raw');
+const onlyTrees=process.argv.includes('--trees-only');
+const onlyModel=process.argv.find(x=>x.startsWith('--model='))?.slice(8);
 let existingManifest=null;
 try{existingManifest=JSON.parse(await fs.readFile(path.join(out,'manifest.json'),'utf8'))}catch{}
 const existingRecords=new Map((existingManifest?.records||[]).map(r=>[r.name||r.id,r]));
@@ -43,6 +46,8 @@ async function simplifyTreeDoc(doc,target,level,err){
  const trunkCap=level==='high'?1400:750;
  const branchCap=Math.round(target*0.26);
  const leavesCap=Math.max(1200,target-trunkCap-branchCap);
+ const detailedLeaves=doc.getRoot().listMaterials().some(m=>m.getName().startsWith('tree_small_02'));
+ const attachFoliage=await bakeFoliage(doc,leavesCap,level,detailedLeaves?(level==='high'?80:40):undefined);
  const meshes=doc.getRoot().listMeshes();
  const backups=meshes.map(m=>({mesh:m,prims:m.listPrimitives()}));
  await doc.transform(dedup());
@@ -69,6 +74,16 @@ async function simplifyTreeDoc(doc,target,level,err){
  for(const {mesh,prims} of backups){
   for(const p of prims)if(!p.isDisposed())mesh.addPrimitive(p);
  }
+ // A minimum leaf budget can exceed the remaining allowance on a small LOD.
+ // Finish only the detached trunk/branch geometry; never simplify baked leaf cards.
+ const woodBudget=target-attachFoliage.triangles;
+ for(const error of [err,.5,1]){
+  const woodTriangles=tri(doc);
+  if(woodTriangles<=woodBudget)break;
+  await doc.transform(simplify({simplifier:MeshoptSimplifier,ratio:Math.max(.01,(woodBudget-8)/woodTriangles),error,lockBorder:false}));
+ }
+ if(tri(doc)>woodBudget)throw new Error(`Tree wood exceeds its reserved triangle budget: ${tri(doc)} > ${woodBudget}`);
+ console.log('foliage bake',level,attachFoliage());
 }
 const models=[
  ['island_tree_01',{high:[16000,1024,.12],low:[7200,512,.22]}],
@@ -85,6 +100,8 @@ const models=[
  ['rock_moss_set_02',{high:[3200,512,.08],low:[1600,512,.16]}],
 ];
 for(const [id,cfg] of models){
+ if(onlyModel&&id!==onlyModel){records.push(existingRecords.get(id));continue}
+ if(onlyTrees&&!['island_tree_01','island_tree_02','tree_small_02'].includes(id)){records.push(existingRecords.get(id));continue}
  const folder=path.join(raw,id),prev=(existingManifest?.records||[]).find(r=>r.id===id);
  let info,assets;
  if(localRawOnly&&prev){
@@ -102,7 +119,7 @@ for(const [id,cfg] of models){
   const ratio=Math.min(1,target/originalTriangles);
   if(originalTriangles>500000){
    await simplifyTreeDoc(doc,target,level,err);
-   await doc.transform(prune(),textureCompress({encoder:sharp,targetFormat:'webp',resize:[texsize,texsize]}),meshopt({encoder:MeshoptEncoder,level:'high'}));
+   await doc.transform(prune(),textureCompress({encoder:sharp,targetFormat:'webp',resize:[texsize,texsize],pattern:/^(?!foliage-atlas)/}),meshopt({encoder:MeshoptEncoder,level:'high'}));
   }else{
    const ops=[dedup(),weld()];
    if(ratio<1)ops.push(simplify({simplifier:MeshoptSimplifier,ratio,error:err,lockBorder:false}));

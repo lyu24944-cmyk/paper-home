@@ -1,6 +1,6 @@
 import { getSupabaseClient, supabaseAnonKey, supabaseUrl } from './supabase'
 import { getBackendMode, getLocalHeaders } from './backend'
-import { registerMediaAssetApi, signMediaUrlsApi } from './api'
+import { cleanupMediaAssetsApi, registerMediaAssetApi, signMediaUrlsApi } from './api'
 import { ApiError, type MediaAsset, type SignedMediaEntry } from '../types/content'
 
 export const MAX_RAW_IMAGE_BYTES = 10 * 1024 * 1024 // 10 MB
@@ -13,7 +13,8 @@ const REFRESH_MARGIN_MS = 30_000
 const MAX_CACHE_ENTRIES = 500
 
 const urlCache = new Map<string, SignedMediaEntry>()
-const inflightSign = new Map<string, Promise<SignedMediaEntry | null>>()
+const signEpoch = { public: 0, admin: 0 }
+const inflightSign = new Map<string, { epoch:number; promise:Promise<SignedMediaEntry | null> | null }>()
 
 function cacheKeyFor(assetId: string, scope: 'public' | 'admin' = 'public'): string {
   return `${scope}:${assetId}`
@@ -42,21 +43,27 @@ export function seedSignedUrls(
 export function evictSignedUrl(assetId: string, scope?: 'public' | 'admin') {
   if (scope) {
     urlCache.delete(cacheKeyFor(assetId, scope))
+    inflightSign.delete(cacheKeyFor(assetId, scope))
     return
   }
   urlCache.delete(cacheKeyFor(assetId, 'public'))
   urlCache.delete(cacheKeyFor(assetId, 'admin'))
+  inflightSign.delete(cacheKeyFor(assetId, 'public'))
+  inflightSign.delete(cacheKeyFor(assetId, 'admin'))
 }
 
 export function clearSignedUrlCache(scope?: 'public' | 'admin') {
+  for (const target of scope ? [scope] : ['public','admin'] as const) signEpoch[target]++
   if (!scope) {
     urlCache.clear()
+    inflightSign.clear()
     return
   }
   const prefix = `${scope}:`
   for (const key of Array.from(urlCache.keys())) {
     if (key.startsWith(prefix)) urlCache.delete(key)
   }
+  for (const key of Array.from(inflightSign.keys())) if (key.startsWith(prefix)) inflightSign.delete(key)
 }
 
 export function getCachedUrl(
@@ -92,11 +99,15 @@ export async function refreshSignedUrl(
   }
 
   const existing = inflightSign.get(key)
-  if (existing) return await existing
+  if (existing?.promise) return await existing.promise
 
-  const task = (async () => {
+  const job = { epoch:signEpoch[scope], promise:null as Promise<SignedMediaEntry | null> | null }
+  const current = () => signEpoch[scope] === job.epoch && inflightSign.get(key) === job
+  inflightSign.set(key, job)
+  job.promise = (async () => {
     try {
       const res = await signMediaUrlsApi([assetId], scope)
+      if (!current()) return null
       seedSignedUrls(res.signedUrls, scope)
       if (res.deniedIds.includes(assetId)) {
         urlCache.delete(key)
@@ -104,17 +115,16 @@ export async function refreshSignedUrl(
       }
       return res.signedUrls[assetId] ?? null
     } catch (err) {
-      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+      if (current() && err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         urlCache.delete(key)
       }
       return null
     } finally {
-      inflightSign.delete(key)
+      if (current()) inflightSign.delete(key)
     }
   })()
 
-  inflightSign.set(key, task)
-  return await task
+  return await job.promise
 }
 
 function createId(): string {
@@ -193,7 +203,8 @@ async function canvasEncode(
   throw new Error('图片编码失败，请尝试更换图片格式。')
 }
 
-export async function processAndUploadImage(file: File): Promise<{ asset: MediaAsset; signedEntry: SignedMediaEntry | null }> {
+export async function processAndUploadImage(file: File, signal?: AbortSignal): Promise<{ asset: MediaAsset; signedEntry: SignedMediaEntry | null }> {
+  signal?.throwIfAborted()
   if (!ALLOWED_IMAGE_MIME.has(file.type)) {
     throw new Error('仅支持 JPEG、PNG、WebP 格式图片。')
   }
@@ -210,8 +221,11 @@ export async function processAndUploadImage(file: File): Promise<{ asset: MediaA
   let display: Awaited<ReturnType<typeof canvasEncode>>
   let thumb: Awaited<ReturnType<typeof canvasEncode>>
   try {
+    signal?.throwIfAborted()
     display = await canvasEncode(decoded.draw, decoded.width, decoded.height, 1600, 0.84)
+    signal?.throwIfAborted()
     thumb = await canvasEncode(decoded.draw, decoded.width, decoded.height, 640, 0.8)
+    signal?.throwIfAborted()
   } finally {
     decoded.close()
   }
@@ -220,8 +234,23 @@ export async function processAndUploadImage(file: File): Promise<{ asset: MediaA
   const displayPath = `images/${assetId}/display.${display.ext}`
   const thumbPath = `images/${assetId}/thumb.${thumb.ext}`
   const mode = await getBackendMode()
+  signal?.throwIfAborted()
+
+  const finish = async (asset: MediaAsset) => {
+    try {
+      signal?.throwIfAborted()
+      const signedEntry = await refreshSignedUrl(asset.id, 'admin', true)
+      signal?.throwIfAborted()
+      return { asset, signedEntry }
+    } catch (error) {
+      // Reference-aware cleanup never removes media saved by another content write.
+      await cleanupMediaAssetsApi({ candidateAssetIds: [asset.id] }).catch(() => undefined)
+      throw error
+    }
+  }
 
   if (mode === 'local-studio') {
+    try {
     const uploadLocalBlob = async (variant: 'display' | 'thumb', blob: Blob, mimeType: string) => {
       const res = await fetch(
         `/__local-cms/media-upload?assetId=${encodeURIComponent(assetId)}&variant=${variant}&mimeType=${encodeURIComponent(mimeType)}`,
@@ -232,6 +261,7 @@ export async function processAndUploadImage(file: File): Promise<{ asset: MediaA
             'Content-Type': 'application/octet-stream',
           },
           body: blob,
+          signal,
         },
       )
       const bodyText = await res.text().catch(() => '')
@@ -249,6 +279,7 @@ export async function processAndUploadImage(file: File): Promise<{ asset: MediaA
       uploadLocalBlob('display', display.blob, display.mimeType),
       uploadLocalBlob('thumb', thumb.blob, thumb.mimeType),
     ])
+    signal?.throwIfAborted()
 
     const asset = await registerMediaAssetApi({
       assetId,
@@ -263,8 +294,12 @@ export async function processAndUploadImage(file: File): Promise<{ asset: MediaA
       originalFilename: file.name,
     })
 
-    const signedEntry = await refreshSignedUrl(asset.id, 'admin', true)
-    return { asset, signedEntry }
+    return await finish(asset)
+    } catch(error) {
+      await cleanupMediaAssetsApi({candidateAssetIds:[assetId]}).catch(()=>undefined)
+      await fetch(`/__local-cms/media-upload?assetId=${encodeURIComponent(assetId)}`,{method:'DELETE',headers:getLocalHeaders()}).catch(()=>undefined)
+      throw error
+    }
   }
 
   if (mode !== 'cloud') {
@@ -272,6 +307,7 @@ export async function processAndUploadImage(file: File): Promise<{ asset: MediaA
   }
 
   const client = await getSupabaseClient()
+  signal?.throwIfAborted()
   const [upDisplay, upThumb] = await Promise.all([
     client.storage.from(BUCKET_NAME).upload(displayPath, display.blob, {
       contentType: display.mimeType,
@@ -293,7 +329,10 @@ export async function processAndUploadImage(file: File): Promise<{ asset: MediaA
     )
   }
 
+  let registrationAttempted = false
   try {
+    signal?.throwIfAborted()
+    registrationAttempted = true
     const asset = await registerMediaAssetApi({
       assetId,
       kind: 'image',
@@ -307,15 +346,19 @@ export async function processAndUploadImage(file: File): Promise<{ asset: MediaA
       originalFilename: file.name,
     })
 
-    const signedEntry = await refreshSignedUrl(asset.id, 'admin', true)
-    return { asset, signedEntry }
+    return await finish(asset)
   } catch (err) {
-    await client.storage.from(BUCKET_NAME).remove([displayPath, thumbPath]).catch(() => undefined)
+    if (registrationAttempted) {
+      await cleanupMediaAssetsApi({ candidateAssetIds: [assetId] }).catch(() => undefined)
+    } else {
+      await client.storage.from(BUCKET_NAME).remove([displayPath, thumbPath]).catch(() => undefined)
+    }
     throw err
   }
 }
 
-export async function validateVideoFile(file: File): Promise<{ mimeType: string; width: number; height: number; durationSec: number }> {
+export async function validateVideoFile(file: File, signal?: AbortSignal): Promise<{ mimeType: string; width: number; height: number; durationSec: number }> {
+  signal?.throwIfAborted()
   const mime = file.type || (file.name.toLowerCase().endsWith('.webm') ? 'video/webm' : file.name.toLowerCase().endsWith('.mp4') ? 'video/mp4' : '')
   if (!ALLOWED_VIDEO_MIME.has(mime)) {
     throw new Error('仅支持浏览器可播放的 MP4 或 WebM 视频文件。')
@@ -331,35 +374,28 @@ export async function validateVideoFile(file: File): Promise<{ mimeType: string;
       video.preload = 'metadata'
       video.muted = true
       video.playsInline = true
+      const cleanup = () => {
+        window.clearTimeout(timer)
+        signal?.removeEventListener('abort', abort)
+        video.onloadedmetadata = null
+        video.onerror = null
+        video.removeAttribute('src')
+        video.load()
+      }
+      const abort = () => { cleanup(); reject(new DOMException('已取消视频检查', 'AbortError')) }
       const timer = window.setTimeout(() => {
-        video.removeAttribute('src')
-        video.load()
-        reject(new Error('视频元信息解析超时，请检查视频编码是否为浏览器支持的 MP4（H.264）或 WebM。'))
+        cleanup()
+        reject(new Error('视频元信息解析超时，请检查视频编码。'))
       }, 10_000)
-
       video.onloadedmetadata = () => {
-        window.clearTimeout(timer)
-        const w = video.videoWidth
-        const h = video.videoHeight
-        const d = video.duration
-        video.removeAttribute('src')
-        video.load()
-        if (w > 0 && h > 0 && Number.isFinite(d) && d > 0) {
-          resolve({
-            width: w,
-            height: h,
-            durationSec: d,
-          })
-        } else {
-          reject(new Error('无法识别视频画面或时长，请转换编码后重试。'))
-        }
+        const w = video.videoWidth, h = video.videoHeight, d = video.duration
+        cleanup()
+        if (w > 0 && h > 0 && Number.isFinite(d) && d > 0) resolve({ width:w, height:h, durationSec:d })
+        else reject(new Error('无法识别视频画面或时长，请转换编码后重试。'))
       }
-      video.onerror = () => {
-        window.clearTimeout(timer)
-        video.removeAttribute('src')
-        video.load()
-        reject(new Error('当前浏览器无法播放该视频编码，请转码为 H.264 MP4 或 WebM 后上传。'))
-      }
+      video.onerror = () => { cleanup(); reject(new Error('当前浏览器无法播放该视频编码。')) }
+      signal?.addEventListener('abort', abort, { once:true })
+      if (signal?.aborted) { abort(); return }
       video.src = objectUrl
     })
 
@@ -431,8 +467,10 @@ function createLocalVideoUpload(
       xhr.send(chunk)
     })
 
+  let started = false
   const start = () => {
-    cancelled = false
+    if (cancelled || started) return
+    started = true
     void (async () => {
       try {
         let offset = 0
@@ -457,6 +495,7 @@ function createLocalVideoUpload(
           durationSec: meta.durationSec,
           originalFilename: file.name,
         })
+        if (cancelled) { await cleanupMediaAssetsApi({ candidateAssetIds:[asset.id] }); return }
         callbacks.onProgress(100, file.size, file.size)
         callbacks.onSuccess(asset)
       } catch (err) {
@@ -486,9 +525,12 @@ export async function createResumableVideoUpload(
     onSuccess: (asset: MediaAsset) => void
     onError: (message: string) => void
   },
+  signal?: AbortSignal,
 ): Promise<VideoUploadController> {
-  const meta = await validateVideoFile(file)
+  const meta = await validateVideoFile(file, signal)
+  signal?.throwIfAborted()
   const mode = await getBackendMode()
+  signal?.throwIfAborted()
   if (mode === 'local-studio') {
     return createLocalVideoUpload(file, meta, callbacks)
   }
@@ -496,7 +538,9 @@ export async function createResumableVideoUpload(
     throw new Error('当前为只读展示模式，无法上传视频。')
   }
   const client = await getSupabaseClient()
+  signal?.throwIfAborted()
   const { data: sessionData, error: sessionErr } = await client.auth.getSession()
+  signal?.throwIfAborted()
   const token = sessionData.session?.access_token
   if (sessionErr || !token) {
     throw new Error('请先登录主人账号后再上传视频。')
@@ -536,6 +580,7 @@ export async function createResumableVideoUpload(
   let cancelled = false
 
   const { Upload } = await import('tus-js-client')
+  signal?.throwIfAborted()
   const upload = new Upload(file, {
     endpoint: `${supabaseUrl}/storage/v1/upload/resumable`,
     retryDelays: [0, 1500, 3000, 6000],
@@ -599,10 +644,12 @@ export async function createResumableVideoUpload(
             durationSec: meta.durationSec,
             originalFilename: file.name,
           })
+          if (cancelled) { await cleanupMediaAssetsApi({ candidateAssetIds:[asset.id] }); return }
           clearPending()
           callbacks.onProgress(100, file.size, file.size)
           callbacks.onSuccess(asset)
         } catch (err) {
+          if (cancelled) return
           callbacks.onError(err instanceof Error ? err.message : '视频登记失败，请重试。')
         }
       })()
@@ -610,9 +657,12 @@ export async function createResumableVideoUpload(
   })
 
   // Check for previous interrupted upload of the same file within this browser (24h TUS TTL).
+  let started = false
   const start = () => {
-    cancelled = false
+    if (cancelled || started) return
+    started = true
     void upload.findPreviousUploads().then((previous) => {
+      if (cancelled) return
       if (previous.length > 0) {
         const prevObj = previous[0].metadata?.objectName
         const match = typeof prevObj === 'string' ? prevObj.match(/^videos\/([0-9a-f-]+)\//i) : null
@@ -626,6 +676,7 @@ export async function createResumableVideoUpload(
       }
       upload.start()
     }).catch(() => {
+      if (cancelled) return
       upload.start()
     })
   }
@@ -638,7 +689,7 @@ export async function createResumableVideoUpload(
     } catch {
       // Ignore abort errors on already-halted uploads.
     }
-    await client.storage.from(BUCKET_NAME).remove([displayPath]).catch(() => undefined)
+    await cleanupMediaAssetsApi({ candidateAssetIds:[assetId] }).catch(() => undefined)
   }
 
   return { assetId, start, cancel }

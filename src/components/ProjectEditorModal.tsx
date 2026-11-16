@@ -43,6 +43,8 @@ export function ProjectEditorModal({
   onConflict: (conflict: ConflictContext) => void
   onClose: () => void
 }) {
+  const alive = useRef(true)
+  useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
   const uid = useId()
   const [current, setCurrent] = useState<AdminProject | null>(initialProject)
   const [title, setTitle] = useState('')
@@ -176,6 +178,7 @@ export function ProjectEditorModal({
         `正文摘要：${latest.draft.body.slice(0, 140) || '（空）'}`,
       ],
       onUseCloud: () => {
+        if (!alive.current) return
         syncFromProject(latest)
         onSaved(latest, 0)
         setSaveError('')
@@ -193,6 +196,7 @@ export function ProjectEditorModal({
     }
 
     const res = await saveProjectDraftApi(current?.id ?? null, current?.version ?? 0, draft)
+    if (!alive.current) return null
     if (res.item) {
       setCurrent(res.item)
       onSaved(res.item, res.pendingCleanupCount, notifyAction)
@@ -215,6 +219,7 @@ export function ProjectEditorModal({
         )
       }
     } catch (err) {
+      if (!alive.current) return
       if (err instanceof ConflictError) {
         raiseProjectConflict(err as ConflictError<AdminProject>)
       } else {
@@ -241,6 +246,7 @@ export function ProjectEditorModal({
       const saved = await saveDraftInternal()
       if (!saved) return
       const pubRes = await publishProjectApi(saved.id, saved.version)
+      if (!alive.current) return
       if (pubRes.item) {
         setCurrent(pubRes.item)
         onSaved(pubRes.item, pubRes.pendingCleanupCount, 'publish')
@@ -249,6 +255,7 @@ export function ProjectEditorModal({
         )
       }
     } catch (err) {
+      if (!alive.current) return
       if (err instanceof ConflictError) {
         raiseProjectConflict(err as ConflictError<AdminProject>)
       } else {
@@ -266,12 +273,14 @@ export function ProjectEditorModal({
     setSaveStatus('')
     try {
       const res = await unpublishProjectApi(current.id, current.version)
+      if (!alive.current) return
       if (res.item) {
         setCurrent(res.item)
         onSaved(res.item, res.pendingCleanupCount, 'unpublish')
         setSaveStatus('已撤回发布，访客不再看到此作品；草稿内容仍已保留。')
       }
     } catch (err) {
+      if (!alive.current) return
       if (err instanceof ConflictError) {
         raiseProjectConflict(err as ConflictError<AdminProject>)
       } else {
@@ -288,10 +297,12 @@ export function ProjectEditorModal({
     setDeleteError('')
     try {
       const res = await deleteProjectApi(current.id, current.version)
+      if (!alive.current) return
       setConfirmDeleteOpen(false)
       onDeleted(current.id, res.pendingCleanupCount)
       onClose()
     } catch (err) {
+      if (!alive.current) return
       if (err instanceof ConflictError) {
         setConfirmDeleteOpen(false)
         raiseProjectConflict(err as ConflictError<AdminProject>)
@@ -304,6 +315,7 @@ export function ProjectEditorModal({
   }
 
   function handleClose() {
+    alive.current = false
     flushSessionCandidates()
     onClose()
   }

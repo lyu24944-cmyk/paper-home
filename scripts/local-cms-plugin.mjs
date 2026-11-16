@@ -1,6 +1,11 @@
+import { createLocalSessions } from './local-sessions.mjs'
+import {validateSnapshot} from './public-snapshot.mjs'
+import {atomicDirectory} from './atomic-directory.mjs'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import os from 'node:os'
+import { canonical, assertPrivateDataDirectory, installPrivateDataGuard } from './private-data-guard.mjs'
 import {
   ALLOWED_IMAGE_MIMES,
   ALLOWED_VIDEO_MIMES,
@@ -109,20 +114,12 @@ async function readJsonBody(req) {
   }
 }
 
-function isWriteAuthorized(req) {
-  if (isLoopbackAddress(req.socket?.remoteAddress)) return true
-  const allowLan = process.env.LOCAL_CMS_ALLOW_LAN === '1'
-  const expectedPin = process.env.LOCAL_CMS_PIN || ''
-  const providedPin = typeof req.headers['x-local-pin'] === 'string' ? req.headers['x-local-pin'] : ''
-  return Boolean(allowLan && expectedPin && providedPin && timingSafeEqualStr(providedPin, expectedPin))
-}
-
-function requireAdminHeaders(req, res) {
+function requireAdminHeaders(req, res, authorized) {
   if (!isAllowedHostHeader(req) || !hasSafeOriginAndFetchSite(req)) {
     sendJson(res, 403, { error: '禁止跨站或非法来源请求本地工作室接口。' })
     return false
   }
-  if (!isWriteAuthorized(req)) {
+  if (!authorized(req)) {
     sendJson(res, 403, { error: '出于安全限制，本地编辑与写入仅限本机 127.0.0.1 / localhost 访问。' })
     return false
   }
@@ -165,11 +162,18 @@ function serveMediaFile(req, res, resolved) {
   res.setHeader('Cache-Control', 'no-store')
 
   const rangeHeader = req.headers.range
-  if (rangeHeader && typeof rangeHeader === 'string' && rangeHeader.startsWith('bytes=')) {
-    const parts = rangeHeader.replace(/^bytes=/, '').split('-')
-    const start = Math.max(0, Number.parseInt(parts[0] || '0', 10))
-    const end = parts[1] ? Math.min(total - 1, Number.parseInt(parts[1], 10)) : total - 1
-    if (Number.isNaN(start) || Number.isNaN(end) || start > end || start >= total) {
+  if (typeof rangeHeader === 'string' && rangeHeader.startsWith('bytes=') && !rangeHeader.includes(',')) {
+    const match=/^bytes=(\d*)-(\d*)$/.exec(rangeHeader)
+    let start=NaN,end=NaN
+    if(match && (match[1] || match[2])){
+      if(!match[1]){
+        const suffix=Number(match[2])
+        if(suffix>0){start=Math.max(0,total-suffix);end=total-1}
+      }else{
+        start=Number(match[1]);end=match[2]?Math.min(total-1,Number(match[2])):total-1
+      }
+    }
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start<0 || start > end || start >= total) {
       res.statusCode = 416
       res.setHeader('Content-Range', `bytes */${total}`)
       res.end()
@@ -187,12 +191,70 @@ function serveMediaFile(req, res, resolved) {
   pipeReadStream(res, resolved.filePath)
 }
 
-export function localCmsPlugin({ rootDir, mode = 'development', outDir = 'dist', dataDir = process.env.LOCAL_CMS_DATA_DIR } = {}) {
+/** @param {{rootDir:string, mode?:string, outDir?:string, dataDir?:string}} options */
+export function localCmsPlugin({ rootDir, mode = 'development', outDir = 'dist', dataDir = process.env.LOCAL_CMS_DATA_DIR }) {
+  const auth = createLocalSessions({isLoopback:isLoopbackAddress,lanEnabled:isLanPinModeEnabled,verifyPin:pin=>timingSafeEqualStr(pin,process.env.LOCAL_CMS_PIN||'')})
   const store = createLocalCmsStore(rootDir, dataDir ? { dataDir } : undefined)
+  const privateDirectories=[...new Set([store.dataDir,path.join(rootDir,'local-data'),path.join(rootDir,'.qa')].map(dir=>path.resolve(dir)))]
+  assertPrivateDataDirectory(store.dataDir, path.resolve(rootDir, 'public'), path.resolve(rootDir, outDir))
+  let previewRoot = path.resolve(rootDir, outDir)
+  let configuredBuild=false,prepared=null,previous=null,completed=false
+  const ownedStages=new Set()
+  const removeStage=dir=>{if(!dir)return;fs.rmSync(dir,{recursive:true,force:true,maxRetries:5,retryDelay:50});ownedStages.delete(dir);if(!ownedStages.size)process.removeListener('exit',exitCleanup)}
+  const exitCleanup=()=>{for(const dir of ownedStages){try{fs.rmSync(dir,{recursive:true,force:true})}catch{/* Leave a recovery directory if the filesystem is unavailable. */}}}
+  const ownStage=()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'paper-home-public-build-'));if(!ownedStages.size)process.once('exit',exitCleanup);ownedStages.add(dir);return dir}
+  const prepare=async()=>{
+    if(prepared)return prepared
+    const dir=ownStage(),input=process.env.PAPER_HOME_SNAPSHOT_DIR
+    try{
+      if(input){
+        const source=path.resolve(rootDir,input)
+        const relative=path.relative(canonical(previewRoot),canonical(source))
+        if(relative===''||(relative!=='..'&&!relative.startsWith('..'+path.sep)&&!path.isAbsolute(relative)))throw new Error('Snapshot input must be outside the build output directory')
+        fs.cpSync(source,dir,{recursive:true})
+      }else{
+        if(!fs.existsSync(store.cottagePath))throw new Error('Missing local snapshot data source; provide PAPER_HOME_SNAPSHOT_DIR or an existing LOCAL_CMS_DATA_DIR/cottage.json')
+        store.exportStaticSnapshot(dir)
+      }
+      const payload=await validateSnapshot(dir,{requireManifest:Boolean(input)})
+      prepared={dir,summary:{projectCount:payload.projects.length,noteCount:payload.notes.length,assetCount:Object.keys(payload.signedUrls).length}}
+      return prepared
+    }catch(error){removeStage(dir);throw error}
+  }
+  const restorePrevious=()=>{
+    if(!previous||completed)return
+    try{atomicDirectory(previewRoot,stage=>fs.cpSync(previous,stage,{recursive:true}))}
+    catch(error){
+      // Never delete the sole complete copy if restoration itself is blocked.
+      const recovery=previous;ownedStages.delete(recovery);previous=null
+      throw new Error(`Snapshot restoration failed; complete recovery copy retained at ${recovery}`,{cause:error})
+    }
+  }
+  const disposePrepared=()=>{if(prepared){removeStage(prepared.dir);prepared=null}if(previous){removeStage(previous);previous=null}}
 
   return {
     name: 'paper-home-local-cms',
+    async configResolved(config) {
+      previewRoot = path.resolve(config.root, config.build.outDir)
+      assertPrivateDataDirectory(store.dataDir, config.publicDir || null, previewRoot)
+      // Append to the resolved defaults; never replace Vite's secret/certificate deny rules.
+      config.server.fs.deny.push(`${path.resolve(store.dataDir).replaceAll('\\', '/')}/**`)
+      for(const dir of privateDirectories)config.server.fs.deny.push(`${dir.replaceAll('\\','/')}/**`)
+      configuredBuild=config.command==='build'
+      if(mode==='local-export'&&configuredBuild){
+        // This hook completes before Vite empties outDir. Preserve a fully
+        // validated immutable snapshot and the previous output for recovery.
+        try{
+          await prepare()
+          if(fs.existsSync(previewRoot)){previous=ownStage();fs.cpSync(previewRoot,previous,{recursive:true})}
+        }catch(error){disposePrepared();throw error}
+      }
+    },
+    configurePreviewServer(server) {
+      for(const dir of privateDirectories)installPrivateDataGuard(server.middlewares, previewRoot, dir)
+    },
     configureServer(server) {
+      for(const dir of privateDirectories)installPrivateDataGuard(server.middlewares, rootDir, dir)
       server.middlewares.use('/__local-cms', async (req, res, next) => {
         try {
           if (!isAllowedHostHeader(req)) {
@@ -206,6 +268,17 @@ export function localCmsPlugin({ rootDir, mode = 'development', outDir = 'dist',
           const urlObj = new URL(req.url || '/', 'http://127.0.0.1')
           const pathname = urlObj.pathname
 
+          if (pathname === '/session' && req.method === 'POST') {
+            const body=await readJsonBody(req)
+            const status=auth.login(req,res,body.pin)
+            sendJson(res,status,status===200?{ok:true}:{error:status===429?'PIN 尝试过多，请五分钟后重试。':'PIN 不正确。'})
+            return
+          }
+          if (pathname === '/session' && req.method === 'DELETE') {
+            auth.logout(req,res)
+            sendJson(res,200,{ok:true})
+            return
+          }
           if (req.method === 'GET' && pathname === '/health') {
             const db = store.readDb()
             const hasContent =
@@ -216,7 +289,8 @@ export function localCmsPlugin({ rootDir, mode = 'development', outDir = 'dist',
               ok: true,
               service: 'paper-home-local-cms',
               mode: 'local-studio',
-              writable: isWriteAuthorized(req),
+              writable: auth.authorized(req),
+              pinRequired: isLanPinModeEnabled() && !isLoopbackAddress(req.socket?.remoteAddress),
               isLoopback: isLoopbackAddress(req.socket?.remoteAddress),
               hasContent,
               dataDir: 'local-data/',
@@ -230,7 +304,7 @@ export function localCmsPlugin({ rootDir, mode = 'development', outDir = 'dist',
           }
 
           if (req.method === 'GET' && pathname === '/admin-content') {
-            if (!requireAdminHeaders(req, res)) return
+            if (!requireAdminHeaders(req, res, auth.authorized)) return
             sendJson(res, 200, store.buildAdminCottage())
             return
           }
@@ -238,7 +312,7 @@ export function localCmsPlugin({ rootDir, mode = 'development', outDir = 'dist',
           if (req.method === 'POST' && pathname === '/media-sign') {
             const body = await readJsonBody(req)
             const scope = body.scope === 'admin' ? 'admin' : 'public'
-            if (scope === 'admin' && !requireAdminHeaders(req, res)) return
+            if (scope === 'admin' && !requireAdminHeaders(req, res, auth.authorized)) return
             const ids = Array.isArray(body.assetIds) ? body.assetIds : []
             const db = store.readDb()
             const { signedUrls, deniedIds } = store.signAssets(db, ids, { scope })
@@ -251,7 +325,7 @@ export function localCmsPlugin({ rootDir, mode = 'development', outDir = 'dist',
           }
 
           if (req.method === 'POST' && pathname === '/admin-mutate') {
-            if (!requireAdminHeaders(req, res)) return
+            if (!requireAdminHeaders(req, res, auth.authorized)) return
             const body = await readJsonBody(req)
             const result = store.mutate(body.action || '', body.payload || {})
             sendJson(res, result.status, result.body)
@@ -259,7 +333,7 @@ export function localCmsPlugin({ rootDir, mode = 'development', outDir = 'dist',
           }
 
           if (req.method === 'POST' && pathname === '/media-cleanup') {
-            if (!requireAdminHeaders(req, res)) return
+            if (!requireAdminHeaders(req, res, auth.authorized)) return
             const body = await readJsonBody(req)
             const resCleanup = store.cleanupAssets(body.candidateAssetIds, Boolean(body.sweepOrphans))
             sendJson(res, 200, resCleanup)
@@ -267,7 +341,7 @@ export function localCmsPlugin({ rootDir, mode = 'development', outDir = 'dist',
           }
 
           if (req.method === 'POST' && pathname === '/init-sample') {
-            if (!requireAdminHeaders(req, res)) return
+            if (!requireAdminHeaders(req, res, auth.authorized)) return
             const body = await readJsonBody(req)
             const result = await store.seedNeutralSample({ force: Boolean(body.force) })
             sendJson(res, 200, { ok: true, ...result })
@@ -275,7 +349,7 @@ export function localCmsPlugin({ rootDir, mode = 'development', outDir = 'dist',
           }
 
           if ((req.method === 'POST' || req.method === 'PUT') && pathname === '/media-upload') {
-            if (!requireAdminHeaders(req, res)) return
+            if (!requireAdminHeaders(req, res, auth.authorized)) return
             const assetId = urlObj.searchParams.get('assetId') || ''
             const variant = urlObj.searchParams.get('variant') || 'display'
             const mimeType = (urlObj.searchParams.get('mimeType') || '').trim()
@@ -319,7 +393,7 @@ export function localCmsPlugin({ rootDir, mode = 'development', outDir = 'dist',
           }
 
           if (req.method === 'DELETE' && pathname === '/media-upload') {
-            if (!requireAdminHeaders(req, res)) return
+            if (!requireAdminHeaders(req, res, auth.authorized)) return
             const assetId = urlObj.searchParams.get('assetId') || ''
             store.abortVideoUpload(assetId)
             sendJson(res, 200, { ok: true })
@@ -329,7 +403,7 @@ export function localCmsPlugin({ rootDir, mode = 'development', outDir = 'dist',
           const mediaMatch = pathname.match(/^\/media\/(public|admin)\/([0-9a-f-]+)\/(display|thumb)$/i)
           if (req.method === 'GET' && mediaMatch) {
             const [, scope, assetId, variant] = mediaMatch
-            if (scope === 'admin' && (!isWriteAuthorized(req) || !hasSafeOriginAndFetchSite(req))) {
+            if (scope === 'admin' && (!auth.authorized(req) || !hasSafeOriginAndFetchSite(req))) {
               sendJson(res, 403, { error: '禁止跨站或非本机读取草稿素材' })
               return
             }
@@ -348,15 +422,21 @@ export function localCmsPlugin({ rootDir, mode = 'development', outDir = 'dist',
         }
       })
     },
-    writeBundle(outputOptions) {
+    async writeBundle(outputOptions) {
       if (mode !== 'local-export') return
       const resolvedOutDir = outputOptions?.dir ? path.resolve(outputOptions.dir) : path.resolve(rootDir, outDir)
       const snapshotDir = path.join(resolvedOutDir, 'local-snapshot')
-      const summary = store.exportStaticSnapshot(snapshotDir)
+      const snapshot=await prepare(),summary=snapshot.summary
+      try{atomicDirectory(snapshotDir,stage=>fs.cpSync(snapshot.dir,stage,{recursive:true}));completed=true}
+      catch(error){restorePrevious();throw error}
+      finally{if(!configuredBuild)disposePrepared()}
       console.log(
         `[paper-home] Exported local static snapshot -> ${path.relative(rootDir, snapshotDir)} ` +
           `(projects: ${summary.projectCount}, notes: ${summary.noteCount}, assets: ${summary.assetCount})`,
       )
     },
+    buildError(){completed=false;try{restorePrevious()}finally{disposePrepared()}},
+    renderError(){completed=false;try{restorePrevious()}finally{disposePrepared()}},
+    closeBundle(){try{restorePrevious()}finally{disposePrepared()}},
   }
 }

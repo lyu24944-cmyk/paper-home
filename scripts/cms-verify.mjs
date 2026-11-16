@@ -1,3 +1,4 @@
+import {browserExecutable,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import crypto from 'node:crypto'
@@ -836,7 +837,7 @@ await new Promise((r) => siteServer.listen(SITE_PORT, '127.0.0.1', r))
 
 const results = { checks: [], errors: [], passed: false }
 const browser = await chromium.launch({
-  executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  ...browserExecutable(),
   headless: true,
   args: ['--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'],
 })
@@ -844,12 +845,22 @@ const browser = await chromium.launch({
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 })
 const page = await context.newPage()
 page.on('pageerror', (e) => results.errors.push(`pageerror: ${e.message}`))
-page.on('console', (m) => {
-  if (m.type() === 'error') {
-    const text = m.text()
-    // Expected 403 / 409 / 500 during negative assertions are intentionally provoked via test steps
-    results.errors.push(`console.error: ${text}`)
-  }
+let negativeStep='none'
+const observedHttp=[],httpConsole=[],expectedCounts={tus:0,conflict:0}
+page.on('response',response=>{
+  if(response.status()<400)return
+  const request=response.request(),url=new URL(response.url())
+  let allowed=false
+  if(negativeStep==='tus-failure' && request.method()==='PATCH' && /^\/storage\/v1\/upload\/resumable\/[^/]+$/.test(url.pathname) && response.status()===500 && expectedCounts.tus<5){expectedCounts.tus++;allowed=true}
+  if(negativeStep==='note-conflict' && request.method()==='POST' && url.pathname==='/functions/v1/admin-mutate' && response.status()===409 && request.postDataJSON()?.action==='note.save_draft' && expectedCounts.conflict<1){expectedCounts.conflict++;allowed=true}
+  observedHttp.push({url:response.url(),status:response.status(),allowed})
+  if(!allowed)results.errors.push(`Unexpected HTTP ${response.status()} ${request.method()} ${url.pathname} at ${negativeStep}`)
+})
+page.on('console',m=>{
+  if(m.type()!=='error')return
+  const match=/^Failed to load resource: the server responded with a status of (\d+)/.exec(m.text())
+  if(match)httpConsole.push({url:m.location().url,status:Number(match[1])})
+  else results.errors.push(`console.error: ${m.text()}`)
 })
 
 async function idle(place) {
@@ -934,14 +945,17 @@ try {
   await coverInput.setInputFiles(coverPngPath)
   await openEd.getByText(/已上传 1 张图片/).waitFor({ timeout: 15000 })
 
-  // Check 4: TUS video upload failure/retry using real 12.14 MB MP4
-  const demoVideoPath = path.join(rootDir, '.qa', 'seed', 'cottage-demo.mp4')
+  // Check 4: real tracked MP4 padded with a legal free box beyond the 6 MiB chunk size
+  const demoVideoPath = prepareTestVideo(qaOutDir)
   await fetch(`http://127.0.0.1:${MOCK_PORT}/__test/set-tus-fail`, {
     method: 'POST',
     body: JSON.stringify({ fail: true }),
   })
+  negativeStep='tus-failure'
   await videoInput.setInputFiles(demoVideoPath)
   await openEd.getByRole('button', { name: '重试上传（同一浏览器断点续传）' }).waitFor({ timeout: 25000 })
+  assert.equal(expectedCounts.tus,5,'exactly five deliberately failed PATCH requests are expected')
+  negativeStep='none'
   // Form text still intact!
   assert.equal(await openEd.getByLabel('作品简介（发布必填）').inputValue(), '手绘白昼风格的可维护个人网站，支持在线创作与发布。')
   await fetch(`http://127.0.0.1:${MOCK_PORT}/__test/set-tus-fail`, {
@@ -1057,9 +1071,12 @@ try {
     method: 'POST',
     body: JSON.stringify({ id: targetNoteId, title: '空间与浏览路线（云端新版本）' }),
   })
+  negativeStep='note-conflict'
   await openEd.getByRole('button', { name: '保存草稿' }).click()
   const conflictDlg = page.locator('dialog.conflict-dialog[open]')
   await conflictDlg.getByText('检测到云端更新冲突').waitFor()
+  assert.equal(expectedCounts.conflict,1)
+  negativeStep='none'
   await conflictDlg.getByRole('button', { name: '查看云端版本' }).click()
   await conflictDlg.getByText(/空间与浏览路线（云端新版本）/).waitFor()
   await conflictDlg.getByRole('button', { name: '使用云端版本刷新' }).click()
@@ -1157,11 +1174,12 @@ try {
   await page.locator('dialog.note-detail-dialog[open] .dialog-close').click()
   results.checks.push('visitor cross-navigation between NoteDetailModal and ProjectDetailModal works')
 
-  // Allowlist expected negative-path HTTP console errors if Chrome logs 403/500 for intentional tests
-  const unexpectedErrors = results.errors.filter(
-    (msg) => !msg.includes('status of 500') && !msg.includes('status of 409'),
-  )
-  assert.equal(unexpectedErrors.length, 0, `Unexpected runtime errors: ${unexpectedErrors.join('\n')}`)
+  for(const message of httpConsole){
+    const observed=observedHttp.find(x=>!x.consoleMatched && x.url===message.url && x.status===message.status)
+    assert.ok(observed,`Unmatched HTTP console error: ${JSON.stringify(message)}`)
+    observed.consoleMatched=true
+  }
+  assert.equal(results.errors.length,0,`Unexpected runtime errors: ${results.errors.join('\n')}`)
   results.passed = true
 } catch (err) {
   results.passed = false

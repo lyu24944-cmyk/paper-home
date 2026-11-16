@@ -1,3 +1,4 @@
+import {browserExecutable,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -6,7 +7,7 @@ import { chromium } from '@playwright/test'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
-const PORT = 4328
+const PORT = await freePort()
 const BASE_URL = `http://127.0.0.1:${PORT}`
 
 function assert(condition, message) {
@@ -40,18 +41,18 @@ async function waitIdle(page, place) {
 
 async function main() {
   const viteBin = path.join(rootDir, 'node_modules', 'vite', 'bin', 'vite.js')
-  const server = spawn(
+  const server = trackProcess(spawn(
     process.execPath,
     [viteBin, '--host', '127.0.0.1', '--port', String(PORT), '--strictPort'],
     {
       cwd: rootDir,
+      env:isolatedLocalEnv(),
       stdio: ['ignore', 'pipe', 'pipe'],
     },
-  )
+  ))
 
-  const chromePath = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
-  const browser = await chromium.launch({
-    ...(fs.existsSync(chromePath) ? { executablePath: chromePath } : {}),
+    const browser = await chromium.launch({
+    ...browserExecutable(),
     headless: true,
     args: ['--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'],
   })
@@ -168,7 +169,7 @@ async function main() {
   } finally {
     await browser.close()
     try {
-      server.kill()
+      await stopProcess(server)
     } catch {
       // ignore
     }

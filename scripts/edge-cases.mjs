@@ -1,10 +1,13 @@
+import {browserExecutable,freePort,isolatedLocalEnv,prepareTestVideo,trackProcess,stopProcess} from './test-runtime.mjs'
 import {chromium} from '@playwright/test';import fs from 'node:fs/promises';import assert from 'node:assert/strict';
-const browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true,args:['--enable-webgl','--ignore-gpu-blocklist']});
+import {startBrowserTest} from './regression/browser.mjs'
+const app=await startBrowserTest(),browser=app.browser;
 const results={checks:[]};
+await fs.mkdir('.qa/polish/after',{recursive:true});
 try{
  const page=await browser.newPage({viewport:{width:640,height:900},deviceScaleFactor:2,hasTouch:true});
- let fail=true;await page.route('**/brick-color.webp',r=>{if(fail){fail=false;return r.abort()}return r.continue()});
- await page.goto('http://127.0.0.1:4319/?qa');await page.getByRole('button',{name:'重新加载',exact:true}).waitFor({timeout:60000});assert(await page.locator('.enter-button').isDisabled());await page.getByRole('button',{name:'重新加载',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.enter-button').disabled,{timeout:120000});results.checks.push('critical load failure keeps entry locked; retry succeeds');
+ let fail=true;await page.route(/\/brick-color(?:-1k)?\.webp(?:\?|$)/,r=>{if(fail){fail=false;return r.abort()}return r.continue()});
+ await page.goto(app.url.replace('quality=low','quality=high'));await page.getByRole('button',{name:'重新加载',exact:true}).waitFor({timeout:60000});assert(await page.locator('.enter-button').isDisabled());await page.getByRole('button',{name:'重新加载',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.enter-button').disabled,{timeout:120000});results.checks.push('critical load failure keeps entry locked; retry succeeds');
  await page.waitForTimeout(1200);assert.equal(await page.evaluate(()=>window.__HOME_QA__.dpr),1.5);results.checks.push('640 px narrow desktop uses a stable DPR cap of 1.5');
  await page.getByRole('button',{name:'敲敲门，进来坐坐'}).click();await page.waitForTimeout(250);assert.equal(await page.evaluate(()=>window.__HOME_QA__.dpr),1.5);await page.waitForFunction(()=>location.hash==='#hall'&&!document.querySelector('.traveling'),{timeout:45000});await page.waitForTimeout(1300);assert.equal(await page.evaluate(()=>window.__HOME_QA__.dpr),1.5);results.checks.push('motion and settling retain DPR 1.5 without render-target reallocation');
  await page.evaluate(()=>{const el=document.querySelector('.home-app');el.scrollTop=((3.2-1.45)/12.5)*(el.scrollHeight-el.clientHeight)});await page.waitForTimeout(1500);const before=await page.evaluate(()=>window.__HOME_QA__.position);
@@ -13,4 +16,4 @@ try{
  const cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:200,y:580}]});for(let i=1;i<=8;i++){await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:200,y:580-i*30}]});await page.waitForTimeout(30)}await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await page.waitForTimeout(700);assert(await page.locator('.home-app').evaluate(el=>el.scrollTop)>start);results.checks.push('phone touch swipe advances the same corridor');
  await page.getByRole('button',{name:'小屋地图',exact:true}).click();assert(await page.getByRole('dialog',{name:'小屋地图',exact:true}).isVisible());await page.keyboard.press('Escape');results.checks.push('icon-only mobile map remains named and keyboard-dismissable');
  await page.screenshot({path:'.qa/polish/after/phone-touch.png'});results.passed=true;await page.close();
-}catch(e){results.passed=false;results.error=e.stack;process.exitCode=1}finally{await fs.writeFile('.qa/polish/after/edge-cases.json',JSON.stringify(results,null,2));console.log(results);await browser.close()}
+}catch(e){results.passed=false;results.error=e.stack;process.exitCode=1}finally{await fs.writeFile('.qa/polish/after/edge-cases.json',JSON.stringify(results,null,2));console.log(results);await app.close()}

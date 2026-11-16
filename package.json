@@ -4,7 +4,7 @@
   "version": "1.1.0",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "assets:prepare": "node scripts/assets.mjs",
@@ -29,7 +29,13 @@
     "build:local": "node scripts/check-assets.mjs && tsc -b && vite build --mode local-export",
     "promo:capture": "node scripts/promo-capture.mjs",
     "sync:supabase": "node scripts/sync-supabase.mjs",
-    "preview": "vite preview --host 127.0.0.1 --port 4319 --strictPort"
+    "preview": "vite preview --host 127.0.0.1 --port 4319 --strictPort",
+    "export:public": "node scripts/export-public.mjs",
+    "check:regressions": "node scripts/check-regressions.mjs",
+    "check:config": "tsc --noEmit -p tsconfig.config.json",
+    "check:edge": "node scripts/edge-typecheck.mjs",
+    "check:supabase": "node scripts/supabase-integration.mjs",
+    "check:ci": "node scripts/ci-verify.mjs"
   },
   "dependencies": {
     "@react-three/fiber": "^9.7.0",
@@ -42,6 +48,7 @@
     "tus-js-client": "^4.3.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.16",
     "@gltf-transform/core": "^4.5.1",
     "@gltf-transform/extensions": "^4.5.1",
     "@gltf-transform/functions": "^4.5.1",
@@ -52,7 +59,9 @@
     "@types/three": "^0.185.0",
     "@vitejs/plugin-react": "^5.1.0",
     "meshoptimizer": "^1.3.0",
+    "pg": "8.23.1",
     "sharp": "^0.35.5",
+    "supabase": "3.1.0",
     "typescript": "~5.9.3",
     "vite": "^7.2.0"
   }
