@@ -277,6 +277,7 @@ async function run() {
     await page.waitForFunction(() => !document.querySelector('dialog.cms-editor-dialog[open]'))
 
     // 6. Restart Vite Dev server & verify persistence across server restarts + visitor isolation
+    await context.close()
     await stopProcess(dev.proc)
     dev = startViteDevServer()
     await waitForHttp(`http://127.0.0.1:${DEV_PORT}/__local-cms/health`)

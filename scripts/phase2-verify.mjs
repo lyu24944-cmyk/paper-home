@@ -122,6 +122,8 @@ async function main() {
     await page.keyboard.press('Escape')
     await page.waitForSelector('dialog.cms-editor-dialog[open]', { state: 'hidden', timeout: 10000 })
 
+    await context.close()
+
     // Switch back to pure visitor session via fresh context on Yard first to test footer postcard
     const visitorCtx = await browser.newContext({
       viewport: { width: 1366, height: 860 },
@@ -145,8 +147,8 @@ async function main() {
     const postcardBtn = vPage.locator('.postcard-button')
     assert(await postcardBtn.isVisible(), 'Expected .postcard-button to be visible in footer')
     await postcardBtn.click()
-    await vPage.waitForSelector('.postcard-dialog', { state: 'visible', timeout: 8000 })
-    await vPage.waitForSelector('.postcard-preview-img', { state: 'visible', timeout: 8000 })
+    await vPage.waitForSelector('.postcard-dialog', { state: 'visible', timeout: browserTestTimeout(8000) })
+    await vPage.waitForSelector('.postcard-preview-img', { state: 'visible', timeout: browserTestTimeout(8000) })
 
     const firstSrc = await vPage.locator('.postcard-preview-img').getAttribute('src')
     assert(firstSrc?.startsWith('data:image/png;base64,'), 'Expected PNG data URL preview image')
@@ -167,7 +169,7 @@ async function main() {
         return Boolean(cur && cur !== prev)
       },
       firstSrc,
-      { timeout: 6000 },
+      { timeout: browserTestTimeout(6000) },
     )
     const updatedSrc = await vPage.locator('.postcard-preview-img').getAttribute('src')
     assert(updatedSrc && updatedSrc !== firstSrc, 'Expected live greeting edit to update postcard preview')
@@ -196,11 +198,11 @@ async function main() {
     await vPage.locator('.directory-toggle').click()
     await vPage.waitForSelector('#room-directory', { state: 'visible' })
     await vPage.locator('#room-directory').getByRole('button', { name: /松果黄铜台灯/ }).click()
-    await vPage.waitForSelector('dialog.project-detail-dialog[open]', { state: 'visible', timeout: 8000 })
+    await vPage.waitForSelector('dialog.project-detail-dialog[open]', { state: 'visible', timeout: browserTestTimeout(8000) })
 
     await vPage.locator('dialog.project-detail-dialog[open]').getByRole('button', { name: '拍明信片' }).click()
-    await vPage.waitForSelector('.postcard-dialog[open]', { state: 'visible', timeout: 8000 })
-    await vPage.waitForSelector('.postcard-preview-img', { state: 'visible', timeout: 8000 })
+    await vPage.waitForSelector('.postcard-dialog[open]', { state: 'visible', timeout: browserTestTimeout(8000) })
+    await vPage.waitForSelector('.postcard-preview-img', { state: 'visible', timeout: browserTestTimeout(8000) })
 
     const itemDeepHash = (await vPage.locator('.postcard-deeplink-box code').textContent())?.trim()
     assert(
@@ -212,7 +214,28 @@ async function main() {
       `Unexpected item deep link hash: ${itemDeepHash}`,
     )
 
-    // 4. Open fresh browser tab directly to itemDeepHash -> restores gallery + night + rain + opens project modal automatically
+    // 4. Verify mobile 390x844 has zero horizontal overflow & postcard button fits cleanly
+    await vPage.setViewportSize({ width: 390, height: 844 })
+    await vPage.waitForTimeout(250)
+    const postcardDialogBox = await vPage.locator('.postcard-dialog').boundingBox()
+    assert(Boolean(postcardDialogBox && postcardDialogBox.width <= 390), `Postcard modal wider than 390px: ${JSON.stringify(postcardDialogBox)}`)
+    const mobileOverflow = await vPage.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth,
+    )
+    assert(!mobileOverflow, 'Mobile 390x844 has horizontal overflow with .postcard-button / .postcard-dialog')
+    await vPage.locator('.postcard-dialog .dialog-close').click()
+    await vPage.waitForTimeout(150)
+    const yardMobileOverflow = await vPage.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth,
+    )
+    assert(!yardMobileOverflow, 'Mobile 390x844 footer has horizontal overflow')
+    const pBtnBox = await vPage.locator('.postcard-button').boundingBox()
+    assert(Boolean(pBtnBox && pBtnBox.width > 0 && pBtnBox.x + pBtnBox.width <= 390), 'Invalid mobile .postcard-button layout')
+
+    // Retain visitor storage, but release its WebGL context before cold boot.
+    await vPage.close()
+
+    // 5. Open fresh browser tab directly to itemDeepHash -> restores gallery + night + rain + opens project modal automatically
     const deepPage = await visitorCtx.newPage()
     deepPage.on('pageerror', (err) => runtimeErrors.push(`deep pageerror: ${err.message}`))
     deepPage.on('console', (msg) => {
@@ -242,24 +265,6 @@ async function main() {
     const qaStudy = await deepPage.evaluate(() => window.__HOME_QA__)
     assert.equal(qaStudy?.focusId, 'study-shelf', `Expected study-shelf focus, got ${qaStudy?.focusId}`)
     assert.equal(qaStudy?.deskLampOn, true, 'Expected lamp=1 to light up desk lamp')
-
-    // 5. Verify mobile 390x844 has zero horizontal overflow & postcard button fits cleanly
-    await vPage.setViewportSize({ width: 390, height: 844 })
-    await vPage.waitForTimeout(250)
-    const postcardDialogBox = await vPage.locator('.postcard-dialog').boundingBox()
-    assert(Boolean(postcardDialogBox && postcardDialogBox.width <= 390), `Postcard modal wider than 390px: ${JSON.stringify(postcardDialogBox)}`)
-    const mobileOverflow = await vPage.evaluate(
-      () => document.documentElement.scrollWidth > window.innerWidth,
-    )
-    assert(!mobileOverflow, 'Mobile 390x844 has horizontal overflow with .postcard-button / .postcard-dialog')
-    await vPage.locator('.postcard-dialog .dialog-close').click()
-    await vPage.waitForTimeout(150)
-    const yardMobileOverflow = await vPage.evaluate(
-      () => document.documentElement.scrollWidth > window.innerWidth,
-    )
-    assert(!yardMobileOverflow, 'Mobile 390x844 footer has horizontal overflow')
-    const pBtnBox = await vPage.locator('.postcard-button').boundingBox()
-    assert(Boolean(pBtnBox && pBtnBox.width > 0 && pBtnBox.x + pBtnBox.width <= 390), 'Invalid mobile .postcard-button layout')
 
     await visitorCtx.close()
     assert.equal(runtimeErrors.length, 0, `Unexpected runtime errors: ${runtimeErrors.join(' | ')}`)
