@@ -53,6 +53,18 @@ async function observeTransition(target){
   requestAnimationFrame(tick);
  },target);
 }
+async function waitForWalkRest(initial){
+ await page.evaluate(()=>{window.__VERIFY_WALK_REST__={previous:null,moved:false,stableFrames:0}},null);
+ await page.waitForFunction(initial=>{
+  const position=window.__HOME_QA__?.position,state=window.__VERIFY_WALK_REST__;
+  if(!position?.every(Number.isFinite))return false;
+  if(Math.hypot(...position.map((value,i)=>value-initial[i]))>.02)state.moved=true;
+  const change=state.previous?Math.hypot(...position.map((value,i)=>value-state.previous[i])):Infinity;
+  state.stableFrames=state.moved&&change<.002?state.stableFrames+1:0;
+  state.previous=position.slice();
+  return state.stableFrames>=3;
+ },initial,{timeout:45000});
+}
 async function idle(place){await page.waitForFunction(p=>location.hash==='#'+p&&!document.querySelector('.traveling')&&!document.querySelector('.loading-note'),place,{timeout:45000});await page.waitForTimeout(350)}
 async function go(target,label,quartiles=true){
  const from=(await status()).hash.slice(1),name={yard:'小院',hall:'走廊',gallery:'作品室',study:'创作手记',blank:'关于我'}[target];
@@ -89,11 +101,11 @@ try{
  await go('gallery','map-gallery',false);await page.screenshot({path:dir+'/gallery-desktop.png'});
  await page.mouse.click(720,365);await page.locator('dialog.project-detail-dialog[open]').waitFor();assert(await page.locator('dialog.project-detail-dialog[open]').count());await page.screenshot({path:dir+'/artwork-desktop.png'});await page.keyboard.press('Escape');results.operations.push('3D artwork picking and Escape');
  await go('hall','gallery-hall');
- await page.mouse.move(780,520);await page.mouse.wheel(0,470);await page.waitForTimeout(900);const walked=await status();assert(walked.qa.position[2]<-1);await page.screenshot({path:dir+'/hall-walking.png'});
+ const walkStart=(await status()).qa.position;await page.mouse.move(780,520);await page.mouse.wheel(0,470);if(softwareRenderer)await waitForWalkRest(walkStart);else await page.waitForTimeout(900);const walked=await status();assert(walked.qa.position[2]<-1);await page.screenshot({path:dir+'/hall-walking.png'});
  const nearby=page.locator('.near-door');if(await nearby.count()){
   const before=walked.qa.position;await nearby.click();await page.waitForFunction(()=>!document.querySelector('.traveling'),{timeout:45000});await page.getByRole('button',{name:'返回走廊',exact:true}).click();await idle('hall');const after=(await status()).qa.position;assert(Math.hypot(...after.map((x,i)=>x-before[i]))<.07);results.operations.push('return to the same corridor position');
  }
- await page.mouse.move(800,500);await page.mouse.wheel(0,-300);await page.waitForTimeout(900);const stopped=(await status()).qa.position;await page.waitForTimeout(1000);const later=(await status()).qa.position;assert(Math.hypot(...later.map((x,i)=>x-stopped[i]))<.02);results.operations.push('forward, reverse and stop scrolling');
+ const reverseStart=(await status()).qa.position;await page.mouse.move(800,500);await page.mouse.wheel(0,-300);if(softwareRenderer)await waitForWalkRest(reverseStart);else await page.waitForTimeout(900);const stopped=(await status()).qa.position;if(softwareRenderer)assert(stopped[2]>reverseStart[2],'Reverse scroll must move back along the corridor');await page.waitForTimeout(1000);const later=(await status()).qa.position;assert(Math.hypot(...later.map((x,i)=>x-stopped[i]))<.02);results.operations.push('forward, reverse and stop scrolling');
  await go('study','hall-study',false);await go('hall','study-hall',false);await go('blank','hall-blank',false);await go('hall','blank-hall',false);
  await go('gallery','cross-start',false);await go('study','gallery-study');await go('blank','study-blank',false);await go('gallery','blank-gallery',false);
  await page.getByRole('button',{name:'小屋地图',exact:true}).click();await page.getByRole('textbox',{name:'给小屋起个名字'}).fill('晴日小屋');await page.getByRole('button',{name:'记住',exact:true}).click();assert(await page.getByText('小屋的名字记住了。').isVisible());assert.equal(await page.evaluate(()=>localStorage.getItem('paper-home:name')),'晴日小屋');await page.keyboard.press('Escape');results.operations.push('rename and local persistence');
