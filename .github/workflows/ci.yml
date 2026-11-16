@@ -7,6 +7,9 @@ jobs:
     env:
       PAPER_HOME_FORCE_LOCAL: "1"
       QA_SOFTWARE_WEBGL: "1"
+      QA_WEBGL_BACKEND: "mesa"
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      DEBUG: "pw:browser"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,7 +22,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Verify clean checkout serially
-        run: npm run check:ci
+        run: xvfb-run --auto-servernum --server-args="-screen 0 2560x1600x24" npm run check:ci
       - uses: actions/upload-artifact@v4
         if: always()
         with:

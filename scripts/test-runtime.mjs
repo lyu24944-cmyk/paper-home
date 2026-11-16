@@ -19,9 +19,13 @@ export function browserExecutable() {
 // explicitly instead of requesting hardware rasterization from that runner.
 export function browserTestArgs(extra = []) {
   const base = ['--enable-webgl', '--ignore-gpu-blocklist']
+  if (process.env.QA_WEBGL_BACKEND === 'mesa') return [...base, '--use-gl=angle', '--use-angle=gl', ...extra.filter(arg => arg !== '--enable-gpu-rasterization')]
   return process.env.QA_SOFTWARE_WEBGL === '1'
     ? [...base, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', ...extra.filter(arg => arg !== '--enable-gpu-rasterization')]
     : [...base, ...extra]
+}
+export function browserTestHeadless(defaultValue = true) {
+  return process.env.QA_WEBGL_BACKEND === 'mesa' ? false : defaultValue
 }
 // Functional flows do not measure visual quality. On software-only CI, use the
 // product's compatible tier; explicit high/low visual checks keep their URL.
