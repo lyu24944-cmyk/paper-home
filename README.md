@@ -144,6 +144,7 @@ Open the extracted folder in **Antigravity, Cursor, or Trae** and paste any of t
 | `npm run check:cms` | Playwright + Mock Supabase verification of Cloud CMS & TUS uploads |
 | `npm run check:edge-cases` | Verify retry on asset failure, DPR cap & mobile touch against `:4319/?qa` |
 | `npm run promo:capture` | Generate promo screenshots, vertical/horizontal videos & README media |
+| `npm run promo:capture -- --readme-only` | Refresh only the README cover and walkthrough GIF from the current app using isolated sample content (requires Chrome/Chromium and FFmpeg) |
 | `npm run sync:supabase` | Migrate `local-data/` to your Supabase project |
 
 ### Mobile Quality & Context Recovery

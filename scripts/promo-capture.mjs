@@ -581,36 +581,114 @@ async function stitchShotsWithAudio(clips, audioPath, outputMp4, fadeSec = FADE_
   return probeMp4Info(outputMp4)
 }
 
-async function encodeGifWithSizeLimit(inputMp4, outputGif, maxBytes = 7_600_000) {
+async function encodeGifWithSizeLimit(inputMp4, outputGif, maxBytes = 7_600_000, attempts = [
+  { fps: 12, width: 640 },
+  { fps: 10, width: 600 },
+  { fps: 8, width: 560 },
+]) {
   const palettePath = path.join(qaTmpDir, 'tour-palette.png')
-  const attempts = [
-    { fps: 12, width: 640 },
-    { fps: 10, width: 600 },
-    { fps: 8, width: 560 },
-  ]
   for (const cfg of attempts) {
     const vfBase = `fps=${cfg.fps},scale=${cfg.width}:-1:flags=lanczos`
     await runCommand('ffmpeg', [
       '-y',
       '-i', inputMp4,
-      '-vf', `${vfBase},palettegen=max_colors=192:stats_mode=diff`,
+      '-vf', `${vfBase},palettegen=max_colors=${cfg.colors || 192}:stats_mode=diff`,
       palettePath,
     ], { capture: true })
     await runCommand('ffmpeg', [
       '-y',
       '-i', inputMp4,
       '-i', palettePath,
-      '-lavfi', `${vfBase}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=3`,
+      '-lavfi', `${vfBase}[x];[x][1:v]paletteuse=dither=${cfg.dither || 'bayer:bayer_scale=3'}`,
       '-loop', '0',
       outputGif,
     ], { capture: true })
     const stat = await fsp.stat(outputGif)
+    console.log(`[promo] GIF ${cfg.width}px @ ${cfg.fps}fps: ${(stat.size / 1048576).toFixed(2)} MiB`)
     if (stat.size <= maxBytes) {
       return { size: stat.size, fps: cfg.fps, width: cfg.width }
     }
   }
   const finalStat = await fsp.stat(outputGif)
   return { size: finalStat.size, fps: attempts[attempts.length - 1].fps, width: attempts[attempts.length - 1].width }
+}
+
+async function captureReadmeMedia(browser, baseUrl, setFrameSink) {
+  const session = await createPromoSession(browser, baseUrl, setFrameSink, 1600, 900, 'readme')
+  const { page, cdp } = session
+  const errors = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  try {
+    await page.evaluate(async () => {
+      const api = window.__PAPER_HOME_PROMO__
+      await api.jumpToPlace('yard')
+      api.setWeather('clear')
+      api.setAtmosphere('daylight')
+      api.clearCamera()
+    })
+    await waitSettled(page, 1600)
+    const heroPng = path.join(qaTmpDir, 'readme-hero.png')
+    await page.screenshot({ path: heroPng })
+    await sharp(heroPng).webp({ quality: 90 }).toFile(path.join(qaTmpDir, 'hero.webp'))
+
+    await setViewportSizeCdp(page, cdp, 960, 540)
+    const clips = []
+    const shots = [
+      {
+        name: 'readme-yard', place: 'yard', seconds: 3,
+        from: { position: [4.8, 2.05, 13.8], target: [-0.5, 1.55, -0.8], fov: 48 },
+        to: { position: [2.8, 1.85, 11.2], target: [-0.2, 1.55, -0.8], fov: 48 },
+      },
+      {
+        name: 'readme-hall', place: 'hall', seconds: 3.5, doorOpenSec: 0.8,
+        from: { position: [0, 1.66, 3.6], target: [0, 1.56, -2.5], fov: 48 },
+        to: { position: [0, 1.60, -4.6], target: [0, 1.58, -10.5], fov: 58 },
+      },
+    ]
+    const gallery = await page.evaluate(() => {
+      const api = window.__PAPER_HOME_PROMO__
+      return {
+        name: 'readme-gallery', place: 'gallery', seconds: 2.75,
+        from: { position: api.roomPoint('gallery', [-1.25, 1.60, 1.85]), target: api.roomPoint('gallery', [-0.55, 1.52, -0.85]), fov: 52 },
+        to: { position: api.roomPoint('gallery', [1.25, 1.60, 1.85]), target: api.roomPoint('gallery', [0.55, 1.52, -0.85]), fov: 52 },
+      }
+    })
+    shots.push(gallery)
+    for (const shot of shots) {
+      clips.push(await session.recordDeterministicShot(
+        shot.name, 960, 540, 24, shot.seconds,
+        async (p) => {
+          await p.evaluate(async ({ place, pose, door }) => {
+            const api = window.__PAPER_HOME_PROMO__
+            await api.jumpToPlace(place)
+            api.setWeather('clear')
+            api.setAtmosphere('daylight')
+            if (door) api.setFrontDoorOpen(0)
+            api.setCameraAt(null, pose, 0, 'none')
+          }, { place: shot.place, pose: shot.from, door: Boolean(shot.doorOpenSec) })
+        },
+        { fromPose: shot.from, toPose: shot.to, ease: 'sine.inOut', doorOpenSec: shot.doorOpenSec },
+      ))
+    }
+    const tourMp4 = path.join(qaTmpDir, 'readme-tour.mp4')
+    const info = await stitchShotsWithAudio(clips, null, tourMp4, 0.25)
+    const gifPath = path.join(qaTmpDir, 'tour.gif')
+    const evidenceDir = path.join(rootDir, '.qa', 'readme-media')
+    await fsp.mkdir(evidenceDir, { recursive: true })
+    await fsp.copyFile(tourMp4, path.join(evidenceDir, 'tour.mp4'))
+    const gif = await encodeGifWithSizeLimit(tourMp4, gifPath, 9_500_000, [
+      { fps: 10, width: 800, colors: 64, dither: 'none' },
+      { fps: 8, width: 800, colors: 64, dither: 'none' },
+      { fps: 10, width: 720, colors: 64, dither: 'none' },
+    ])
+    if (gif.size > 9_500_000) throw new Error(`README GIF exceeds size budget: ${gif.size}`)
+    if (errors.length) throw new Error(`README capture browser errors: ${errors.join('; ')}`)
+    await fsp.copyFile(path.join(qaTmpDir, 'hero.webp'), path.join(docsMediaDir, 'hero.webp'))
+    await fsp.copyFile(gifPath, path.join(docsMediaDir, 'tour.gif'))
+    console.log(`[promo] README media saved: hero 1600x900; tour ${gif.width}px, ${gif.fps}fps, ${info.duration.toFixed(2)}s, ${(gif.size / 1048576).toFixed(2)} MiB`)
+  } finally {
+    await session.context.close()
+  }
 }
 
 async function main() {
@@ -636,9 +714,13 @@ async function main() {
   // Total 25.50s exact phrase-locked timeline (4.25s per musical phrase, drop at 8.50s):
   // 4.45 + 4.65 + 4.65 + 4.65 + 4.65 + 4.45 - 5 * 0.40 = 25.50s @ 60.000 fps (1530 frames)
   const masterAudioPath = path.join(qaTmpDir, 'promo-master-25.50s.m4a')
-  await buildMasterAudioTrack(25.50, masterAudioPath)
 
   try {
+    if (process.argv.includes('--readme-only')) {
+      await captureReadmeMedia(browser, baseUrl, setFrameSink)
+      return
+    }
+    await buildMasterAudioTrack(25.50, masterAudioPath)
     // ------------------------------------------------------------------
     // PART 1: XHS 6 Vertical Stills (1080x1440)
     // ------------------------------------------------------------------

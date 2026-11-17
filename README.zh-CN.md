@@ -181,6 +181,7 @@
 | `npm run check:cms` | Playwright + Mock Supabase 校验云端 CMS、TUS 分片断点上传与乐观锁冲突 |
 | `npm run check:edge-cases` | 针对 `http://127.0.0.1:4319/?qa` 验证资源失败重试、DPR 上限与移动端触控 |
 | `npm run promo:capture` | 自动导入示例并以 `?promo=1` 录制宣传图文、竖屏/横屏视频与 README 动图 |
+| `npm run promo:capture -- --readme-only` | 只更新 README 封面与漫游动图，使用当前程序及隔离的示例内容，需要 Chrome/Chromium 和 FFmpeg |
 | `npm run sync:supabase` | 将本地 `local-data/` 数据与媒体一键迁移至自己的 Supabase 项目 |
 
 ### 架构与性能纪律
