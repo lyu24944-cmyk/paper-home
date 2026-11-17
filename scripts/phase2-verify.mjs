@@ -49,6 +49,63 @@ async function waitIdle(page, place) {
   await page.waitForTimeout(250)
 }
 
+async function waitForStudyDeepLink(page) {
+  const expected = { place: 'study', atmosphere: 'golden', focusId: 'study-shelf', deskLampOn: true }
+  const timeout = browserTestTimeout(10000)
+  try {
+    // Room travel commits before the queued hash settings and QA effect. Wait
+    // for the complete observable result instead of assuming a 250ms delay.
+    await page.waitForFunction(
+      (state) => {
+        const app = document.querySelector('.home-app')
+        const qa = window.__HOME_QA__
+        return app?.classList.contains(`place-${state.place}`) &&
+          app.classList.contains(`atmo-${state.atmosphere}`) &&
+          !document.querySelector('.traveling') &&
+          !document.querySelector('.loading-note') &&
+          qa?.atmospherePreset === state.atmosphere &&
+          qa?.focusId === state.focusId && qa?.deskLampOn === state.deskLampOn
+      },
+      expected,
+      { timeout },
+    )
+  } catch (error) {
+    const diagnosticDir = path.join(qaOutDir, 'diagnostics')
+    try {
+      fs.mkdirSync(diagnosticDir, { recursive: true })
+      const diagnostic = { url: page.url(), expected, timeoutMs: timeout, error: String(error) }
+      try {
+        diagnostic.observed = await page.locator('.home-app').evaluate((app) => {
+          const qa = window.__HOME_QA__
+          return {
+            classes: app.className,
+            loading: Boolean(document.querySelector('.loading-note')),
+            traveling: Boolean(document.querySelector('.traveling')),
+            qa: qa ? {
+              atmosphereMode: qa.atmosphereMode, atmospherePreset: qa.atmospherePreset,
+              weather: qa.weather, focusId: qa.focusId, deskLampOn: qa.deskLampOn,
+              transition: qa.transition, position: qa.position,
+            } : null,
+          }
+        }, null, { timeout: 5000 })
+      } catch (captureError) {
+        diagnostic.stateCaptureError = String(captureError)
+      }
+      const reportPath = path.join(diagnosticDir, 'deep-link-state.json')
+      fs.writeFileSync(reportPath, JSON.stringify(diagnostic, null, 2))
+      try {
+        await page.screenshot({ path: path.join(diagnosticDir, 'deep-link-state.png'), timeout: 5000 })
+      } catch (captureError) {
+        diagnostic.screenshotError = String(captureError)
+        fs.writeFileSync(reportPath, JSON.stringify(diagnostic, null, 2))
+      }
+    } catch (captureError) {
+      console.error('[phase2-verify] Could not save deep-link diagnostics:', captureError)
+    }
+    throw error
+  }
+}
+
 async function main() {
   const testPng = await sharp({
     create: { width: 320, height: 220, channels: 4, background: { r: 74, g: 112, b: 86, alpha: 1 } },
@@ -256,10 +313,15 @@ async function main() {
     // Close modal & verify live in-tab hashchange deep link (#room=study&at=golden&focus=study-shelf&lamp=1)
     await deepPage.keyboard.press('Escape')
     await deepPage.waitForSelector('dialog.project-detail-dialog[open]', { state: 'hidden', timeout: browserTestTimeout(5000) })
+    if (process.argv.includes('--slow-deeplink')) {
+      const cdp = await visitorCtx.newCDPSession(deepPage)
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 })
+      console.log('[phase2-verify] Live deep-link check using 4x CPU slowdown')
+    }
     await deepPage.evaluate(() => {
       window.location.hash = '#room=study&at=golden&focus=study-shelf&lamp=1'
     })
-    await waitIdle(deepPage, 'study')
+    await waitForStudyDeepLink(deepPage)
     const studyCls = await deepPage.locator('.home-app').getAttribute('class')
     assert(studyCls?.includes('atmo-golden'), `Hashchange failed to switch to golden: ${studyCls}`)
     const qaStudy = await deepPage.evaluate(() => window.__HOME_QA__)

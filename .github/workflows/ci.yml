@@ -40,12 +40,34 @@ jobs:
       - name: Diagnose remaining five gates (not the full release gate)
         if: github.event_name == 'workflow_dispatch' && inputs.verification == 'remaining'
         run: xvfb-run --auto-servernum --server-args="-screen 0 2560x1600x24" node scripts/ci-verify.mjs --remaining
+      - name: Record full verification revision and results
+        if: always() && (github.event_name != 'workflow_dispatch' || inputs.verification == 'full')
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs'
+          const read = (file) => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : []
+          const steps = read('.qa/ci-results.json')
+          const regressions = read('.qa/regression/results.json')
+          const passed = steps.length === 17 && regressions.length === 26 &&
+            [...steps, ...regressions].every(row => row.exitCode === 0)
+          const summary = {
+            commit: process.env.GITHUB_SHA,
+            runUrl: `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`,
+            recordedAt: new Date().toISOString(),
+            passed, steps, regressions,
+          }
+          fs.mkdirSync('.qa', { recursive: true })
+          fs.writeFileSync('.qa/verification-summary.json', JSON.stringify(summary, null, 2))
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            `## Full verification: ${passed ? 'PASS' : 'FAIL / INCOMPLETE'}\n\nCommit: \`${summary.commit}\`\n\n[Run](${summary.runUrl})\n\nSteps: ${steps.filter(row => row.exitCode === 0).length}/17; regressions: ${regressions.filter(row => row.exitCode === 0).length}/26.\n`)
+          NODE
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: verification-evidence
           path: |
             .qa/ci-results.json
+            .qa/verification-summary.json
             .qa/ci-remaining-results.json
             .qa/sound-verify/
             .qa/polish/after/verification.json
@@ -53,4 +75,5 @@ jobs:
             .qa/polish/after/failure.png
             .qa/regression/
             .qa/phase2-verify/downloads/
+            .qa/phase2-verify/diagnostics/
           retention-days: 7
