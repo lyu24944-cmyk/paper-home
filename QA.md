@@ -1,10 +1,10 @@
 # 小屋画面精修与窗口性能验收
 
-当前最新版本：`v1.1.2`（2026-11-18，Asia/Tokyo）。
-历史基线（2026-11-13）与 `v1.1.0`（2026-11-15）实测数据完整保留在对比表格中以便横向对照；`.qa/` 与 `.taste-skill/inspect/` 存放可复现原始采样与截图产物。
+当前最新版本：`v1.2.0`（2026-11-18，Asia/Tokyo）。
+历史基线（2026-11-13）、`v1.1.0`（2026-11-15）与 `v1.1.2`（2026-11-18）实测数据完整保留在对比表格中以便横向对照；`.qa/` 与 `.taste-skill/inspect/` 存放可复现原始采样与截图产物。
 
 > [!NOTE]
-> `v1.1.2`（2026-11-18）针对外景树冠渲染性能完成了叶簇图集紧致裁剪（`alpha >= 92`）、由外向内径向排序、图集分辨率收敛（`high <= 2048px` / `low <= 1024px`）、正交列点积替换顶点 `inverse()`、剔除片元冗余丢弃，以及对户外材质剥离零贡献室内 `RectAreaLight` LTC 与对叶簇卡跳过多点 PCF 阴影采样；6 轮交替 A/B 硬件实测将 `#yard` 冷启动恢复至 `49.00 FPS`（相对 `perf-baseline` `53.12 FPS` 保留 `92.24%`）、全路线 `99.40%`、P95 `100.00%`，并完成 26/26 串行回归与 `/paper-home/` 子路径托管冒烟验证。
+> `v1.2.0`（2026-11-18）在保留 `v1.1.2` 外景树冠性能的基础上，完成了冷启动 GPU 预热加速（`~10 ms` 时间切片纹理上传、绑定 `composer.readBuffer` 的全场景可见/隐藏网格 `gl.compileAsync` 并行异步编译、`32×32` 离屏几何缓冲区预热与单次真实可见性 `composer.render(0)`），在 AMD Radeon 780M（`2560×1440` `high` `DPR 1`）有窗口实测中将 `initial-render-warmup` 从 `v1.1.2` 的 `13.96 s` 缩短至 **`5.83 s`**（提速 `58.2%` / `2.39×`，且全房间漫游保持 **`0` 次运行时 `shader-compile`** 与 **`0` 次运行时 `texture-upload`**）；同时交付零依赖 XSS 安全 Markdown 排版工具栏与实时预览、动态 Open Graph / Twitter 社交卡片（`1280×640` `social-preview.jpg`）及本地工作室一键「导出公开快照」，并通过 **27/27** 串行回归验证。
 
 ## v1.1.0 历史背景（2026-11-15）
 
@@ -32,6 +32,7 @@ Playwright 操作实际有窗口 Google Chrome，AMD Radeon 780M / ANGLE Direct3
 | **v1.1.0 1920×1080 兼容（2026-11-15）** | **74.1 s** | **71.0** | **26.7 ms** | **33.7 ms** | **58.4 ms** | **2** | **0** |
 | perf-baseline 2560×1440 细致（2026-11-18，三次中位数） | 75.0 s | 39.10 | 50.0 ms | 58.4 ms | 108.4 ms | 137 | 2 |
 | **v1.1.2 2560×1440 细致（2026-11-18，三次中位数）** | **74.8 s** | **38.86** | **50.0 ms** | **58.4 ms** | **150.0 ms** | **119** | **1** |
+| **v1.2.0 2560×1440 细致（2026-11-18，单轮复核）** | **75.0 s** | **38.65** | **53.3 ms** | **69.4 ms** | **131.5 ms** | **180** | **1** |
 
 ## 连续行走分段
 
@@ -45,6 +46,7 @@ Playwright 操作实际有窗口 Google Chrome，AMD Radeon 780M / ANGLE Direct3
 | **v1.1.0 1080p 兼容（2026-11-15）** | **68.3** | **27.7 ms** | **33.4 ms** | **35.7 ms** | **0** |
 | perf-baseline 1440p 细致（2026-11-18，三次中位数） | 38.33 | 50.0 ms | 58.4 ms | 66.7 ms | 45 |
 | **v1.1.2 1440p 细致（2026-11-18，三次中位数）** | **38.27** | **50.0 ms** | **58.4 ms** | **66.6 ms** | **39** |
+| **v1.2.0 1440p 细致（2026-11-18，单轮复核）** | **37.39** | **55.9 ms** | **72.9 ms** | **95.3 ms** | **65** |
 
 在 AMD Radeon 780M 核显下：`1920×1080` 细致画质已实现完整操作平均 66.8 FPS、全程仅 1 帧超过 50 ms，24 秒走廊连续行走平均 65.4 FPS 且 0 次超过 50 ms；`2560×1440` 细致画质相对上一轮 30.9 FPS 提升至 41.1 FPS，>50 ms 慢帧减半（267 -> 134）。数据为单台集成显卡的可复现窗口实测，系统合成与驱动调度仍会影响绝对帧间隔。
 
@@ -100,3 +102,24 @@ Playwright 操作实际有窗口 Google Chrome，AMD Radeon 780M / ANGLE Direct3
   - `node scripts/regression/gpu-resources.mjs`：4 轮 high/low 重建后 `geometries: 130`、`textures: 97`、`programs: 58`，WebGL context 恢复后 `programs: 57`、`0` 泄漏、`0` 错误（`.qa/regression/gpu-resources.json`）。
   - `npm run assets:verify`、`npx tsc --noEmit`、`npm run check:config`、`npm run check:edge`、`npm run build` 均退出 `0`；`/paper-home/` 隔离静态子路径托管冒烟验证（`init:sample` 样本 + `export:public` + `build:local`）在 Playwright 下完成 `53` 次请求（含 `5` 次快照资源请求）、`0` 个 HTTP >=400/404、`0` 个控制台/页面错误（`.qa/regression/subpath-smoke.json`）。
   - `npm run check:regressions`：**26/26** 串行通过（`.qa/regression/results.json`；注：Windows 下将 `TEMP`/`TMP` 从 8.3 短路径 `ADMINI~1` 展开为完整长路径 `C:\Users\Administrator\AppData\Local\Temp` 以避开 libuv `src\win\fs-event.c:72` 在 `f16-lan` 临时目录监听中的短路径大小写断言）。
+
+## v1.2.0 冷启动预热加速、创作打磨与 27/27 回归验收（2026-11-18）
+
+- **生产构建产物（`npm run build`）**：
+  - 入口脚本：`dist/assets/index-DiwhKxEn.js`（`225.22 kB` / gzip `75.40 kB`）；编辑器排版工具栏拆分为按需加载 chunk `dist/assets/MarkdownToolbar-D6lCTIA9.js`（`4.75 kB` / gzip `1.87 kB`）；云端 SDK 保持按需独立 chunk `dist/assets/supabase-B26TmGPc.js`（`286.85 kB` / gzip `75.12 kB`）。
+  - 社交分享预览图：`public/social-preview.jpg`（`1280×640` MozJPEG，`108.37 KB`）及 `home-hand.ttf` 字体 `preload`、动态 HTML 转义的 `<title>` / Open Graph / Twitter Card 元信息已随 `dist/index.html` 构建输出。
+- **冷启动 GPU 预热加速实测（AMD Radeon 780M / ANGLE D3D11，`2560×1440` `high` `DPR 1`，有窗口 Chrome）**：
+  - **`initial-render-warmup`**：由 `v1.1.2` 的 `13.96 s`（`v1.1.0` 为 `16,114.9 ms`）缩短至 **`5,833.2 ms`（`5.83 s`，页面时间 `6.70 s` 完成）**，冷启动 GPU 预热耗时减少 **`8.13 s`（提速 `58.2%` / `2.39×`）**。
+  - **预热阶段拆分**：
+    - `render-target-resize`：`0.0 ms`（`2560x1440@1`）
+    - `texture-upload`：`2,776.4 ms`（`82 textures`，按 `~10 ms` 帧预算切片上传以保持加载动画与主线程响应）
+    - `shader-compile`：`2,711.0 ms`（临时全开可见/隐藏网格并绑定 `composer.readBuffer` 调用 `gl.compileAsync`，通过 `KHR_parallel_shader_compile` 一步并行编译 `RenderPass` 真实 `NoToneMapping + LinearSRGB` 变体，驻留 WebGL program 数由 `58` 收敛至 `34`～`37`）
+    - `32×32` 离屏全几何 VBO/IBO 上传（`gl.shadowMap.needsUpdate = false`）+ 单次真实可见性 `composer.render(0)` 与平行光阴影预热：`336.4 ms`
+  - **运行时零编译/零重传验证**：测量开始后遍历 `#yard → #hall → #gallery → #study → #blank → #yard` 全房间，记录 **`0` 次运行时 `shader-compile`**、**`0` 次运行时 `texture-upload`**（仅门动画触发 `8` 次按需 `shadow-refresh`，单次 `1.6`～`7.5 ms`）。
+- **有窗口完整路线性能复核（`QA_HEADFUL=1 npm run check:window-performance`，`2560×1440` `high` `DPR 1`）**：
+  - **庭院冷启动 `#yard`**：**`46.46 FPS`**（`p50: 21.7 ms`、`p95: 41.0 ms`、`p99: 49.6 ms`、`max: 50.3 ms`，`>100 ms: 0`）。
+  - **全路线（`75.0 s`，`2,900` 帧）**：**`38.65 FPS`**（`p50: 22.9 ms`、`p95: 53.3 ms`、`p99: 69.4 ms`、`max: 131.5 ms`，`>100 ms: 1`，`errors: []`）。
+  - **24 秒走廊连续行走 `walking`**：**`37.39 FPS`**（`p50: 23.0 ms`、`p95: 55.9 ms`、`max: 95.3 ms`，`>100 ms: 0`）。
+- **端到端与 27/27 串行回归验证**：
+  - `npm run assets:verify`（61 个本地资产 `38.16 MiB`）、`npx tsc --noEmit`、`npm run check:config`、`npm run check:edge`、`npm run check:local`、`npm run check:cms`、`npm run check:phase2` 全部退出 `0`（`0` 错误）。
+  - `npm run check:regressions`：**27/27** 串行通过（含新增 `scripts/regression/f22-v120-polish.mjs`：验证 `renderParagraphs` 全部轻量 Markdown 语法与 `<script>` / `<img onerror>` / `javascript:` / `data:` 零注入安全、自定义 `siteSettings` 下 `build:local` 的 HTML 转义 `<title>` 与 `og:*`/`twitter:*` + `1280×640` `social-preview.jpg`、`POST /__local-cms/export-public` 跨站 `Origin` / 未授权 `403` 防护，以及浏览器内 `MarkdownToolbar` + 实时预览 + 一键「导出公开快照」端到端闭环，仓库 `site-content/cottage.json` 保持空快照 `projects: []`）。

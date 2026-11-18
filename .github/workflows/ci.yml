@@ -48,7 +48,7 @@ jobs:
           const read = (file) => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : []
           const steps = read('.qa/ci-results.json')
           const regressions = read('.qa/regression/results.json')
-          const passed = steps.length === 17 && regressions.length === 26 &&
+          const passed = steps.length === 17 && regressions.length === 27 &&
             [...steps, ...regressions].every(row => row.exitCode === 0)
           const summary = {
             commit: process.env.GITHUB_SHA,
@@ -59,7 +59,7 @@ jobs:
           fs.mkdirSync('.qa', { recursive: true })
           fs.writeFileSync('.qa/verification-summary.json', JSON.stringify(summary, null, 2))
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
-            `## Full verification: ${passed ? 'PASS' : 'FAIL / INCOMPLETE'}\n\nCommit: \`${summary.commit}\`\n\n[Run](${summary.runUrl})\n\nSteps: ${steps.filter(row => row.exitCode === 0).length}/17; regressions: ${regressions.filter(row => row.exitCode === 0).length}/26.\n`)
+            `## Full verification: ${passed ? 'PASS' : 'FAIL / INCOMPLETE'}\n\nCommit: \`${summary.commit}\`\n\n[Run](${summary.runUrl})\n\nSteps: ${steps.filter(row => row.exitCode === 0).length}/17; regressions: ${regressions.filter(row => row.exitCode === 0).length}/27.\n`)
           NODE
       - uses: actions/upload-artifact@v4
         if: always()

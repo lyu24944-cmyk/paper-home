@@ -505,3 +505,20 @@ export async function initLocalSampleApi(force = false) {
     requireAuth: true,
   })
 }
+
+export interface ExportLocalSnapshotResult {
+  ok: boolean
+  outDir: string
+  source: string
+  projects: number
+  notes: number
+  assets: number
+}
+
+export async function exportLocalSnapshotApi(): Promise<ExportLocalSnapshotResult> {
+  return await callFunction<ExportLocalSnapshotResult>('export-public', {
+    method: 'POST',
+    body: {},
+    requireAuth: true,
+  })
+}

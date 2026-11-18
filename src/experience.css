@@ -1484,6 +1484,119 @@ a:focus-visible {
   word-break: break-word;
 }
 
+.detail-heading {
+  font-family: var(--hand);
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  margin: 24px 0 12px;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.detail-subheading {
+  font-family: "Songti SC", "SimSun", serif;
+  font-size: 17.5px;
+  font-weight: 600;
+  line-height: 1.55;
+  margin: 20px 0 10px;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.detail-body > .detail-heading:first-child,
+.detail-body > .detail-subheading:first-child {
+  margin-top: 0;
+}
+
+.detail-divider {
+  border: 0;
+  height: 1px;
+  background: var(--hairline-strong);
+  margin: 22px 0;
+}
+
+.detail-list {
+  font-family: "Songti SC", "SimSun", serif;
+  font-size: 16px;
+  line-height: 1.9;
+  margin: 0 0 18px;
+  padding-left: 22px;
+  color: #303a32;
+  word-break: break-word;
+}
+
+.detail-list li + li {
+  margin-top: 6px;
+}
+
+.detail-quote {
+  margin: 0 0 18px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--green);
+  background: rgba(235, 232, 219, 0.58);
+  border-radius: 0 10px 10px 0;
+  font-family: "Songti SC", "SimSun", serif;
+  font-size: 15.5px;
+  line-height: 1.9;
+  color: #354238;
+  word-break: break-word;
+}
+
+.detail-code-block {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  background: #ebe8da;
+  border: 1px solid rgba(41, 54, 46, 0.14);
+  border-radius: 10px;
+  overflow-x: auto;
+  max-width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: #243028;
+}
+
+.detail-code-block code {
+  font-family: inherit;
+  background: transparent;
+  padding: 0;
+  border: 0;
+}
+
+.detail-inline-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  padding: 2px 6px;
+  margin: 0 2px;
+  border-radius: 5px;
+  background: rgba(41, 54, 46, 0.08);
+  border: 1px solid rgba(41, 54, 46, 0.1);
+  color: #243c2c;
+  word-break: break-word;
+}
+
+.detail-inline-link {
+  color: var(--green);
+  text-decoration: underline;
+  text-decoration-color: rgba(54, 88, 64, 0.42);
+  text-underline-offset: 3px;
+  transition: color 0.15s, text-decoration-color 0.15s;
+}
+
+.detail-inline-link:hover {
+  color: var(--green-hover);
+  text-decoration-color: var(--green-hover);
+}
+
+.profile-bio-text .detail-list,
+.profile-bio-text .detail-quote {
+  font-size: 13.5px;
+  line-height: 1.8;
+  margin-bottom: 8px;
+}
+
 .reading-dialog article > p {
   color: var(--ink);
 }
@@ -1719,6 +1832,86 @@ a:focus-visible {
 .cms-field textarea {
   resize: vertical;
   line-height: 1.7;
+}
+
+.markdown-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  background: rgba(236, 234, 222, 0.82);
+  border: 1px solid rgba(41, 54, 46, 0.14);
+  border-radius: 10px;
+}
+
+.markdown-tool-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.markdown-tool-btn {
+  border: 1px solid rgba(41, 54, 46, 0.1);
+  background: rgba(252, 250, 244, 0.88);
+  color: var(--ink);
+  border-radius: 7px;
+  min-height: 28px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.markdown-tool-btn:hover:not(:disabled) {
+  background: #fffefa;
+  border-color: rgba(54, 88, 64, 0.28);
+  color: var(--green-hover);
+}
+
+.markdown-tool-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.markdown-preview-toggle {
+  margin-left: auto;
+}
+
+.markdown-tool-btn[aria-pressed="true"],
+.markdown-tool-btn.active {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fffefa;
+}
+
+.markdown-tool-btn[aria-pressed="true"]:hover:not(:disabled),
+.markdown-tool-btn.active:hover:not(:disabled) {
+  background: var(--green-hover);
+  border-color: var(--green-hover);
+  color: #fffefa;
+}
+
+.markdown-preview-box {
+  min-height: 196px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: #faf8ee;
+  border: 1px solid rgba(41, 54, 46, 0.18);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 0;
+  max-width: none;
+}
+
+.markdown-preview-box > :last-child {
+  margin-bottom: 0;
 }
 
 .media-picker-block {

@@ -32,6 +32,7 @@ import { resolveInitialQuality, saveQualityPreference } from './lib/quality'
 import { RenderPipeline } from './RenderPipeline'
 import {
   cleanupMediaAssetsApi,
+  exportLocalSnapshotApi,
   fetchAdminCottage,
   fetchPublicCottage,
   initLocalSampleApi,
@@ -706,11 +707,16 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    document.title = `${homeName} · ${rooms.find((r) => r.id === place)?.name}`
+    const activeName = siteSettings.homeName.trim() || DEFAULT_SITE_SETTINGS.homeName
+    const activePlaque = siteSettings.plaqueTitle.trim() || DEFAULT_SITE_SETTINGS.plaqueTitle
+    document.title = `${activeName} · ${activePlaque}`
+  }, [siteSettings.homeName, siteSettings.plaqueTitle])
+
+  useEffect(() => {
     if (!richHashActiveRef.current && !pendingHash) {
       history.replaceState(null, '', `#${place}`)
     }
-  }, [homeName, place, pendingHash])
+  }, [place, pendingHash])
 
   useEffect(() => {
     if (!ready || cloudLoading || cloudError || !pendingDeepLinkItemRef.current) return
@@ -2974,6 +2980,15 @@ export default function App() {
             await initLocalSampleApi(false)
             await refreshCloud()
             showToast('已导入初始示例内容', 'success')
+          }}
+          onExportSnapshot={async () => {
+            const res = await exportLocalSnapshotApi()
+            playSound('success-seal')
+            showToast(
+              `公开快照导出完成（作品 ${res.projects} 件 · 手记 ${res.notes} 篇）`,
+              'success',
+            )
+            return res
           }}
         />
       </Modal>

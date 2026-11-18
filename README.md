@@ -80,10 +80,11 @@ On first launch, it automatically installs dependencies, imports starter sample 
 1. Click **Cottage Map (`小屋地图`)** in the top-right corner and choose **Enter Edit Mode (`进入编辑模式`)** (local editing is restricted to `127.0.0.1` / `localhost`).
 2. **Branding & Default Atmosphere**: Rename your cottage, customize the wooden plaque & yard greeting, and choose the default time-of-day and weather visitors see first.
 3. **Edit Each Room**:
-   - **Gallery**: Add projects with cover images, photo galleries (auto-compressed to WebP), and MP4/WebM demo videos. Your top 3 published projects appear framed on the 3D gallery wall.
-   - **Study**: Write long-form notes with images, videos, and project links.
+   - **Gallery**: Add projects with cover images, photo galleries (auto-compressed to WebP), MP4/WebM demo videos, and rich descriptions using the built-in Markdown formatting toolbar & live preview (`排版预览`). Your top 3 published projects appear framed on the 3D gallery wall.
+   - **Study**: Write long-form notes with headings, bold/italic text, lists, quotes, code blocks, safe external links, live Markdown preview (`排版预览`), images, videos, and project links.
    - **About Me**: Update your bio, avatar, contact links, 3 tabletop **Now Notes**, and bookshelf quote slips.
 4. **Visitor Preview**: Click **Editing (`编辑中`) → Exit Edit / Visitor Preview** anytime to verify unpublished drafts stay hidden. Everything saves locally inside `local-data/`.
+5. **One-Click Public Snapshot Export**: Ready to publish to GitHub Pages or static hosting? Open **Cottage Map (`小屋地图`)** while in Local Edit Mode and click **`导出公开快照` (Export Public Snapshot)** to populate `site-content/` with your published items and media — no terminal commands needed.
 
 ---
 
@@ -132,8 +133,10 @@ Open the extracted folder in **Antigravity, Cursor, or Trae** and paste any of t
 | `npm run studio` | Start Local Studio and auto-open the browser |
 | `npm run init:sample` | Seed neutral starter items into `local-data/` when empty (`--force` resets) |
 | `npm run build` | Asset verification + TypeScript build + Vite production build |
+| `npm run export:public -- --source local` | Export published `local-data/` content & media into `site-content/` (also available one-click via `导出公开快照` in Local Studio's Cottage Map) |
 | `npm run build:local` | Build a read-only static snapshot in `dist/` (`dist/local-snapshot/`) |
 | `npm run preview` | Preview `dist/` locally at `http://127.0.0.1:4319/` |
+| `npm run check:regressions` | Run all 27 serial security, GPU, Local Studio, Markdown & snapshot regression gates |
 | `npm run assets:1k` | Generate 18 `1024×1024` `-1k.webp` mobile textures and update `manifest.json` |
 | `npm run assets:prepare` | Re-download and process all Poly Haven assets + 1K variants |
 | `npm run assets:verify` | Verify SHA-256 checksums of all 61 local assets (`38.16 MiB`) in `manifest.json` |

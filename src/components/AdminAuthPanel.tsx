@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import { isCloudConfigured } from '../lib/supabase'
-import { enterLocalOwnerMode, signInAdmin, signOutAdmin } from '../lib/api'
+import {
+  enterLocalOwnerMode,
+  signInAdmin,
+  signOutAdmin,
+  type ExportLocalSnapshotResult,
+} from '../lib/api'
 import type { LocalStudioHealth } from '../types/content'
 import { Icon } from './Icon'
 
@@ -13,6 +18,7 @@ export function AdminAuthPanel({
   onSignedOut,
   onRetryCleanup,
   onImportSample,
+  onExportSnapshot,
 }: {
   adminEmail: string | null
   pendingCleanupCount: number
@@ -22,6 +28,7 @@ export function AdminAuthPanel({
   onSignedOut: () => Promise<void>
   onRetryCleanup: () => Promise<void>
   onImportSample?: () => Promise<void>
+  onExportSnapshot?: () => Promise<ExportLocalSnapshotResult>
 }) {
   const [expanded, setExpanded] = useState(false)
   const [email, setEmail] = useState('')
@@ -30,6 +37,7 @@ export function AdminAuthPanel({
   const [busy, setBusy] = useState(false)
   const [cleaning, setCleaning] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -114,6 +122,27 @@ export function AdminAuthPanel({
       setError(err instanceof Error ? err.message : '示例数据导入失败。')
     } finally {
       setImporting(false)
+    }
+  }
+
+  async function handleExportSnapshot() {
+    if (!onExportSnapshot) return
+    setExporting(true)
+    setError('')
+    setMessage('')
+    try {
+      const res = await onExportSnapshot()
+      const emptyHint =
+        res.projects === 0 && res.notes === 0
+          ? '——当前尚无已发布的作品或手记，发布后再导出即可上线展示。'
+          : '，可直接用于静态构建或公开部署。'
+      setMessage(
+        `已导出公开快照至 ${res.outDir}（作品 ${res.projects} 件、手记 ${res.notes} 篇、素材 ${res.assets} 个）${emptyHint}`,
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '公开快照导出失败，请重试。')
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -227,6 +256,20 @@ export function AdminAuthPanel({
               >
                 <Icon name="plus" size={14} />
                 <span>{importing ? '生成中…' : '导入示例内容'}</span>
+              </button>
+            </div>
+          )}
+          {isLocalStudio && adminEmail && onExportSnapshot && (
+            <div className="cleanup-banner" role="region" aria-label="导出公开快照">
+              <span>发布准备：将已发布内容与素材一键导出为公开快照（site-content/）</span>
+              <button
+                type="button"
+                className="cms-ghost-btn"
+                disabled={exporting}
+                onClick={() => void handleExportSnapshot()}
+              >
+                <Icon name="download" size={14} />
+                <span>{exporting ? '导出中…' : '导出公开快照'}</span>
               </button>
             </div>
           )}

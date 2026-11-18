@@ -1,6 +1,7 @@
 import { createLocalSessions } from './local-sessions.mjs'
 import {validateSnapshot} from './public-snapshot.mjs'
 import {atomicDirectory} from './atomic-directory.mjs'
+import { exportPublic } from './export-public.mjs'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -17,6 +18,15 @@ import {
 } from './local-cms-store.mjs'
 
 const SAFE_SERVE_MIMES = new Set([...ALLOWED_IMAGE_MIMES, ...ALLOWED_VIDEO_MIMES])
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
 
 function isLoopbackAddress(addr) {
   if (!addr) return false
@@ -234,6 +244,28 @@ export function localCmsPlugin({ rootDir, mode = 'development', outDir = 'dist',
 
   return {
     name: 'paper-home-local-cms',
+    config() {
+      const exportTarget = process.env.PAPER_HOME_EXPORT_OUT_DIR
+        ? path.resolve(rootDir, process.env.PAPER_HOME_EXPORT_OUT_DIR)
+        : path.join(rootDir, 'site-content')
+      const siteContentDir = path.join(rootDir, 'site-content').replaceAll('\\', '/')
+      const exportDirNorm = exportTarget.replaceAll('\\', '/')
+      return {
+        server: {
+          watch: {
+            ignored: [
+              '**/.snapshot-stage-*',
+              '**/.snapshot-stage-*/**',
+              `${path.resolve(store.dataDir).replaceAll('\\', '/')}/**`,
+              siteContentDir,
+              `${siteContentDir}/**`,
+              exportDirNorm,
+              `${exportDirNorm}/**`,
+            ],
+          },
+        },
+      }
+    },
     async configResolved(config) {
       previewRoot = path.resolve(config.root, config.build.outDir)
       assertPrivateDataDirectory(store.dataDir, config.publicDir || null, previewRoot)
@@ -249,6 +281,32 @@ export function localCmsPlugin({ rootDir, mode = 'development', outDir = 'dist',
           if(fs.existsSync(previewRoot)){previous=ownStage();fs.cpSync(previewRoot,previous,{recursive:true})}
         }catch(error){disposePrepared();throw error}
       }
+    },
+    async transformIndexHtml(html) {
+      let siteSettings = null
+      if (mode === 'local-export') {
+        siteSettings = JSON.parse(fs.readFileSync(path.join((await prepare()).dir, 'cottage.json'), 'utf8')).siteSettings
+      } else if (fs.existsSync(store.cottagePath)) {
+        try {
+          siteSettings = store.readDb().siteSettings
+        } catch {
+          siteSettings = null
+        }
+      }
+      if (!siteSettings) return html
+      const homeName = String(siteSettings.homeName || '').trim() || '我的小屋'
+      const plaqueTitle = String(siteSettings.plaqueTitle || '').trim() || '欢迎回家'
+      const pageTitle = `${homeName} · ${plaqueTitle}`
+      const pageDesc = String(siteSettings.yardSubtitle || '').trim() || '一座可以走进去的手绘小屋，留给生活、文字和喜欢的事物。'
+      const escapedTitle = escapeHtml(pageTitle)
+      const escapedDesc = escapeHtml(pageDesc)
+      return html
+        .replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapedTitle}</title>`)
+        .replace(/<meta\s+name="description"\s+content="[^"]*"\s*\/?>/i, () => `<meta name="description" content="${escapedDesc}" />`)
+        .replace(/<meta\s+property="og:title"\s+content="[^"]*"\s*\/?>/i, () => `<meta property="og:title" content="${escapedTitle}" />`)
+        .replace(/<meta\s+name="twitter:title"\s+content="[^"]*"\s*\/?>/i, () => `<meta name="twitter:title" content="${escapedTitle}" />`)
+        .replace(/<meta\s+property="og:description"\s+content="[^"]*"\s*\/?>/i, () => `<meta property="og:description" content="${escapedDesc}" />`)
+        .replace(/<meta\s+name="twitter:description"\s+content="[^"]*"\s*\/?>/i, () => `<meta name="twitter:description" content="${escapedDesc}" />`)
     },
     configurePreviewServer(server) {
       for(const dir of privateDirectories)installPrivateDataGuard(server.middlewares, previewRoot, dir)
@@ -345,6 +403,26 @@ export function localCmsPlugin({ rootDir, mode = 'development', outDir = 'dist',
             const body = await readJsonBody(req)
             const result = await store.seedNeutralSample({ force: Boolean(body.force) })
             sendJson(res, 200, { ok: true, ...result })
+            return
+          }
+
+          if (req.method === 'POST' && pathname === '/export-public') {
+            if (!requireAdminHeaders(req, res, auth.authorized)) return
+            await readJsonBody(req)
+            if (!fs.existsSync(store.cottagePath)) {
+              store.writeDb(store.readDb())
+            }
+            const targetOutDir = process.env.PAPER_HOME_EXPORT_OUT_DIR
+              ? path.resolve(rootDir, process.env.PAPER_HOME_EXPORT_OUT_DIR)
+              : path.join(rootDir, 'site-content')
+            const exported = await exportPublic({ source: 'local', dataDir: store.dataDir, outDir: targetOutDir })
+            const rawRel = path.relative(rootDir, targetOutDir)
+            const relOut = rawRel.replaceAll('\\', '/')
+            sendJson(res, 200, {
+              ok: true,
+              outDir: relOut && !relOut.startsWith('..') && !path.isAbsolute(rawRel) ? `${relOut}/` : targetOutDir,
+              ...exported,
+            })
             return
           }
 

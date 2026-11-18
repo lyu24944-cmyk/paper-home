@@ -6,7 +6,7 @@ import {
   saveProjectDraftApi,
   unpublishProjectApi,
 } from '../lib/api'
-import { buildStatusLabel, safeExternalUrl } from '../lib/text'
+import { buildStatusLabel, renderParagraphs, safeExternalUrl } from '../lib/text'
 import { isCloudConfigured } from '../lib/supabase'
 import {
   ConflictError,
@@ -17,6 +17,7 @@ import {
 import { ConfirmDialog } from './ConfirmDialog'
 import type { ConflictContext } from './ConflictDialog'
 import { Icon } from './Icon'
+import { MarkdownToolbar } from './MarkdownToolbar'
 import { ImageListPicker, VideoUploadPicker } from './MediaPickers'
 import { Modal } from './Modal'
 
@@ -67,6 +68,9 @@ export function ProjectEditorModal({
   const [saveError, setSaveError] = useState('')
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [preview, setPreview] = useState(false)
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null)
+  const prevProjectIdRef = useRef<string | null>(initialProject?.id ?? null)
 
   const sessionUploadedIdsRef = useRef<string[]>([])
   const wasOpenRef = useRef(false)
@@ -98,11 +102,16 @@ export function ProjectEditorModal({
     const closing = wasOpenRef.current && !open
     wasOpenRef.current = open
     if (closing) {
+      setPreview(false)
       flushSessionCandidates()
       return
     }
     if (!open) return
     syncFromProject(initialProject)
+    if (opening || (initialProject?.id ?? null) !== prevProjectIdRef.current) {
+      prevProjectIdRef.current = initialProject?.id ?? null
+      setPreview(false)
+    }
     if (opening) {
       setSaveStatus('')
       setSaveError('')
@@ -390,13 +399,32 @@ export function ProjectEditorModal({
                 <label htmlFor={`${uid}-body`}>作品正文（发布必填，支持分段纯文本）</label>
                 <span className="cms-char-count">{body.replace(/\s+/g, '').length} 字</span>
               </div>
-              <textarea
-                id={`${uid}-body`}
-                rows={8}
+              <MarkdownToolbar
+                textareaRef={bodyRef}
                 value={body}
-                onChange={(e) => setBody(e.target.value)}
-                placeholder="介绍完成效果、空间设计与交互亮点…"
+                onChange={setBody}
+                preview={preview}
+                onTogglePreview={() => setPreview((v) => !v)}
+                disabled={saving}
               />
+              {preview ? (
+                <div className="markdown-preview-box detail-body">
+                  {body.trim() ? (
+                    renderParagraphs(body)
+                  ) : (
+                    <p className="cms-char-count">暂无正文内容，点击「返回编辑」开始输入。</p>
+                  )}
+                </div>
+              ) : (
+                <textarea
+                  ref={bodyRef}
+                  id={`${uid}-body`}
+                  rows={8}
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder="介绍完成效果、空间设计与交互亮点…"
+                />
+              )}
             </div>
           </div>
 

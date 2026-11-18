@@ -198,31 +198,72 @@ export function RenderPipeline({
             }
           }
         })
-        textures.forEach((texture) => gl.initTexture(texture))
+        const textureList = Array.from(textures)
+        let sliceStart = performance.now()
+        for (let i = 0; i < textureList.length; i++) {
+          gl.initTexture(textureList[i])
+          if (i < textureList.length - 1 && performance.now() - sliceStart > 10) {
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+            if (!mounted) return
+            sliceStart = performance.now()
+          }
+        }
         recordEvent('texture-upload', performance.now() - start, `${textures.size} textures`)
         await stage('正在准备室内光线…')
         if (!mounted) return
         const compileStart = performance.now()
-        await gl.compileAsync(scene, camera)
+        const compileVis: { object: Object3D; visible: boolean }[] = []
+        scene.traverse((object) => {
+          compileVis.push({ object, visible: object.visible })
+          object.visible = true
+        })
+        const prevCompileTarget = gl.getRenderTarget()
+        try {
+          // Bind composer.readBuffer so getParameters() compiles the exact NoToneMapping + LinearSRGB
+          // shader variants used by RenderPass instead of canvas ACESFilmic + SRGB variants.
+          gl.setRenderTarget(composer.readBuffer)
+          const compileTask = gl.compileAsync(scene, camera)
+          gl.setRenderTarget(prevCompileTarget)
+          await compileTask
+        } finally {
+          if (gl.getRenderTarget() !== prevCompileTarget) {
+            gl.setRenderTarget(prevCompileTarget)
+          }
+          compileVis.forEach(({ object, visible }) => {
+            object.visible = visible
+          })
+        }
+        if (!mounted) return
         recordEvent('shader-compile', performance.now() - compileStart)
         await stage('正在布置房间与庭院…')
         if (!mounted) return
-        // Upload even geometry behind the camera and in hidden rooms, including deep links.
+        // Upload even geometry behind the camera and in hidden rooms into a tiny 32x32 target,
+        // without corrupting the directional shadow map or paying full-res post-processing cost.
+        const warmupTarget = new WebGLRenderTarget(32, 32)
         const states: { object: Object3D; visible: boolean; frustumCulled: boolean }[] = []
         scene.traverse((object) => {
           states.push({ object, visible: object.visible, frustumCulled: object.frustumCulled })
           object.visible = true
           object.frustumCulled = false
         })
-        gl.shadowMap.needsUpdate = true
+        gl.shadowMap.needsUpdate = false
+        const prevTarget = gl.getRenderTarget()
         try {
-          composer.render(0)
+          gl.setRenderTarget(warmupTarget)
+          gl.render(scene, camera)
+          gl.setRenderTarget(prevTarget)
         } finally {
           states.forEach(({ object, visible, frustumCulled }) => {
             object.visible = visible
             object.frustumCulled = frustumCulled
           })
+          if (gl.getRenderTarget() !== prevTarget) {
+            gl.setRenderTarget(prevTarget)
+          }
+          warmupTarget.dispose()
         }
+        gl.shadowMap.needsUpdate = true
+        composer.render(0)
         warmed.current = true
         recordEvent('initial-render-warmup', performance.now() - start)
       } catch (err) {

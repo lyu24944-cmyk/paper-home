@@ -6,7 +6,7 @@ import {
   saveNoteDraftApi,
   unpublishNoteApi,
 } from '../lib/api'
-import { buildStatusLabel } from '../lib/text'
+import { buildStatusLabel, renderParagraphs } from '../lib/text'
 import { isCloudConfigured } from '../lib/supabase'
 import {
   ConflictError,
@@ -18,6 +18,7 @@ import {
 import { ConfirmDialog } from './ConfirmDialog'
 import type { ConflictContext } from './ConflictDialog'
 import { Icon } from './Icon'
+import { MarkdownToolbar } from './MarkdownToolbar'
 import { ImageListPicker, VideoUploadPicker } from './MediaPickers'
 import { Modal } from './Modal'
 import type { SaveActionKind } from './ProjectEditorModal'
@@ -67,6 +68,9 @@ export function NoteEditorModal({
   const [saveError, setSaveError] = useState('')
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [preview, setPreview] = useState(false)
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null)
+  const prevNoteIdRef = useRef<string | null>(initialNote?.id ?? null)
 
   const sessionUploadedIdsRef = useRef<string[]>([])
   const wasOpenRef = useRef(false)
@@ -96,11 +100,16 @@ export function NoteEditorModal({
     const closing = wasOpenRef.current && !open
     wasOpenRef.current = open
     if (closing) {
+      setPreview(false)
       flushSessionCandidates()
       return
     }
     if (!open) return
     syncFromNote(initialNote)
+    if (opening || (initialNote?.id ?? null) !== prevNoteIdRef.current) {
+      prevNoteIdRef.current = initialNote?.id ?? null
+      setPreview(false)
+    }
     if (opening) {
       setSaveStatus('')
       setSaveError('')
@@ -348,13 +357,32 @@ export function NoteEditorModal({
                 <label htmlFor={`${uid}-body`}>手记正文（发布必填）</label>
                 <span className="cms-char-count">{body.replace(/\s+/g, '').length} 字</span>
               </div>
-              <textarea
-                id={`${uid}-body`}
-                rows={10}
+              <MarkdownToolbar
+                textareaRef={bodyRef}
                 value={body}
-                onChange={(e) => setBody(e.target.value)}
-                placeholder="写下思考过程、对比尝试、依据与结论…"
+                onChange={setBody}
+                preview={preview}
+                onTogglePreview={() => setPreview((v) => !v)}
+                disabled={saving}
               />
+              {preview ? (
+                <div className="markdown-preview-box detail-body">
+                  {body.trim() ? (
+                    renderParagraphs(body)
+                  ) : (
+                    <p className="cms-char-count">暂无正文内容，点击「返回编辑」开始输入。</p>
+                  )}
+                </div>
+              ) : (
+                <textarea
+                  ref={bodyRef}
+                  id={`${uid}-body`}
+                  rows={10}
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder="写下思考过程、对比尝试、依据与结论…"
+                />
+              )}
             </div>
           </div>
 
