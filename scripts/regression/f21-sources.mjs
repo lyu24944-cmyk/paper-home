@@ -1,4 +1,6 @@
 import http from 'node:http'
+import {spawnSync} from 'node:child_process'
+import {fileURLToPath} from 'node:url'
 import {exportPublic} from '../export-public.mjs'
 import {createLocalCmsStore,createEmptyStoreData} from '../local-cms-store.mjs'
 import {validateSnapshot} from '../public-snapshot.mjs'
@@ -55,5 +57,13 @@ try{
  const empty=path.join(root,'empty');fs.mkdirSync(empty);fs.writeFileSync(path.join(empty,'cottage.json'),JSON.stringify(createEmptyStoreData()))
  await exportPublic({source:'local',dataDir:empty,outDir:path.join(root,'empty-public')})
  assert.equal((await validateSnapshot(path.join(root,'empty-public'))).projects.length,0)
+ const cliDemoDataDir=path.join(root,'cli-demo'),cliDemoPublicDir=path.join(root,'cli-demo-public')
+ const initScript=fileURLToPath(new URL('../init-sample.mjs',import.meta.url))
+ const initRun=spawnSync(process.execPath,[initScript],{env:{...process.env,LOCAL_CMS_DATA_DIR:cliDemoDataDir},encoding:'utf8'})
+ assert.equal(initRun.status,0,initRun.stderr||initRun.stdout)
+ assert.ok(initRun.stdout.includes(cliDemoDataDir),'init-sample log should report custom LOCAL_CMS_DATA_DIR')
+ await exportPublic({source:'local',dataDir:cliDemoDataDir,outDir:cliDemoPublicDir})
+ const cliDemoSnapshot=await validateSnapshot(cliDemoPublicDir)
+ assert.ok(cliDemoSnapshot.projects.length>0)
  console.log('F21 PASS: missing source fails; local/cloud exports use public data, local media, hashes, no fallback and explicit empty snapshots')
 }finally{fs.rmSync(root,{recursive:true,force:true})}

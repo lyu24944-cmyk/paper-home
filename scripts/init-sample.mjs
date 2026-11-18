@@ -5,16 +5,19 @@ import { createLocalCmsStore } from './local-cms-store.mjs'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
 const force = process.argv.includes('--force')
+const envDataDir = process.env.LOCAL_CMS_DATA_DIR?.trim()
+const dataDir = envDataDir ? path.resolve(rootDir, envDataDir) : undefined
 
 async function main() {
-  const store = createLocalCmsStore(rootDir)
+  const store = createLocalCmsStore(rootDir, dataDir ? { dataDir } : undefined)
   const res = await store.seedNeutralSample({ force })
   if (res.skipped) {
     console.log(`[init:sample] ${res.reason} 如需重置覆盖可追加 --force。`)
     return
   }
+  const targetDir = dataDir ? store.dataDir : 'local-data/'
   console.log(
-    `[init:sample] 已写入中性示例到 local-data/（作品 ${res.projectCount} 件，手记 ${res.noteCount} 篇，图片 ${res.assetCount} 张）。`,
+    `[init:sample] 已写入中性示例到 ${targetDir}（作品 ${res.projectCount} 件，手记 ${res.noteCount} 篇，图片 ${res.assetCount} 张）。`,
   )
   console.log('[init:sample] 运行 npm run dev 后即可在浏览器中查看、修改或删除示例内容。')
 }
