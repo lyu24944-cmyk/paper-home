@@ -3,13 +3,14 @@
 > 一座可以推门走进去的三维个人主页与作品集模板 —— 不会写代码也能双击运行，在网页里直接换成自己的文字、图片和视频，免费发布给朋友逛。
 
 <p align="center">
+  <a href="https://lyu24944-cmyk.github.io/paper-home/"><img src="https://img.shields.io/badge/%E5%9C%A8%E7%BA%BF%E4%BD%93%E9%AA%8C-%E6%8E%A8%E9%97%A8%E9%80%9B%E5%B0%8F%E5%B1%8B-b8643b.svg" alt="在线体验 — 推门逛小屋" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-365840.svg" alt="MIT License" /></a>
   <a href="https://github.com/lyu24944-cmyk/paper-home/actions/workflows/ci.yml"><img src="https://github.com/lyu24944-cmyk/paper-home/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-20%2B-566e57.svg" alt="Node.js 20+" /></a>
 </p>
 
 <p align="center">
-  <strong>简体中文</strong> · <a href="./README.md">English</a> · <a href="#-零基础-3-步打开你的小屋">零基础启动</a> · <a href="#-不会写代码让-ai-帮你">AI 助手提示词</a> · <a href="#-开发者参考">开发者参考</a>
+  <strong><a href="https://lyu24944-cmyk.github.io/paper-home/">在线逛小屋</a></strong> · <strong>简体中文</strong> · <a href="./README.md">English</a> · <a href="#-零基础-3-步打开你的小屋">零基础启动</a> · <a href="#-不会写代码让-ai-帮你">AI 助手提示词</a> · <a href="#-开发者参考">开发者参考</a>
 </p>
 
 <p align="center">
@@ -172,7 +173,7 @@
 | `npm run preview` | 本地预览 `dist/` 构建产物（默认 `http://127.0.0.1:4319/`） |
 | `npm run assets:1k` | 从现有贴图生成 18 张 1024×1024 `-1k.webp` 轻量贴图并更新 `manifest.json` |
 | `npm run assets:prepare` | 从 Poly Haven 重新拉取处理全部写实贴图、GLB 植物模型、HDRI 与 1K 变体 |
-| `npm run assets:verify` | 校验 `public/assets/realistic/manifest.json` 中全部本地资产 SHA-256 与体积 |
+| `npm run assets:verify` | 校验 `public/assets/realistic/manifest.json` 中全部 61 个本地资产（`38.16 MiB`）的 SHA-256 与体积 |
 | `npm run check:camera` | 校验 120 条穿门相机路径与 6 种视口的 75,144 个几何采样点 |
 | `npm run check:sound` | Playwright 端到端校验 WebAudio 声景与触感音效 |
 | `npm run check:phase1` | Playwright 校验四时天色、细雨与房间内互动彩蛋 |
@@ -186,7 +187,7 @@
 
 ### 架构与性能纪律
 
-- **双档位画质与自动降级**：`high` 档位加载完整 4K/2K `.webp` 贴图与高精度植物模型；`low` 档位（兼容画质）加载 `1024×1024` `-1k.webp` 贴图（18 张合计约 1.67 MiB）与低面数 `.glb`。优先级为 `?quality=` URL 参数 > `localStorage` 手动记忆 > 设备/内置浏览器自动检测（移动设备、内存 `<= 4GB` 或微信/小红书/抖音/B站/微博/QQ 内置 WebView 自动采用兼容画质）。切换画质时自动释放旧档位 GPU 纹理与模型几何体，防止显存翻倍；捕获 `webglcontextlost` 后展示恢复卡片并提供「切换兼容画质并重试」。
+- **双档位画质与自动降级**：`high` 档位加载完整 4K/2K `.webp` 贴图与高精度植物模型（`7.34 MiB`）；`low` 档位（兼容画质）加载 `1024×1024` `-1k.webp` 贴图（18 张合计 `1.67 MiB`）与低面数 `.glb`（`2.56 MiB`）。优先级为 `?quality=` URL 参数 > `localStorage` 手动记忆 > 设备/内置浏览器自动检测（移动设备、内存 `<= 4GB` 或微信/小红书/抖音/B站/微博/QQ 内置 WebView 自动采用兼容画质）。切换画质时自动释放旧档位 GPU 纹理与模型几何体，防止显存翻倍；捕获 `webglcontextlost` 后展示恢复卡片并提供「切换兼容画质并重试」。
 - **0 运行时外部请求**：所有写实贴图、模型、HDRI、字体与合成音频全部本地自托管，不依赖外部 CDN。
 - **GitHub Pages 子路径兼容**：构建使用相对 `base: './'`，资源加载基址基于 `import.meta.env.BASE_URL`，部署在 `https://<用户名>.github.io/<仓库名>/` 子路径下所有资产正常加载。
 

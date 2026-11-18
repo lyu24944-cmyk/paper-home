@@ -12,6 +12,7 @@ import {
   Euler,
   Float32BufferAttribute,
   InstancedMesh,
+  Material,
   Matrix4,
   Mesh,
   MeshBasicMaterial,
@@ -20,16 +21,55 @@ import {
   PlaneGeometry,
   Quaternion,
   RGBADepthPacking,
+  ShaderChunk,
   SpriteMaterial,
   SRGBColorSpace,
   Uint16BufferAttribute,
   Vector3,
-  type Material,
+  type WebGLProgramParametersWithUniforms,
+  type WebGLRenderer,
 } from 'three'
 import type { AtmosphereLighting } from './atmosphere'
 import { Builder, StaticBatch } from './Geometry'
 import type { V3 } from './layout'
 import type { ResourcePack } from './resources'
+
+const LIGHTS_FRAGMENT_WITHOUT_RECT_AREA = ShaderChunk.lights_fragment_begin.replace(
+  /#if\s*\(\s*NUM_RECT_AREA_LIGHTS\s*>\s*0\s*\)[\s\S]*?#endif/,
+  '',
+)
+const RECT_AREA_STRIP_KEY = 'no-rect-area-v1'
+const rectAreaStrippedMaterials = new WeakSet<Material>()
+
+/** Strip indoor RectAreaLight LTC evaluation from outdoor-only MeshStandardMaterials. */
+function stripRectAreaLight(material: Material): void {
+  if (!(material instanceof MeshStandardMaterial) || rectAreaStrippedMaterials.has(material)) return
+  rectAreaStrippedMaterials.add(material)
+
+  const prevCacheKey = material.customProgramCacheKey
+  const hasCustomCacheKey = prevCacheKey !== Material.prototype.customProgramCacheKey
+  const prevOnBeforeCompile = material.onBeforeCompile
+  const hasCustomOnBeforeCompile = prevOnBeforeCompile !== Material.prototype.onBeforeCompile
+
+  material.customProgramCacheKey = () => {
+    const base = hasCustomCacheKey
+      ? prevCacheKey.call(material)
+      : hasCustomOnBeforeCompile
+        ? prevOnBeforeCompile.toString()
+        : ''
+    return base ? `${base}|${RECT_AREA_STRIP_KEY}` : RECT_AREA_STRIP_KEY
+  }
+
+  material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms, renderer: WebGLRenderer) => {
+    if (hasCustomOnBeforeCompile) {
+      prevOnBeforeCompile.call(material, shader, renderer)
+    }
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <lights_fragment_begin>',
+      LIGHTS_FRAGMENT_WITHOUT_RECT_AREA,
+    )
+  }
+}
 
 const BASE_GROUND_Y = -0.335
 const PATH_BOLLARD_Z = [4.2, 7.2] as const
@@ -263,6 +303,7 @@ function prepareVegetalMaterial(mat: Material): {
   const cloned = mat.clone()
   if (cloned.userData.clusterCards) applyFoliageSelection(cloned)
   if (cloned instanceof MeshStandardMaterial) {
+    stripRectAreaLight(cloned)
     if (cloned.transparent || cloned.alphaTest > 0) {
       cloned.transparent = false
       cloned.alphaTest = Math.max(cloned.alphaTest, 0.36)
@@ -414,13 +455,40 @@ function createTuftGeometry(): BufferGeometry {
   return geo
 }
 
+const DRY_GRASS_COLOR = new Color('#a2b890')
+const WET_GRASS_COLOR = new Color('#8ca47a')
+
 function SculptedGround({
   grassMaterial,
   quality,
+  wetness,
 }: {
   grassMaterial: Material
   quality: ResourcePack['quality']
+  wetness: number
 }) {
+  const clonedGrassMaterial = useMemo(() => {
+    const cloned = grassMaterial.clone()
+    if (grassMaterial.onBeforeCompile !== Material.prototype.onBeforeCompile) {
+      cloned.onBeforeCompile = grassMaterial.onBeforeCompile
+    }
+    if (grassMaterial.customProgramCacheKey !== Material.prototype.customProgramCacheKey) {
+      cloned.customProgramCacheKey = grassMaterial.customProgramCacheKey
+    }
+    stripRectAreaLight(cloned)
+    return cloned
+  }, [grassMaterial])
+
+  useEffect(() => {
+    if (!(clonedGrassMaterial instanceof MeshStandardMaterial)) return
+    const w = Math.max(0, Math.min(1, wetness))
+    clonedGrassMaterial.roughness = 0.9 + (0.74 - 0.9) * w
+    clonedGrassMaterial.color.copy(DRY_GRASS_COLOR).lerp(WET_GRASS_COLOR, w)
+    clonedGrassMaterial.envMapIntensity = 1 + 0.12 * w
+  }, [clonedGrassMaterial, wetness])
+
+  useEffect(() => () => clonedGrassMaterial.dispose(), [clonedGrassMaterial])
+
   const geometry = useMemo(() => {
     const segs = quality === 'high' ? 64 : 48
     const vertsPerSide = segs + 1
@@ -495,7 +563,7 @@ function SculptedGround({
   return (
     <mesh
       geometry={geometry}
-      material={grassMaterial}
+      material={clonedGrassMaterial}
       receiveShadow
       castShadow={false}
       raycast={() => null}
@@ -569,15 +637,15 @@ function HorizonTransition({ lighting }: { lighting: AtmosphereLighting }) {
     }
   }, [])
 
-  const ridgeMaterial = useMemo(
-    () =>
-      new MeshStandardMaterial({
-        vertexColors: true,
-        roughness: 0.96,
-        metalness: 0,
-      }),
-    [],
-  )
+  const ridgeMaterial = useMemo(() => {
+    const mat = new MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.96,
+      metalness: 0,
+    })
+    stripRectAreaLight(mat)
+    return mat
+  }, [])
 
   useEffect(() => {
     const ridgeHex =
@@ -678,7 +746,7 @@ function InstancedMultiPart({
           }}
           args={[part.geometry, part.material, matrices.length]}
           castShadow={castShadow}
-          receiveShadow={receiveShadow}
+          receiveShadow={receiveShadow && !part.material.userData.clusterCards}
           customDepthMaterial={castShadow ? part.depthMaterial : undefined}
           userData={skipAO ? { skipAO: true } : undefined}
           raycast={() => null}
@@ -1600,6 +1668,7 @@ transformed.x += sin(phase) * 0.038 * bladeLift;
 transformed.z += cos(phase * 0.82 + 0.5) * 0.026 * bladeLift;`,
         )
     }
+    stripRectAreaLight(mat)
     return mat
   }, [])
 
@@ -1847,7 +1916,7 @@ export function ExteriorScenery({
   return (
     <group>
       <group visible={!interiorHidden}>
-        <SculptedGround grassMaterial={materials.grass} quality={pack.quality} />
+        <SculptedGround grassMaterial={materials.grass} quality={pack.quality} wetness={lighting.wetness} />
         <HorizonTransition lighting={lighting} />
         <PerimeterForestAndTrees pack={pack} />
         <PastureFences materials={materials} />

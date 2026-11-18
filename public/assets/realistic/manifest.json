@@ -1,5 +1,5 @@
 {
-  "generated": "2026-11-16T06:06:25.619Z",
+  "generated": "2026-11-18T04:05:36.362Z",
   "records": [
     {
       "name": "brick",
@@ -211,15 +211,15 @@
       "lod": [
         {
           "level": "high",
-          "triangles": 15413,
-          "bytes": 3966708,
-          "sha256": "6a3e92542e412c7979b8c433682998e69d40bc5c9c0733c8997e3a8eeb03c757"
+          "triangles": 15407,
+          "bytes": 2431476,
+          "sha256": "c9ca7d1f7a46baa8722aea4089e29576012cf96e9715c0388c4a7b88b96cdd45"
         },
         {
           "level": "low",
-          "triangles": 6511,
-          "bytes": 1129884,
-          "sha256": "c2c4f81d361873f65650687daef21e42542dc48aef7916f7ab404bedc74bcb3d"
+          "triangles": 6505,
+          "bytes": 738508,
+          "sha256": "8d465964a0b51611451b5f05804d86fc56f15578c29647d15985cebfe3216ff4"
         }
       ],
       "assets": [
@@ -316,14 +316,14 @@
         {
           "level": "high",
           "triangles": 5919,
-          "bytes": 1856448,
-          "sha256": "54d9174d01e54d2466757743b834b306bdb8e489e668b744ed2dc9a211347d2e"
+          "bytes": 1712336,
+          "sha256": "2479cfc165a70e8f306ff07b7932e8515a9af3fc40faeb8c1dbd7acd0c855dd7"
         },
         {
           "level": "low",
           "triangles": 2363,
-          "bytes": 511004,
-          "sha256": "90a29e3a0850d034479f337b0398619fc0040a9af162a72334d4f04fec94d9c6"
+          "bytes": 484940,
+          "sha256": "62dc3a38fdae5f8bc6e1b9488a2dc2c3492ba662d922fe96def84e5d86f403e4"
         }
       ],
       "assets": [
@@ -504,14 +504,14 @@
         {
           "level": "high",
           "triangles": 4313,
-          "bytes": 3272860,
-          "sha256": "1eec00421d5bb1638ed8a42a1a72205743b318140bef6b315a511f70ebc28d8f"
+          "bytes": 2207680,
+          "sha256": "594aae977fb507dd1b2b2e7ad0ef5bd2bb1552b3dbaf350c045e15768a2bde49"
         },
         {
           "level": "low",
           "triangles": 2189,
-          "bytes": 542240,
-          "sha256": "14a9c14f816528085192d18b800f00f3c63499e81a7eff5958dafa0ba20d7ca5"
+          "bytes": 501412,
+          "sha256": "20c730806fdbb3cb27c94ee92d61ccd44e8628659c18f5313b08ca9d2dfcc782"
         }
       ],
       "assets": [
@@ -1237,23 +1237,23 @@
     },
     {
       "filename": "island_tree_01-high.glb",
-      "bytes": 3966708,
-      "sha256": "6a3e92542e412c7979b8c433682998e69d40bc5c9c0733c8997e3a8eeb03c757"
+      "bytes": 2431476,
+      "sha256": "c9ca7d1f7a46baa8722aea4089e29576012cf96e9715c0388c4a7b88b96cdd45"
     },
     {
       "filename": "island_tree_01-low.glb",
-      "bytes": 1129884,
-      "sha256": "c2c4f81d361873f65650687daef21e42542dc48aef7916f7ab404bedc74bcb3d"
+      "bytes": 738508,
+      "sha256": "8d465964a0b51611451b5f05804d86fc56f15578c29647d15985cebfe3216ff4"
     },
     {
       "filename": "island_tree_02-high.glb",
-      "bytes": 1856448,
-      "sha256": "54d9174d01e54d2466757743b834b306bdb8e489e668b744ed2dc9a211347d2e"
+      "bytes": 1712336,
+      "sha256": "2479cfc165a70e8f306ff07b7932e8515a9af3fc40faeb8c1dbd7acd0c855dd7"
     },
     {
       "filename": "island_tree_02-low.glb",
-      "bytes": 511004,
-      "sha256": "90a29e3a0850d034479f337b0398619fc0040a9af162a72334d4f04fec94d9c6"
+      "bytes": 484940,
+      "sha256": "62dc3a38fdae5f8bc6e1b9488a2dc2c3492ba662d922fe96def84e5d86f403e4"
     },
     {
       "filename": "periwinkle_plant-high.glb",
@@ -1407,13 +1407,13 @@
     },
     {
       "filename": "tree_small_02-high.glb",
-      "bytes": 3272860,
-      "sha256": "1eec00421d5bb1638ed8a42a1a72205743b318140bef6b315a511f70ebc28d8f"
+      "bytes": 2207680,
+      "sha256": "594aae977fb507dd1b2b2e7ad0ef5bd2bb1552b3dbaf350c045e15768a2bde49"
     },
     {
       "filename": "tree_small_02-low.glb",
-      "bytes": 542240,
-      "sha256": "14a9c14f816528085192d18b800f00f3c63499e81a7eff5958dafa0ba20d7ca5"
+      "bytes": 501412,
+      "sha256": "20c730806fdbb3cb27c94ee92d61ccd44e8628659c18f5313b08ca9d2dfcc782"
     },
     {
       "filename": "wood-color-1k.webp",

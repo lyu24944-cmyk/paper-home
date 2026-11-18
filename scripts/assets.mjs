@@ -119,7 +119,7 @@ for(const [id,cfg] of models){
   const ratio=Math.min(1,target/originalTriangles);
   if(originalTriangles>500000){
    await simplifyTreeDoc(doc,target,level,err);
-   await doc.transform(prune(),textureCompress({encoder:sharp,targetFormat:'webp',resize:[texsize,texsize],pattern:/^(?!foliage-atlas)/}),meshopt({encoder:MeshoptEncoder,level:'high'}));
+   await doc.transform(prune(),textureCompress({encoder:sharp,targetFormat:'webp',resize:[texsize,texsize],pattern:/^(?!foliage-atlas)/}),meshopt({encoder:MeshoptEncoder,level:'high',quantizeTexcoord:14}));
   }else{
    const ops=[dedup(),weld()];
    if(ratio<1)ops.push(simplify({simplifier:MeshoptSimplifier,ratio,error:err,lockBorder:false}));

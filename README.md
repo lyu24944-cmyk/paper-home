@@ -3,13 +3,14 @@
 > An open-source, walkable 3D digital cottage and personal homepage template — launch with a double-click, edit your projects and notes visually in the browser without touching code, and publish anywhere for free.
 
 <p align="center">
+  <a href="https://lyu24944-cmyk.github.io/paper-home/"><img src="https://img.shields.io/badge/Live_Demo-Visit_Cottage-b8643b.svg" alt="Live Demo — Visit Cottage" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-365840.svg" alt="MIT License" /></a>
   <a href="https://github.com/lyu24944-cmyk/paper-home/actions/workflows/ci.yml"><img src="https://github.com/lyu24944-cmyk/paper-home/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-20%2B-566e57.svg" alt="Node.js 20+" /></a>
 </p>
 
 <p align="center">
-  <a href="./README.zh-CN.md">简体中文</a> · <strong>English</strong> · <a href="#-open-your-cottage-in-3-zero-code-steps">Zero-Code Quickstart</a> · <a href="#-no-coding-experience-copy-these-ai-prompts">AI Prompts</a> · <a href="#%EF%B8%8F-developer-reference">Developer Reference</a>
+  <strong><a href="https://lyu24944-cmyk.github.io/paper-home/">Live Demo</a></strong> · <a href="./README.zh-CN.md">简体中文</a> · <strong>English</strong> · <a href="#-open-your-cottage-in-3-zero-code-steps">Zero-Code Quickstart</a> · <a href="#-no-coding-experience-copy-these-ai-prompts">AI Prompts</a> · <a href="#%EF%B8%8F-developer-reference">Developer Reference</a>
 </p>
 
 <p align="center">
@@ -135,7 +136,7 @@ Open the extracted folder in **Antigravity, Cursor, or Trae** and paste any of t
 | `npm run preview` | Preview `dist/` locally at `http://127.0.0.1:4319/` |
 | `npm run assets:1k` | Generate 18 `1024×1024` `-1k.webp` mobile textures and update `manifest.json` |
 | `npm run assets:prepare` | Re-download and process all Poly Haven assets + 1K variants |
-| `npm run assets:verify` | Verify SHA-256 checksums of all 61 local assets (`35.27 MiB`) in `manifest.json` |
+| `npm run assets:verify` | Verify SHA-256 checksums of all 61 local assets (`38.16 MiB`) in `manifest.json` |
 | `npm run check:camera` | Verify 75,144 camera trajectory samples across 120 routes & 6 viewports |
 | `npm run check:sound` | Playwright verification of WebAudio synthesis & tactile SFX |
 | `npm run check:phase1` | Playwright verification of atmospheres, rain & room props |
@@ -149,7 +150,7 @@ Open the extracted folder in **Antigravity, Cursor, or Trae** and paste any of t
 
 ### Mobile Quality & Context Recovery
 
-- **Dual Quality Packs**: `high` loads full 4K/2K `.webp` textures and high-poly GLBs; `low` loads `1024×1024` `-1k.webp` textures (`1.67 MiB` total) and low-poly GLBs. Selection priority: `?quality=` URL param > saved `localStorage` choice > automatic detection (mobile/tablet devices, `deviceMemory <= 4`, and WeChat / Xiaohongshu / Douyin / Bilibili / Weibo / QQ WebViews default to `low`). Switching quality disposes the replaced GPU textures and GLTF geometries cleanly.
+- **Dual Quality Packs**: `high` loads full 4K/2K `.webp` textures and high-poly GLBs (`7.34 MiB`); `low` loads `1024×1024` `-1k.webp` textures (`1.67 MiB` total) and low-poly GLBs (`2.56 MiB`). Selection priority: `?quality=` URL param > saved `localStorage` choice > automatic detection (mobile/tablet devices, `deviceMemory <= 4`, and WeChat / Xiaohongshu / Douyin / Bilibili / Weibo / QQ WebViews default to `low`). Switching quality disposes the replaced GPU textures and GLTF geometries cleanly.
 - **WebGL Context Loss**: Listens for `webglcontextlost`, presents a styled recovery card with a **Switch to Compatible Quality & Retry** button, and remounts `<Canvas>` cleanly in `low` mode.
 
 ### Optional Cloud CMS Mode (Supabase + Cloudflare Pages)

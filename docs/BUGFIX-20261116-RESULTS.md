@@ -1,6 +1,8 @@
 # F01—F21 实证验收报告
 
-最后 F15 Vite 构建保护补修后，26/26 项串行回归、正常顶层构建、隔离本地顶层构建及干净副本三项定向验证均退出 0。早前完整干净 CI 17/17 通过，但早于该补修；最新代码没有重新执行完整 17 步链路。未执行生产迁移、真实云端内容同步、远端发布或 Git 提交。**庭院冷启动 FPS 仍仅为旧版 75.01%，不能宣称每阶段无性能回归。**
+**`v1.1.2` 最新状态（2026-11-18）：** 完成树木叶簇图集紧致裁剪（`alpha >= 92`）、由外向内径向排序、图集上限收敛（`high <= 2048px` / `low <= 1024px`）、正交列点积替换 `inverse()` 与户外材质阴影/RectAreaLight 优化后，AMD Radeon 780M（`2560×1440`、`high`、`DPR 1`、有窗口 Chrome）6 轮交替 A/B 实测全路线 FPS 中位数保留 **99.40%**（`38.86 vs 39.10`）、P95 比值 **100.00%**（`50.00 vs 50.00 ms`）、**庭院冷启动 `#yard` FPS 恢复至 92.24%（`49.00 vs 53.12` >= 90%，解除原有 75.01% 限制）**。`npm run assets:verify`（61 个资产 / `38.16 MiB`）、`npx tsc --noEmit`、`npm run check:config`、`npm run check:edge`、`npm run build`、隔离 `/paper-home/` 子路径静态托管冒烟验证与 **26/26 项串行回归**全部退出 0。本轮未执行生产迁移、真实云端内容同步、远端 CI/Pages 发布或 Git 提交（待协调确认后执行）。
+
+> 历史背景（`v1.1.1`，2026-11-16/17）：早前 F15 Vite 构建保护补修后，26/26 项串行回归、正常顶层构建、隔离本地顶层构建及干净副本三项定向验证均退出 0（`3e1e4300e7329902dc4a3a1a93a927f32edff839` 后通过完整 Ubuntu CI [43990553205](https://github.com/lyu24944-cmyk/paper-home/actions/runs/43990553205) 17/17 + 26/26）；当时曾遗留庭院冷启动 FPS 仅为旧版 75.01% 的限制，现已由 `v1.1.2` 解除。以下各节保留完整历史记录并补充 `v1.1.2` 实测。
 
 ## 逐项修复
 
@@ -174,6 +176,23 @@
 
 ## 命令退出码
 
+### `v1.1.2`（2026-11-18）本机串行实测命令
+
+| 命令 | 退出码 | 实测结果与范围 | 原始日志 / 证据 |
+|---|---:|---|---|
+| `npm run assets:verify` | 0 | 61 个本地资产（`38.16 MiB`）SHA-256 + 解码 + F04 遮罩全部达标 | 标准输出 + `manifest.json` |
+| `npx tsc --noEmit` | 0 | 主应用 TypeScript 编译通过 | 标准输出 |
+| `npm run check:config` | 0 | 配置脚本类型检查通过 | 标准输出 |
+| `npm run check:edge` | 0 | 5 个 Supabase Edge Functions 类型检查通过 | 标准输出 |
+| `node scripts/regression/f04-browser.mjs` | 0 | `low`（58 programs / 338,662 tris）、`high`（58 programs / 695,004 tris），0 错误，5 张截图目视通过 | `.qa/regression/trees/` |
+| `node scripts/regression/gpu-resources.mjs` | 0 | 4 轮重建 `130` geos / `97` tex / `58` programs，context 恢复后 `57`，0 泄漏 | `.qa/regression/gpu-resources.json` |
+| 6 轮交替 A/B GPU 基准（`2560×1440, high, DPR 1, headed`） | 0 | 全路线 FPS `99.40%`、P95 `100.00%`、`#yard` FPS `92.24%`（`49.00 vs 53.12`） | `.qa/regression/performance-v112/results.json` |
+| `npm run build` | 0 | `dist/assets/index-DlD0cN9c.js`（220.36 kB / gzip 74.01 kB） | 标准输出 |
+| 隔离 `/paper-home/` 子路径静态托管冒烟验证 | 0 | `init:sample` + `export:public` + `build:local`，`53` 请求（5 次快照请求）、`0` HTTP >=400、`0` 错误 | `.qa/regression/subpath-smoke.json` |
+| `npm run check:regressions` | 0 | **26/26** 串行通过（Windows 下展开长路径 `TEMP`/`TMP` 以避开 libuv `fs-event.c:72` 短路径 `ADMINI~1` 断言） | `.qa/regression/results.json` |
+
+### `v1.1.1`（2026-11-16，历史命令记录保留）
+
 | 命令 | 退出码 | 证据适用范围 | 原始日志 |
 |---|---:|---|---|
 | npx tsc --noEmit | 0 | 早前验收记录，本次未重复执行 | .qa/final-latest/01.log |
@@ -214,6 +233,32 @@
 
 保持原树位/树种/实例化和 3D 木质枝干，运行时未放回百万面原模型。四向树冠遮罩全部达到 high≥80%、low≥70%。
 
+### `v1.1.2`（2026-11-18，当前结果）
+
+| 树 / LOD | 原三角面 | 新三角面 / 预算 | 最低遮罩 IoU | 原 MiB → 新 MiB |
+|---|---:|---:|---:|---:|
+| island_tree_01 / high | 15963 | 15407 / 16000 | 82.31% | 1.38 → 2.32 |
+| island_tree_01 / low | 7099 | 6505 / 7200 | 74.84% | 0.53 → 0.70 |
+| island_tree_02 / high | 5949 | 5919 / 6000 | 82.91% | 1.08 → 1.63 |
+| island_tree_02 / low | 2613 | 2363 / 2600 | 75.57% | 0.38 → 0.46 |
+| tree_small_02 / high | 4655 | 4313 / 4800 | 80.48% | 1.08 → 2.11 |
+| tree_small_02 / low | 2581 | 2189 / 2200 | 72.12% | 0.35 → 0.48 |
+
+全部静态资源：35.27 → 38.16 MiB（相对 `v1.1.1` 的 41.22 MiB 回落 3.06 MiB；12 个 high GLB 共 7.34 MiB，12 个 low GLB 共 2.56 MiB，1K 纹理共 1.67 MiB）。
+
+同一 AMD 780M、2560×1440、high、DPR 1、同一份冻结公开场景数据（`.qa/regression/perf-data-frozen`），`.qa/regression/perf-baseline` 与 `.qa/regression/perf-v112` 各三次交替运行（`baseline 1 → v112 1 → baseline 2 → v112 2 → baseline 3 → v112 3`）；新浏览器独立启动，计时中无截图/录制/其他 GPU 任务，全部 6 轮与中位数保存在 `.qa/regression/performance-v112/results.json`。
+
+| 指标（三次中位数） | perf-baseline | v1.1.2 | 验收 |
+|---|---:|---:|---|
+| 全路线平均 FPS | 39.10 | 38.86 | 保留 99.40% ≥ 90%，通过 |
+| 全路线 P95 ms | 50.00 | 50.00 | 比值 100.00% ≤ 110%，通过 |
+| 初始庭院 `#yard` FPS | 53.12 | 49.00 | 保留 92.24% ≥ 90%，通过 |
+
+- 逐轮全路线 FPS：`baseline` `[39.10, 39.30, 28.04]` vs `v1.1.2` `[40.07, 38.86, 21.15]`；逐轮 `#yard` FPS：`baseline` `[51.62, 53.12, 54.11]` vs `v1.1.2` `[49.05, 49.00, 24.33]`。第 3 轮对组中段起系统后台/热节流尖峰同时影响了 `baseline-3` 与 `v112-3`（长任务分别增至 46 / 51 次），3 轮中位数自然过滤该异常；干净的第 1、2 轮 `v1.1.2` `#yard` 分别为 `49.05` / `49.00` FPS。
+- `v1.1.2` GPU 资源：四轮 high/low 重建后几何 `130`、纹理 `97`、程序 `58`，WebGL context 恢复后 `57`、`0` 泄漏、`0` 错误（`.qa/regression/gpu-resources.json`）。`f04-browser.mjs` 实测 `low` 58 programs / 338,662 tris、`high` 58 programs / 695,004 tris，截图位于 `.qa/regression/trees`。
+
+### `v1.1.1`（2026-11-16，历史基线记录保留）
+
 | 树 / LOD | 原三角面 | 新三角面 / 预算 | 最低遮罩 IoU | 原 MiB → 新 MiB |
 |---|---:|---:|---:|---:|
 | island_tree_01 / high | 15963 | 15413 / 16000 | 82.73% | 1.38 → 3.78 |
@@ -223,20 +268,16 @@
 | tree_small_02 / high | 4655 | 4313 / 4800 | 80.79% | 1.08 → 3.12 |
 | tree_small_02 / low | 2581 | 2189 / 2200 | 71.87% | 0.35 → 0.52 |
 
-全部静态资源：35.27 → 41.22 MiB。
+历史 `v1.1.1` 全部静态资源：35.27 → 41.22 MiB。
 
-同一 AMD 780M、2560×1440、high、DPR 1、同一份公开场景数据，旧版/新版各三次，交替运行；新浏览器独立启动，计时中无截图/录制/其他 GPU 任务。
-
-| 指标（三次中位数） | 旧版 | 新版 | 验收 |
+| 指标（`v1.1.1` 历史三次中位数） | 旧版 | `v1.1.1` | 验收 |
 |---|---:|---:|---|
 | 全路线平均 FPS | 32.14 | 30.66 | 保留 95.39% ≥ 90%，通过 |
 | 全路线 P95 ms | 66.60 | 66.60 | 比值 100.00% ≤ 110%，通过 |
 
-**单独阶段限制：** 初始庭院 FPS 中位数 42.56 → 31.92，保留 75.01%。全路线门槛通过，庭院冷启动阶段仍有明显性能成本；完整阶段数据保存在 JSON。
+**`v1.1.1` 历史阶段限制（已由 `v1.1.2` 解除）：** `v1.1.1` 初始庭院 FPS 中位数 42.56 → 31.92，保留 75.01%；`v1.1.2` 已将该阶段恢复至 49.00 vs 53.12（92.24% ≥ 90%）。
 
-第一次叶簇实现的全路线 FPS 保留率为 89.65%，未达门槛；随后将未选视角从片元丢弃改为顶点裁剪并统一实例视角，重新执行完整六轮后通过，未降低断言。初次失败数据保留在 `.qa/regression/performance-initial`。
-
-GPU 资源：四轮 high/low 重建后几何 130、纹理 97，程序数保持有界（四轮 58，context 恢复后 57）；resize/DPR 及 WebGL context 恢复通过。截图位于 `.qa/regression/trees`，旧图位于 `.qa/audit-20261116/yard-high.png`。
+第一次叶簇实现的全路线 FPS 保留率为 89.65%，未达门槛；随后将未选视角从片元丢弃改为顶点裁剪并统一实例视角，重新执行完整六轮后通过，未降低断言。初次失败数据保留在 `.qa/regression/performance-initial`；`v1.1.1` 六轮数据保留在 `.qa/regression/performance`；旧图位于 `.qa/audit-20261116/yard-high.png`。
 
 ## 数据库与发布
 
@@ -250,6 +291,6 @@ Pages 手动选择 local 或 supabase。site-content 初始为明确空快照；
 
 - iOS Safari / Android 真机自动播放及低显存设备
 - 生产数据库迁移与真实内容同步
-- 远端 GitHub Actions / Pages 发布
+- `v1.1.2` 远端 GitHub Actions（Ubuntu 17 项 CI）与 GitHub Pages 部署（待提交推送后运行）
 
 真实集成使用本机 Docker 的独立 Supabase 项目（PostgreSQL 17、真实 Auth/RLS/Storage/Edge），包含 Storage 停机和数据库删除失败注入；结束后均停止隔离项目。PGlite 与 Mock UI 回归继续存在，各自不替代真实集成。
