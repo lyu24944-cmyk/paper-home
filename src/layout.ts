@@ -26,14 +26,15 @@ export function roomPoint(id: Place, p: V3) {
   const t = roomTransform(id)
   return new Vector3(...p).applyAxisAngle(up,t.rotation).add(new Vector3(t.x,0,t.z))
 }
-export function hallPose(progress: number, aspect = 1.6): CameraPose {
+export function hallPose(progress: number, aspect = 1.6, lookOffset = 0): CameraPose {
   const depth = .85 + Math.max(0,Math.min(1,progress))*layout.walkLength
-  let yaw = 0
+  let yaw = lookOffset
   for (const d of doorStops) {
     const offset = Math.abs(depth - (d.depth-.6))
     const weight = offset < 1.05 ? (1+Math.cos(offset/1.05*Math.PI))/2 : 0
     yaw += d.side * weight * .62
   }
+  yaw = Math.max(-0.95, Math.min(0.95, yaw))
   return pose([0,layout.eyeHeight,-depth],[Math.sin(yaw)*4,1.58,-depth-Math.cos(yaw)*4],aspect<.8?78:62)
 }
 export function gallerySlotX(index: number, count: number): number {

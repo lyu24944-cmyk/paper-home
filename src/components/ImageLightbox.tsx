@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useI18n } from '../lib/i18n'
 import { playSound } from '../lib/sound'
 import { Icon } from './Icon'
 import { SignedImage } from './SignedImage'
@@ -24,6 +25,7 @@ export function ImageLightbox({
   onIndexChange: (nextIndex: number) => void
   onClose: () => void
 }) {
+  const { tr } = useI18n()
   const dialogRef = useRef<HTMLDialogElement>(null)
   const count = images.length
   const safeIndex = count > 0 ? Math.max(0, Math.min(index, count - 1)) : 0
@@ -65,7 +67,7 @@ export function ImageLightbox({
     <dialog
       ref={dialogRef}
       className="lightbox-dialog"
-      aria-label={current?.caption || current?.alt || '图片大图预览'}
+      aria-label={current?.caption || current?.alt || tr('图片大图预览', 'Image preview')}
       onCancel={(e) => {
         e.preventDefault()
         e.stopPropagation()
@@ -91,7 +93,7 @@ export function ImageLightbox({
         >
           <div className="lightbox-topbar">
             <span className="lightbox-counter">
-              {count > 1 ? `${safeIndex + 1} / ${count}` : '原图预览'}
+              {count > 1 ? `${safeIndex + 1} / ${count}` : tr('原图预览', 'Full-size preview')}
               {current.caption ? ` · ${current.caption}` : ''}
             </span>
             <button
@@ -99,10 +101,10 @@ export function ImageLightbox({
               className="lightbox-close-btn"
               data-sound="modal-close"
               onClick={onClose}
-              aria-label="关闭大图预览"
+              aria-label={tr('关闭大图预览', 'Close image preview')}
             >
               <Icon name="close" size={20} />
-              <span>关闭</span>
+              <span>{tr('关闭', 'Close')}</span>
             </button>
           </div>
 
@@ -121,7 +123,7 @@ export function ImageLightbox({
                 className="lightbox-arrow-btn prev"
                 data-sound="shutter"
                 onClick={() => onIndexChange((safeIndex - 1 + count) % count)}
-                aria-label="上一张图片"
+                aria-label={tr('上一张图片', 'Previous image')}
               >
                 <Icon name="back" size={22} />
               </button>
@@ -144,7 +146,7 @@ export function ImageLightbox({
                 className="lightbox-arrow-btn next"
                 data-sound="shutter"
                 onClick={() => onIndexChange((safeIndex + 1) % count)}
-                aria-label="下一张图片"
+                aria-label={tr('下一张图片', 'Next image')}
               >
                 <Icon name="arrow" size={22} />
               </button>
@@ -152,7 +154,7 @@ export function ImageLightbox({
           </div>
 
           {count > 1 && (
-            <div className="lightbox-dots" role="tablist" aria-label="切换预览图片">
+            <div className="lightbox-dots" role="tablist" aria-label={tr('切换预览图片', 'Switch preview image')}>
               {images.map((item, idx) => (
                 <button
                   key={`${item.assetId}-${idx}`}
@@ -160,7 +162,7 @@ export function ImageLightbox({
                   role="tab"
                   data-sound="shutter"
                   aria-selected={idx === safeIndex}
-                  aria-label={`查看第 ${idx + 1} 张图片`}
+                  aria-label={tr(`查看第 ${idx + 1} 张图片`, `View image ${idx + 1}`)}
                   className={`lightbox-dot-btn ${idx === safeIndex ? 'active' : ''}`}
                   onClick={() => onIndexChange(idx)}
                 />

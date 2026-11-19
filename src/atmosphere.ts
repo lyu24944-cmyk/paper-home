@@ -1,3 +1,4 @@
+import type { Locale } from './lib/i18n'
 import type { AtmosphereMode, AtmospherePreset, WeatherMode } from './types/content'
 
 export interface AtmosphereOption {
@@ -273,8 +274,62 @@ export const DEFAULT_STUDY_QUOTES: string[] = [
   '“窗户如果是假的贴图，房子就是封闭的盒子；当视线能穿过 6 毫米玻璃看见书桌上的台灯，家才有了内外。”',
 ]
 
+export const DEFAULT_STUDY_QUOTES_EN: string[] = [
+  '"A good house is not a monument to gaze up at, but a vessel where you want to sit, listen to the rain, turn pages, and breathe slowly."',
+  '"The warmth of paper and the depth of 3D space do not conflict—strip away excess spectacle, and wind can blow through the quiet margins."',
+  '"First let yourself comfortably finish writing your first note locally, then decide whether to hand the keys to the cloud."',
+  '"If windows are fake textures, a house is a sealed box; when sightlines pass through 6 mm glass to the desk lamp, home gains an inside and outside."',
+]
+
 export const DEFAULT_NOW_NOTES: string[] = [
   '打磨四时天色与雨夜窗景',
   '在读《建筑的模式语言》',
   '收集慢节奏的独立小工具',
 ]
+
+export const DEFAULT_NOW_NOTES_EN: string[] = [
+  'Refining four-season skies and rainy-night window views',
+  'Reading "A Pattern Language"',
+  'Collecting unhurried indie tools',
+]
+
+const ATMOSPHERE_EN: Record<
+  AtmosphereMode,
+  Pick<AtmosphereOption, 'label' | 'shortLabel' | 'eyebrow' | 'footerText'>
+> = {
+  dawn: {
+    label: 'Dawn',
+    shortLabel: 'Dawn',
+    eyebrow: 'Misty Dawn Courtyard',
+    footerText: 'Outside, cool morning mist',
+  },
+  daylight: {
+    label: 'Daylight',
+    shortLabel: 'Day',
+    eyebrow: 'Sunlit Courtyard',
+    footerText: 'Outside, a clear sunlit day',
+  },
+  golden: {
+    label: 'Sunset',
+    shortLabel: 'Dusk',
+    eyebrow: 'Golden Hour Courtyard',
+    footerText: 'Outside, warm sunset glow',
+  },
+  night: {
+    label: 'Night',
+    shortLabel: 'Night',
+    eyebrow: 'Lantern-lit Courtyard',
+    footerText: 'Outside, night lamps are glowing',
+  },
+  auto: {
+    label: 'Auto',
+    shortLabel: 'Auto',
+    eyebrow: 'Four-Hour Courtyard',
+    footerText: 'Outside, the sky follows local time',
+  },
+}
+
+export function getLocalizedAtmosphereOptions(locale: Locale = 'zh'): AtmosphereOption[] {
+  if (locale !== 'en') return ATMOSPHERE_OPTIONS
+  return ATMOSPHERE_OPTIONS.map((opt) => ({ ...opt, ...ATMOSPHERE_EN[opt.id] }))
+}

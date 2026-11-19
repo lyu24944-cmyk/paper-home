@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useI18n } from '../lib/i18n'
 import { isCloudConfigured } from '../lib/supabase'
 import {
   enterLocalOwnerMode,
@@ -30,6 +31,7 @@ export function AdminAuthPanel({
   onImportSample?: () => Promise<void>
   onExportSnapshot?: () => Promise<ExportLocalSnapshotResult>
 }) {
+  const { tr } = useI18n()
   const [expanded, setExpanded] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -46,7 +48,7 @@ export function AdminAuthPanel({
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     if (!email.trim() || !password) {
-      setError('请输入管理员邮箱和密码。')
+      setError(tr('请输入管理员邮箱和密码。', 'Please enter your owner email and password.'))
       return
     }
     setBusy(true)
@@ -57,9 +59,9 @@ export function AdminAuthPanel({
       setPassword('')
       await onSignedIn()
       setExpanded(false)
-      setMessage('已进入主人管理模式。')
+      setMessage(tr('已进入主人管理模式。', 'Entered Owner editing mode.'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : '登录失败，请检查账号或网络。')
+      setError(err instanceof Error ? err.message : tr('登录失败，请检查账号或网络。', 'Sign-in failed—check credentials or connection.'))
     } finally {
       setBusy(false)
     }
@@ -73,9 +75,9 @@ export function AdminAuthPanel({
       await enterLocalOwnerMode(pin)
       setPin('')
       await onSignedIn()
-      setMessage('已进入本地编辑模式，修改会保存在本机 local-data/。')
+      setMessage(tr('已进入本地编辑模式，修改会保存在本机 local-data/。', 'Local Studio active—changes save to local-data/.'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : '无法进入本地编辑模式。')
+      setError(err instanceof Error ? err.message : tr('无法进入本地编辑模式。', 'Unable to enter Local Studio mode.'))
     } finally {
       setBusy(false)
     }
@@ -88,9 +90,13 @@ export function AdminAuthPanel({
     try {
       await signOutAdmin()
       await onSignedOut()
-      setMessage(isLocalStudio ? '已退出编辑模式，恢复访客浏览视图。' : '已退出管理模式，恢复访客浏览视图。')
+      setMessage(
+        isLocalStudio
+          ? tr('已退出编辑模式，恢复访客浏览视图。', 'Exited editing mode—returned to visitor view.')
+          : tr('已退出管理模式，恢复访客浏览视图。', 'Signed out—returned to visitor view.'),
+      )
     } catch (err) {
-      setError(err instanceof Error ? err.message : '退出失败，请重试。')
+      setError(err instanceof Error ? err.message : tr('退出失败，请重试。', 'Sign-out failed, please retry.'))
     } finally {
       setBusy(false)
     }
@@ -102,9 +108,9 @@ export function AdminAuthPanel({
     setMessage('')
     try {
       await onRetryCleanup()
-      setMessage('待清理旧素材已检查完毕。')
+      setMessage(tr('待清理旧素材已检查完毕。', 'Pending unused media check completed.'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : '素材清理重试失败，请稍后再试。')
+      setError(err instanceof Error ? err.message : tr('素材清理重试失败，请稍后再试。', 'Media cleanup retry failed.'))
     } finally {
       setCleaning(false)
     }
@@ -117,9 +123,14 @@ export function AdminAuthPanel({
     setMessage('')
     try {
       await onImportSample()
-      setMessage('已生成中性示例作品与手记（含本地封面图），可在各房间修改或删除。')
+      setMessage(
+        tr(
+          '已生成中性示例作品与手记（含本地封面图），可在各房间修改或删除。',
+          'Starter sample projects & notes generated—edit or delete them inside any room.',
+        ),
+      )
     } catch (err) {
-      setError(err instanceof Error ? err.message : '示例数据导入失败。')
+      setError(err instanceof Error ? err.message : tr('示例数据导入失败。', 'Sample import failed.'))
     } finally {
       setImporting(false)
     }
@@ -134,13 +145,16 @@ export function AdminAuthPanel({
       const res = await onExportSnapshot()
       const emptyHint =
         res.projects === 0 && res.notes === 0
-          ? '——当前尚无已发布的作品或手记，发布后再导出即可上线展示。'
-          : '，可直接用于静态构建或公开部署。'
+          ? tr('——当前尚无已发布的作品或手记，发布后再导出即可上线展示。', ' — No published works yet; publish items before exporting for production.')
+          : tr('，可直接用于静态构建或公开部署。', ', ready for static build or public deployment.')
       setMessage(
-        `已导出公开快照至 ${res.outDir}（作品 ${res.projects} 件、手记 ${res.notes} 篇、素材 ${res.assets} 个）${emptyHint}`,
+        tr(
+          `已导出公开快照至 ${res.outDir}（作品 ${res.projects} 件、手记 ${res.notes} 篇、素材 ${res.assets} 个）${emptyHint}`,
+          `Exported public snapshot to ${res.outDir} (${res.projects} projects, ${res.notes} notes, ${res.assets} assets)${emptyHint}`,
+        ),
       )
     } catch (err) {
-      setError(err instanceof Error ? err.message : '公开快照导出失败，请重试。')
+      setError(err instanceof Error ? err.message : tr('公开快照导出失败，请重试。', 'Snapshot export failed, please retry.'))
     } finally {
       setExporting(false)
     }
@@ -148,15 +162,20 @@ export function AdminAuthPanel({
 
   if (backendHealth.mode === 'static-snapshot') {
     return (
-      <section className="admin-auth-section" aria-label="纯静态展馆模式">
+      <section className="admin-auth-section" aria-label={tr('纯静态展馆模式', 'Static Exhibition Mode')}>
         <div className="admin-auth-header">
           <span className="admin-auth-title">
             <Icon name="home" size={16} />
-            <strong>纯静态展馆模式</strong>
+            <strong>{tr('纯静态展馆模式', 'Static Exhibition Mode')}</strong>
           </span>
         </div>
         <p className="admin-auth-hint">
-          当前站点仅展示已导出的公开内容（只读）。如需修改自己的小屋内容，请在电脑本地运行 <code>npm run dev</code> 进入编辑。
+          {tr(
+            '当前站点仅展示已导出的公开内容（只读）。如需修改自己的小屋内容，请在电脑本地运行 ',
+            'This site serves an exported read-only snapshot. To edit content locally, run ',
+          )}
+          <code>npm run dev</code>
+          {tr(' 进入编辑。', ' on your computer.')}
         </p>
       </section>
     )
@@ -164,33 +183,38 @@ export function AdminAuthPanel({
 
   if (backendHealth.mode === 'unconfigured-readonly' && !isCloudConfigured) {
     return (
-      <section className="admin-auth-section" aria-label="只读展示状态">
+      <section className="admin-auth-section" aria-label={tr('只读展示状态', 'Read-only Mode')}>
         <div className="admin-auth-header">
           <span className="admin-auth-title">
             <Icon name="lock" size={16} />
-            <strong>只读展示状态</strong>
+            <strong>{tr('只读展示状态', 'Read-only Mode')}</strong>
           </span>
         </div>
         <p className="admin-auth-hint">
-          当前未配置云端环境，也未连接到本地工作室服务。若你在自己的电脑使用，请通过 <code>npm run dev</code> 打开即可本地编辑与保存。
+          {tr(
+            '当前未配置云端环境，也未连接到本地工作室服务。若你在自己的电脑使用，请通过 ',
+            'No cloud backend or Local Studio server is connected. Run ',
+          )}
+          <code>npm run dev</code>
+          {tr(' 打开即可本地编辑与保存。', ' locally to edit and save content.')}
         </p>
       </section>
     )
   }
 
   return (
-    <section className="admin-auth-section" aria-label="主人登录与管理">
+    <section className="admin-auth-section" aria-label={tr('主人登录与管理', 'Owner Sign-in & Studio')}>
       <div className="admin-auth-header">
         <span className="admin-auth-title">
           <Icon name={isLocalStudio ? 'pencil' : 'lock'} size={16} />
           <strong>
             {adminEmail
               ? isLocalStudio
-                ? '本地编辑模式'
-                : '主人已登录'
+                ? tr('本地编辑模式', 'Local Editing Mode')
+                : tr('主人已登录', 'Owner Signed In')
               : isLocalStudio
-                ? '本地工作室（本机自用）'
-                : '主人登录'}
+                ? tr('本地工作室（本机自用）', 'Local Studio (On This Device)')
+                : tr('主人登录', 'Owner Sign-in')}
           </strong>
         </span>
         {adminEmail ? (
@@ -200,7 +224,11 @@ export function AdminAuthPanel({
             disabled={busy}
             onClick={() => void handleLogout()}
           >
-            {busy ? '正在退出…' : isLocalStudio ? '退出编辑（访客预览）' : '退出登录'}
+            {busy
+              ? tr('正在退出…', 'Signing out…')
+              : isLocalStudio
+                ? tr('退出编辑（访客预览）', 'Exit Editing (Visitor View)')
+                : tr('退出登录', 'Sign Out')}
           </button>
         ) : isLocalStudio ? (
           <button
@@ -209,7 +237,13 @@ export function AdminAuthPanel({
             disabled={busy || (!backendHealth.writable && !backendHealth.pinRequired)}
             onClick={() => void handleEnterLocalOwner()}
           >
-            {busy ? '正在进入…' : backendHealth.pinRequired && !backendHealth.writable ? '使用 PIN 进入编辑' : backendHealth.writable ? '进入编辑模式' : '仅本机可编辑'}
+            {busy
+              ? tr('正在进入…', 'Entering…')
+              : backendHealth.pinRequired && !backendHealth.writable
+                ? tr('使用 PIN 进入编辑', 'Unlock with PIN')
+                : backendHealth.writable
+                  ? tr('进入编辑模式', 'Enter Studio')
+                  : tr('仅本机可编辑', 'Localhost Only')}
           </button>
         ) : (
           <button
@@ -220,21 +254,23 @@ export function AdminAuthPanel({
               setError('')
             }}
           >
-            {expanded ? '收起' : '登录管理'}
+            {expanded ? tr('收起', 'Collapse') : tr('登录管理', 'Sign In')}
           </button>
         )}
       </div>
 
       {isLocalStudio && !adminEmail && backendHealth.pinRequired && !backendHealth.writable && (
-        <label className="cms-field">局域网编辑 PIN
+        <label className="cms-field">{tr('局域网编辑 PIN', 'LAN Studio PIN')}
           <input type="password" value={pin} autoComplete="off" onChange={e=>setPin(e.target.value)} />
         </label>
       )}
       {isLocalStudio && !adminEmail && (
         <p className="admin-auth-hint">
-          {backendHealth.pinRequired ? '输入本地服务的 PIN 后，可在此设备编辑；会话一小时后到期。' : backendHealth.writable
-            ? '无需云端账号：作品、手记、图片与演示视频会直接保存在本机 local-data/ 目录；未点击发布的草稿不会在访客模式出现。'
-            : '当前通过非本机地址访问，仅允许访客只读浏览；请在电脑本机（127.0.0.1 / localhost）开启编辑。'}
+          {backendHealth.pinRequired
+            ? tr('输入本地服务的 PIN 后，可在此设备编辑；会话一小时后到期。', 'Enter the Local Studio PIN to edit from this device; session expires in 1 hour.')
+            : backendHealth.writable
+              ? tr('无需云端账号：作品、手记、图片与演示视频会直接保存在本机 local-data/ 目录；未点击发布的草稿不会在访客模式出现。', 'No cloud account needed: projects, notes, images & videos save straight to local-data/. Unpublished drafts stay hidden in visitor view.')
+              : tr('当前通过非本机地址访问，仅允许访客只读浏览；请在电脑本机（127.0.0.1 / localhost）开启编辑。', 'Accessed from a non-local address—read-only visitor mode. Open on 127.0.0.1 / localhost to edit.')}
         </p>
       )}
 
@@ -242,12 +278,12 @@ export function AdminAuthPanel({
         <div className="admin-logged-meta">
           <p className="admin-auth-hint">
             {isLocalStudio
-              ? '当前身份：本地主人 · 内容与素材保存在本机 local-data/（各房间已显示添加与编辑入口）'
-              : `当前账号：${adminEmail}（各房间已显示添加与编辑入口）`}
+              ? tr('当前身份：本地主人 · 内容与素材保存在本机 local-data/（各房间已显示添加与编辑入口）', 'Signed in as Local Owner · saves to local-data/ (edit actions visible in every room)')
+              : tr(`当前账号：${adminEmail}（各房间已显示添加与编辑入口）`, `Signed in as ${adminEmail} (edit actions visible in every room)`)}
           </p>
           {isLocalStudio && !hasContent && onImportSample && (
-            <div className="cleanup-banner" role="region" aria-label="导入初始示例">
-              <span>当前小屋还没有内容，可先导入 1 组中性示例体验效果</span>
+            <div className="cleanup-banner" role="region" aria-label={tr('导入初始示例', 'Import starter samples')}>
+              <span>{tr('当前小屋还没有内容，可先导入 1 组中性示例体验效果', 'Your cottage is empty—import starter samples to preview the layout')}</span>
               <button
                 type="button"
                 className="cms-ghost-btn"
@@ -255,13 +291,13 @@ export function AdminAuthPanel({
                 onClick={() => void handleSampleImport()}
               >
                 <Icon name="plus" size={14} />
-                <span>{importing ? '生成中…' : '导入示例内容'}</span>
+                <span>{importing ? tr('生成中…', 'Generating…') : tr('导入示例内容', 'Import Samples')}</span>
               </button>
             </div>
           )}
           {isLocalStudio && adminEmail && onExportSnapshot && (
-            <div className="cleanup-banner" role="region" aria-label="导出公开快照">
-              <span>发布准备：将已发布内容与素材一键导出为公开快照（site-content/）</span>
+            <div className="cleanup-banner" role="region" aria-label={tr('导出公开快照', 'Export public snapshot')}>
+              <span>{tr('发布准备：将已发布内容与素材一键导出为公开快照（site-content/）', 'Publish prep: export published content & media to site-content/')}</span>
               <button
                 type="button"
                 className="cms-ghost-btn"
@@ -269,13 +305,13 @@ export function AdminAuthPanel({
                 onClick={() => void handleExportSnapshot()}
               >
                 <Icon name="download" size={14} />
-                <span>{exporting ? '导出中…' : '导出公开快照'}</span>
+                <span>{exporting ? tr('导出中…', 'Exporting…') : tr('导出公开快照', 'Export Snapshot')}</span>
               </button>
             </div>
           )}
           {pendingCleanupCount > 0 && (
             <div className="cleanup-banner" role="status">
-              <span>有 {pendingCleanupCount} 个旧素材待从存储清理</span>
+              <span>{tr(`有 ${pendingCleanupCount} 个旧素材待从存储清理`, `${pendingCleanupCount} unused media files pending cleanup`)}</span>
               <button
                 type="button"
                 className="cms-ghost-btn"
@@ -283,7 +319,7 @@ export function AdminAuthPanel({
                 onClick={() => void handleCleanup()}
               >
                 <Icon name="refresh" size={14} />
-                <span>{cleaning ? '清理中…' : '重试清理'}</span>
+                <span>{cleaning ? tr('清理中…', 'Cleaning…') : tr('重试清理', 'Retry Cleanup')}</span>
               </button>
             </div>
           )}
@@ -294,35 +330,37 @@ export function AdminAuthPanel({
         <form className="admin-login-form" onSubmit={(e) => void handleLogin(e)}>
           {!isCloudConfigured && (
             <p className="cms-error-inline" role="alert">
-              尚未配置云端环境（VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY），当前仅本地展示。
+              {tr('尚未配置云端环境（VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY），当前仅本地展示。', 'Cloud environment variables (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) are not configured.')}
             </p>
           )}
           <label className="cms-field">
-            <span>管理员邮箱</span>
+            <span>{tr('管理员邮箱', 'Owner Email')}</span>
             <input
               type="email"
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="输入你的管理员邮箱"
+              placeholder={tr('输入你的管理员邮箱', 'Enter owner email')}
               disabled={busy || !isCloudConfigured}
             />
           </label>
           <label className="cms-field">
-            <span>登录密码</span>
+            <span>{tr('登录密码', 'Password')}</span>
             <input
               type="password"
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="输入登录密码"
+              placeholder={tr('输入登录密码', 'Enter password')}
               disabled={busy || !isCloudConfigured}
             />
           </label>
-          <p className="admin-auth-hint">仅开放单一主人账号登录，不提供访客注册；登录邮箱不会公开展示。</p>
+          <p className="admin-auth-hint">
+            {tr('仅开放单一主人账号登录，不提供访客注册；登录邮箱不会公开展示。', 'Single-owner sign-in only; email is never shown publicly.')}
+          </p>
           {error && <p className="cms-error-inline" role="alert">{error}</p>}
           <button type="submit" className="cms-primary-btn" disabled={busy || !isCloudConfigured}>
-            {busy ? '正在验证身份…' : '登录小屋'}
+            {busy ? tr('正在验证身份…', 'Signing in…') : tr('登录小屋', 'Sign In')}
           </button>
         </form>
       )}

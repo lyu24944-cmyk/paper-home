@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useI18n } from '../lib/i18n'
 import { Modal } from './Modal'
 import { Icon } from './Icon'
 
@@ -16,6 +17,7 @@ export function ConflictDialog({
   conflict: ConflictContext | null
   onClose: () => void
 }) {
+  const { tr } = useI18n()
   const [showCloud, setShowCloud] = useState(false)
   const [copyStatus, setCopyStatus] = useState('')
 
@@ -23,9 +25,9 @@ export function ConflictDialog({
     if (!conflict) return
     try {
       await navigator.clipboard.writeText(conflict.localCopyText)
-      setCopyStatus('当前编辑内容已复制到剪贴板。')
+      setCopyStatus(tr('当前编辑内容已复制到剪贴板。', 'Your current draft has been copied to the clipboard.'))
     } catch {
-      setCopyStatus('浏览器未授权自动复制，请返回编辑器手动全选复制。')
+      setCopyStatus(tr('浏览器未授权自动复制，请返回编辑器手动全选复制。', 'Clipboard access was blocked—please return to the editor and copy manually.'))
     }
   }
 
@@ -37,14 +39,17 @@ export function ConflictDialog({
         setCopyStatus('')
         onClose()
       }}
-      label={conflict?.title ?? '版本冲突'}
+      label={conflict?.title ?? tr('版本冲突', 'Version Conflict')}
       className="conflict-dialog"
     >
       {conflict && (
         <>
-          <h2>检测到云端更新冲突</h2>
+          <h2>{tr('检测到云端更新冲突', 'Update Conflict Detected')}</h2>
           <p className="dialog-intro">
-            另一台设备刚刚更新了「{conflict.title}」。为避免静默覆盖，你当前的输入已完整保留。
+            {tr(
+              `另一台设备刚刚更新了「${conflict.title}」。为避免静默覆盖，你当前的输入已完整保留。`,
+              `Another session just updated "${conflict.title}". Your current edits have been preserved so nothing is overwritten.`,
+            )}
           </p>
 
           <div className="conflict-actions">
@@ -54,11 +59,11 @@ export function ConflictDialog({
               onClick={() => setShowCloud((v) => !v)}
             >
               <Icon name="eye" size={16} />
-              <span>{showCloud ? '收起云端版本' : '查看云端版本'}</span>
+              <span>{showCloud ? tr('收起云端版本', 'Hide Latest Version') : tr('查看云端版本', 'View Latest Version')}</span>
             </button>
             <button type="button" className="cms-ghost-btn" onClick={() => void handleCopy()}>
               <Icon name="copy" size={16} />
-              <span>复制当前内容</span>
+              <span>{tr('复制当前内容', 'Copy My Draft')}</span>
             </button>
             <button
               type="button"
@@ -71,7 +76,7 @@ export function ConflictDialog({
               }}
             >
               <Icon name="refresh" size={16} />
-              <span>使用云端版本刷新</span>
+              <span>{tr('使用云端版本刷新', 'Reload Latest Version')}</span>
             </button>
           </div>
 
@@ -79,7 +84,7 @@ export function ConflictDialog({
 
           {showCloud && (
             <div className="cloud-preview-box">
-              <h3>云端最新内容摘要</h3>
+              <h3>{tr('云端最新内容摘要', 'Latest Version Summary')}</h3>
               {conflict.cloudSummaryLines.map((line, i) => (
                 <p key={i}>{line}</p>
               ))}
@@ -96,7 +101,7 @@ export function ConflictDialog({
                 onClose()
               }}
             >
-              保留当前编辑继续处理
+              {tr('保留当前编辑继续处理', 'Keep My Edits & Continue')}
             </button>
           </div>
         </>

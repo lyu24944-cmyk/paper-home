@@ -16,15 +16,23 @@ import gsap from 'gsap'
 import { CameraController, World, doorStops, type CameraHandle } from './World'
 import type { PromoCameraWaypoint } from './Camera'
 import {
-  ATMOSPHERE_OPTIONS,
   DEFAULT_NOW_NOTES,
+  DEFAULT_NOW_NOTES_EN,
   DEFAULT_STUDY_QUOTES,
+  DEFAULT_STUDY_QUOTES_EN,
   getAtmosphereLighting,
+  getLocalizedAtmosphereOptions,
   isValidAtmosphereMode,
   isValidWeatherMode,
   resolveAtmospherePreset,
 } from './atmosphere'
-import { rooms, type Place } from './content'
+import { getLocalizedRooms, type Place } from './content'
+import {
+  I18nContext,
+  resolveInitialLocale,
+  saveLocalePreference,
+  type Locale,
+} from './lib/i18n'
 import { qaEnabled } from './diagnostics'
 import { layout, roomPoint, stopProgress, type FocusSubPoseId, type TransitionState } from './layout'
 import { clearResourcePacks, disposeResourcePack, loadResources, type Quality, type ResourcePack } from './resources'
@@ -166,16 +174,25 @@ type ViewingNoteState = {
   adminItem?: AdminNote
 }
 
-class SceneBoundary extends Component<{ children: ReactNode; onFailure: () => void }, { failed: boolean }> {
+class SceneBoundary extends Component<{ children: ReactNode; onFailure: () => void; locale?: Locale }, { failed: boolean }> {
   state = { failed: false }
   static getDerivedStateFromError() { return { failed: true } }
   componentDidCatch() { this.props.onFailure() }
   render() {
+    const isEn = this.props.locale === 'en'
     return this.state.failed ? (
       <div className="scene-fallback">
         <Icon name="home" size={60} />
-        <p>三维小屋暂时没有打开。<br />你仍可以通过「小屋地图」浏览所有房间。</p>
-        <button type="button" onClick={() => window.location.reload()}>重新打开小屋</button>
+        <p>
+          {isEn ? (
+            <>The 3D cottage could not be opened.<br />You can still browse all rooms via the Cottage Map.</>
+          ) : (
+            <>三维小屋暂时没有打开。<br />你仍可以通过「小屋地图」浏览所有房间。</>
+          )}
+        </p>
+        <button type="button" onClick={() => window.location.reload()}>
+          {isEn ? 'Reopen Cottage' : '重新打开小屋'}
+        </button>
       </div>
     ) : this.props.children
   }
@@ -217,11 +234,48 @@ interface GuestStampEntry {
 }
 
 const STAMP_MOODS = [
-  { id: '☀️ 晴日来访', reply: '谢谢你在晴天推门进来，愿你今天也有好心情。' },
-  { id: '🌧️ 听雨路过', reply: '屋檐下的雨声留给你，累了随时来坐坐。' },
-  { id: '🕯️ 夜灯共鸣', reply: '深夜亮着的那盏绿台灯，很高兴被你看见。' },
-  { id: '🌱 留下一颗松果', reply: '已收进木匣里，下次来小院一起看树长大。' },
+  {
+    id: '☀️ 晴日来访',
+    labelEn: '☀️ Sunlit Visit',
+    reply: '谢谢你在晴天推门进来，愿你今天也有好心情。',
+    replyEn: 'Thanks for stopping by on a sunny day—wishing you a bright mood ahead.',
+  },
+  {
+    id: '🌧️ 听雨路过',
+    labelEn: '🌧️ Rainy Drop-in',
+    reply: '屋檐下的雨声留给你，累了随时来坐坐。',
+    replyEn: 'The rain under the eaves is yours—drop by and rest anytime.',
+  },
+  {
+    id: '🕯️ 夜灯共鸣',
+    labelEn: '🕯️ Night Lamp Glow',
+    reply: '深夜亮着的那盏绿台灯，很高兴被你看见。',
+    replyEn: 'Glad you spotted the green desk lamp glowing late into the night.',
+  },
+  {
+    id: '🌱 留下一颗松果',
+    labelEn: '🌱 Left a Pinecone',
+    reply: '已收进木匣里，下次来小院一起看树长大。',
+    replyEn: 'Tucked safely in the wooden box—let’s watch the courtyard tree grow next time.',
+  },
 ]
+
+const PROP_TAP_EN: Record<string, string> = {
+  '枝叶在房间光线里微微摇晃': 'Leaves sway gently in the room light',
+  '实木铭牌微凉沉稳，推开窗就是小院': 'Cool solid wood plaque—the courtyard lies just outside the window',
+  '轻叩手捏素烧陶罐，传出温和清脆的窑音': 'A gentle tap on the unglazed ceramic jar rings with a warm tone',
+  '轻叩门牌，木纹温润沉稳': 'Warm, steady wood grain beneath your fingertips',
+  '风吹过院子里的老树，叶片沙沙作响': 'A breeze rustles through the old courtyard tree',
+  '门廊旁的绿植轻轻晃了晃': 'The porch foliage sways softly',
+  '窗边花盆的叶片轻轻晃动': 'The windowsill leaves gently nod',
+}
+
+function localizedSiteDefault(value: string, defaultZh: string, defaultEn: string, locale: Locale): string {
+  const trimmed = value.trim()
+  if (!trimmed) return locale === 'en' ? defaultEn : defaultZh
+  if (locale === 'en' && trimmed === defaultZh) return defaultEn
+  return value
+}
 
 function loadGuestStamps(): GuestStampEntry[] {
   try {
@@ -321,6 +375,27 @@ export default function App() {
   const richHashActiveRef = useRef(initialDeepLink.isRich)
   const [pendingHash, setPendingHash] = useState<ReturnType<typeof parseDeepLinkHash> | null>(null)
   const pendingDeepLinkItemRef = useRef<string | null>(initialDeepLink.item)
+  const [locale, setLocaleState] = useState<Locale>(resolveInitialLocale)
+  const localeRef = useRef<Locale>(locale)
+  localeRef.current = locale
+  const setLocale = useCallback((next: Locale) => {
+    localeRef.current = next
+    setLocaleState(next)
+    saveLocalePreference(next)
+  }, [])
+  const toggleLocale = useCallback(() => {
+    const next: Locale = localeRef.current === 'zh' ? 'en' : 'zh'
+    setLocale(next)
+  }, [setLocale])
+  const tr = useCallback((zh: string, en: string) => (locale === 'en' ? en : zh), [locale])
+  const trLive = useCallback((zh: string, en: string) => (localeRef.current === 'en' ? en : zh), [])
+  const i18nValue = useMemo(
+    () => ({ locale, setLocale, toggleLocale, tr }),
+    [locale, setLocale, toggleLocale, tr],
+  )
+  const localizedRooms = useMemo(() => getLocalizedRooms(locale), [locale])
+  const localizedAtmoOptions = useMemo(() => getLocalizedAtmosphereOptions(locale), [locale])
+
   const [place, setPlace] = useState<Place>(startingPlace)
   const [opening, setOpening] = useState<Place | null>(null)
   const [busy, setBusy] = useState(false)
@@ -403,8 +478,15 @@ export default function App() {
   const pendingFocusAfterNavRef = useRef<FocusSubPoseId | null>(null)
   const camera = useRef<CameraHandle>(null)
   const progress = useRef(place === 'yard' || place === 'hall' ? 0 : stopProgress(doorStops.find((d) => d.id === place)!.depth))
+  const hallLook = useRef(0)
   const [nearby, setNearby] = useState<Place | null>(null)
+  const nearbyRef = useRef<Place | null>(nearby)
+  nearbyRef.current = nearby
   const [atEnd, setAtEnd] = useState(false)
+  const reducedRef = useRef(reduced)
+  reducedRef.current = reduced
+  const readyRef = useRef(ready)
+  readyRef.current = ready
   const [isNarrowViewport, setIsNarrowViewport] = useState(() =>
     matchMedia('(max-width: 650px)').matches,
   )
@@ -524,13 +606,17 @@ export default function App() {
       setSignedUrlRevision((r) => r + 1)
     } catch (err) {
       if (seq !== publicSeqRef.current) return
-      setCloudError(err instanceof Error ? err.message : '公开内容读取失败，请稍后重试。')
+      setCloudError(
+        err instanceof Error
+          ? err.message
+          : trLive('公开内容读取失败，请稍后重试。', 'Failed to load public content. Please try again.'),
+      )
     } finally {
       if (seq === publicSeqRef.current) {
         setCloudLoading(false)
       }
     }
-  }, [])
+  }, [trLive])
 
   const loadAdmin = useCallback(async () => {
     const seq = ++adminSeqRef.current
@@ -550,7 +636,7 @@ export default function App() {
         if (seq !== adminSeqRef.current) return
         seedSignedUrls(data.signedUrls, 'admin')
         setAdminData(data)
-        setAdminEmail('本地主人')
+        setAdminEmail(trLive('本地主人', 'Local Owner'))
         if (data.siteSettings) {
           setSiteSettings(data.siteSettings)
           setSettingsDraft(data.siteSettings)
@@ -577,7 +663,7 @@ export default function App() {
       if (seq !== adminSeqRef.current) return
       seedSignedUrls(data.signedUrls, 'admin')
       setAdminData(data)
-      setAdminEmail(sess.session.user?.email ?? '主人')
+      setAdminEmail(sess.session.user?.email ?? trLive('主人', 'Owner'))
       if (data.siteSettings) {
         setSiteSettings(data.siteSettings)
         setSettingsDraft(data.siteSettings)
@@ -590,12 +676,19 @@ export default function App() {
         clearSignedUrlCache()
         setAdminEmail(null)
         setAdminData(null)
-        setAdminError('当前无管理权限或登录已失效，已恢复访客视图。')
+        setAdminError(
+          trLive(
+            '当前无管理权限或登录已失效，已恢复访客视图。',
+            'Editor permissions missing or session expired—switched back to visitor view.',
+          ),
+        )
       } else {
-        setAdminError(err instanceof Error ? err.message : '管理数据读取失败。')
+        setAdminError(
+          err instanceof Error ? err.message : trLive('管理数据读取失败。', 'Failed to load owner data.'),
+        )
       }
     }
-  }, [])
+  }, [trLive])
 
   const refreshCloud = useCallback(async () => {
     await loadPublic()
@@ -626,7 +719,7 @@ export default function App() {
       setBackendHealth(health)
       if (health.mode === 'local-studio') {
         if (health.writable && isLocalOwnerActive()) {
-          setAdminEmail('本地主人')
+          setAdminEmail(trLive('本地主人', 'Local Owner'))
           void loadAdmin()
         }
         return
@@ -636,7 +729,7 @@ export default function App() {
       if (!active) return
       void client.auth.getSession().then(({ data }) => {
         if (active && data.session?.access_token) {
-          setAdminEmail(data.session.user?.email ?? '主人')
+          setAdminEmail(data.session.user?.email ?? trLive('主人', 'Owner'))
           void loadAdmin()
         }
       })
@@ -651,7 +744,7 @@ export default function App() {
           setProfileEditorOpen(false)
           void loadPublic()
         } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          setAdminEmail(session.user?.email ?? '主人')
+          setAdminEmail(session.user?.email ?? trLive('主人', 'Owner'))
           if (event === 'SIGNED_IN') void loadAdmin()
         }
       })
@@ -674,7 +767,11 @@ export default function App() {
     setReady(false); setLoadError(''); setPreparing('')
     void loadResources(quality, (v) => { if (active) setLoadProgress(v) })
       .then((value) => { if (active) { setPack(value); setLoadProgress(1) } })
-      .catch(() => { if (active) setLoadError('小屋素材没有加载完成。请重试。') })
+      .catch(() => {
+        if (active) {
+          setLoadError(trLive('小屋素材没有加载完成。请重试。', 'Cottage assets failed to finish loading. Please retry.'))
+        }
+      })
     return () => { active = false }
   }, [quality, retry])
 
@@ -707,10 +804,16 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const activeName = siteSettings.homeName.trim() || DEFAULT_SITE_SETTINGS.homeName
-    const activePlaque = siteSettings.plaqueTitle.trim() || DEFAULT_SITE_SETTINGS.plaqueTitle
+    document.documentElement.lang = locale === 'en' ? 'en' : 'zh-CN'
+  }, [locale])
+
+  useEffect(() => {
+    const rawName = siteSettings.homeName.trim() || DEFAULT_SITE_SETTINGS.homeName
+    const rawPlaque = siteSettings.plaqueTitle.trim() || DEFAULT_SITE_SETTINGS.plaqueTitle
+    const activeName = locale === 'en' && rawName === DEFAULT_SITE_SETTINGS.homeName ? 'My Cottage' : rawName
+    const activePlaque = locale === 'en' && rawPlaque === DEFAULT_SITE_SETTINGS.plaqueTitle ? 'Welcome Home' : rawPlaque
     document.title = `${activeName} · ${activePlaque}`
-  }, [siteSettings.homeName, siteSettings.plaqueTitle])
+  }, [siteSettings.homeName, siteSettings.plaqueTitle, locale])
 
   useEffect(() => {
     if (!richHashActiveRef.current && !pendingHash) {
@@ -897,6 +1000,7 @@ export default function App() {
     const w = window as unknown as { __HOME_QA__?: Record<string, unknown> }
     if (!w.__HOME_QA__) w.__HOME_QA__ = {}
     Object.assign(w.__HOME_QA__, {
+      locale,
       atmosphereMode,
       atmospherePreset,
       weather,
@@ -905,9 +1009,12 @@ export default function App() {
       sfxEnabled,
       quality,
       contextLost,
+      nearby,
+      getHallProgress: () => progress.current,
+      getHallLook: () => hallLook.current,
       loseWebglContext: () => loseContextForQaRef.current?.() ?? false,
     })
-  }, [atmosphereMode, atmospherePreset, weather, deskLampOn, focusId, sfxEnabled, quality, contextLost])
+  }, [locale, atmosphereMode, atmospherePreset, weather, deskLampOn, focusId, sfxEnabled, quality, contextLost, nearby])
 
   const navigatePromoRef = useRef(navigate)
   navigatePromoRef.current = navigate
@@ -1184,6 +1291,218 @@ export default function App() {
     }
   }, [place])
 
+  useEffect(() => {
+    if (place !== 'hall') {
+      hallLook.current = 0
+      return
+    }
+    const heldKeys = new Set<string>()
+    let rafId: number | null = null
+    let lastFrameTime = 0
+    let lastStepSoundTime = 0
+    let walkHoldStart = 0
+
+    const isEditableTarget = (target: EventTarget | null) =>
+      target instanceof Element &&
+      Boolean(target.closest('input,textarea,select,[contenteditable="true"],[contenteditable=""],dialog'))
+
+    const isInteractiveTarget = (target: EventTarget | null) =>
+      target instanceof Element &&
+      Boolean(target.closest('button,a,input,textarea,select,[contenteditable="true"],[contenteditable=""],dialog,[role="menu"],[role="dialog"]'))
+
+    const isBlocked = () =>
+      busyRef.current ||
+      !readyRef.current ||
+      modalOpenRef.current ||
+      Boolean(root.current?.querySelector('dialog[open]')) ||
+      studioMenuOpen ||
+      atmoPopoverOpen
+
+    const updateLookTarget = () => {
+      const lookLeft = heldKeys.has('KeyA') || heldKeys.has('ArrowLeft')
+      const lookRight = heldKeys.has('KeyD') || heldKeys.has('ArrowRight')
+      hallLook.current = lookLeft && !lookRight ? -0.45 : lookRight && !lookLeft ? 0.45 : 0
+    }
+
+    const getWalkDir = () => {
+      const forward = heldKeys.has('KeyW') || heldKeys.has('ArrowUp')
+      const backward = heldKeys.has('KeyS') || heldKeys.has('ArrowDown')
+      return (forward ? 1 : 0) - (backward ? 1 : 0)
+    }
+
+    const stopLoop = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+        rafId = null
+      }
+      lastFrameTime = 0
+    }
+
+    const clearHeld = () => {
+      heldKeys.clear()
+      hallLook.current = 0
+      stopLoop()
+    }
+
+    const syncWalkProgress = (el: HTMLElement) => {
+      progress.current = Math.max(0, Math.min(1, el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight)))
+      const depth = 0.85 + progress.current * layout.walkLength
+      setNearby(doorStops.find((d) => Math.abs(depth - (d.depth - 0.6)) < 0.85)?.id || null)
+      setAtEnd(progress.current > 0.98)
+    }
+
+    const tick = (now: number) => {
+      if (isBlocked() || !root.current) {
+        clearHeld()
+        return
+      }
+      const dir = getWalkDir()
+      if (dir === 0) {
+        stopLoop()
+        return
+      }
+      const dt = lastFrameTime ? Math.min(0.08, (now - lastFrameTime) / 1000) : 0
+      lastFrameTime = now
+      // Start continuous glide after initial tap kick (~120ms)
+      if (dt > 0 && now - walkHoldStart >= 120) {
+        const el = root.current
+        const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight)
+        if (maxScroll > 0) {
+          const walkSpeedMetersPerSec = 2.8
+          const deltaPx = (dir * walkSpeedMetersPerSec * dt * maxScroll) / layout.walkLength
+          const prevTop = el.scrollTop
+          const nextTop = Math.max(0, Math.min(maxScroll, prevTop + deltaPx))
+          if (Math.abs(nextTop - prevTop) > 0.25) {
+            el.scrollTop = nextTop
+            syncWalkProgress(el)
+            if (now - lastStepSoundTime >= 480) {
+              playSound('step')
+              lastStepSoundTime = now
+            }
+          }
+        }
+      }
+      rafId = requestAnimationFrame(tick)
+    }
+
+    const ensureLoop = () => {
+      if (rafId === null) {
+        lastFrameTime = performance.now()
+        rafId = requestAnimationFrame(tick)
+      }
+    }
+
+    const nudgeScroll = (meters: number) => {
+      const el = root.current
+      if (!el) return
+      const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight)
+      if (maxScroll <= 0) return
+      const deltaPx = (meters * maxScroll) / layout.walkLength
+      const prevTop = el.scrollTop
+      const nextTop = Math.max(0, Math.min(maxScroll, prevTop + deltaPx))
+      if (Math.abs(nextTop - prevTop) < 0.5) return
+      playSound('step')
+      lastStepSoundTime = performance.now()
+      el.scrollTop = nextTop
+      syncWalkProgress(el)
+    }
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || isBlocked() || isEditableTarget(e.target)) return
+      const code = e.code
+
+      if (code === 'KeyW' || code === 'KeyS' || code === 'ArrowUp' || code === 'ArrowDown') {
+        if (e.target instanceof Element && e.target.closest('[role="menu"],[role="dialog"]')) return
+        e.preventDefault()
+        const dir = code === 'KeyW' || code === 'ArrowUp' ? 1 : -1
+        if (reducedRef.current) {
+          step(dir)
+          return
+        }
+        if (!heldKeys.has(code)) {
+          heldKeys.add(code)
+          walkHoldStart = performance.now()
+          // Immediate responsive tap step; CameraController smooths the glide.
+          nudgeScroll(dir * 0.55)
+          ensureLoop()
+        }
+        return
+      }
+
+      if (code === 'KeyA' || code === 'KeyD' || code === 'ArrowLeft' || code === 'ArrowRight') {
+        if (e.target instanceof Element && e.target.closest('[role="menu"],[role="dialog"]')) return
+        e.preventDefault()
+        if (!heldKeys.has(code)) {
+          heldKeys.add(code)
+          updateLookTarget()
+        }
+        return
+      }
+
+      if (code === 'PageDown' || code === 'PageUp') {
+        if (isInteractiveTarget(e.target)) return
+        e.preventDefault()
+        step(code === 'PageUp' ? -1 : 1)
+        return
+      }
+
+      if (code === 'Space') {
+        if (isInteractiveTarget(e.target)) return
+        e.preventDefault()
+        step(e.shiftKey ? -1 : 1)
+        return
+      }
+
+      if (code === 'Home' || code === 'End') {
+        if (isInteractiveTarget(e.target)) return
+        const el = root.current
+        if (!el) return
+        e.preventDefault()
+        const targetTop = code === 'Home' ? 0 : Math.max(0, el.scrollHeight - el.clientHeight)
+        playSound('step')
+        if (reducedRef.current) {
+          el.scrollTop = targetTop
+          syncWalkProgress(el)
+        } else {
+          el.scrollTo({ top: targetTop, behavior: 'smooth' })
+        }
+        return
+      }
+
+      if (code === 'Enter' || code === 'KeyE') {
+        if (code === 'Enter' && isInteractiveTarget(e.target)) return
+        if (nearbyRef.current) {
+          e.preventDefault()
+          clearHeld()
+          void navigatePromoRef.current(nearbyRef.current)
+        }
+      }
+    }
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (heldKeys.delete(e.code)) {
+        updateLookTarget()
+        if (getWalkDir() === 0) stopLoop()
+      }
+    }
+
+    const onVisibility = () => {
+      if (document.hidden) clearHeld()
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', clearHeld)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      clearHeld()
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', clearHeld)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [place, studioMenuOpen, atmoPopoverOpen])
+
   function onWalkScroll() {
     if (place !== 'hall' || busyRef.current || anyModalOpen) return
     const el = root.current!
@@ -1252,7 +1571,12 @@ export default function App() {
     } catch {
       transition.current = { from: place, to: target, phase: 'failed', progress: 0 }
       setRetryTarget(target)
-      setLoadError('目的地没有准备好，已留在当前房间。请重试。')
+      setLoadError(
+        trLive(
+          '目的地没有准备好，已留在当前房间。请重试。',
+          'Destination is not ready yet—stayed in the current room. Please retry.',
+        ),
+      )
     } finally {
       if (resumeProgress !== null) progress.current = resumeProgress
       busyRef.current = false; setBusy(false); setOpening(null); setDestination(null)
@@ -1361,12 +1685,15 @@ export default function App() {
       try {
         await navigator.clipboard.writeText(email)
         playSound('success-seal')
-        showToast(`已复制联系邮箱：${email}`, 'success')
+        showToast(trLive(`已复制联系邮箱：${email}`, `Copied email: ${email}`), 'success')
       } catch {
-        showToast('浏览器未授权剪贴板，请长按或右键复制邮箱', 'info')
+        showToast(
+          trLive('浏览器未授权剪贴板，请长按或右键复制邮箱', 'Clipboard permission blocked—please copy the email manually'),
+          'info',
+        )
       }
     },
-    [showToast],
+    [showToast, trLive],
   )
 
   async function handleQuickSignOut() {
@@ -1384,11 +1711,13 @@ export default function App() {
       setStudioMenuOpen(false)
       await loadPublic()
       showToast(
-        backendHealth.mode === 'local-studio' ? '已退出编辑，切换为访客浏览视图' : '已切换为访客浏览视图',
+        backendHealth.mode === 'local-studio'
+          ? trLive('已退出编辑，切换为访客浏览视图', 'Exited Studio—switched to visitor view')
+          : trLive('已切换为访客浏览视图', 'Switched to visitor view'),
         'info',
       )
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '退出失败，请重试', 'error')
+      showToast(err instanceof Error ? err.message : trLive('退出失败，请重试', 'Sign-out failed, please retry'), 'error')
     } finally {
       setSignOutBusy(false)
     }
@@ -1405,9 +1734,13 @@ export default function App() {
       return { ...prev, projects, pendingCleanupCount }
     })
     void loadPublic()
-    if (action === 'draft') showToast('作品草稿已保存', 'success')
-    else if (action === 'publish') { playSound('success-seal'); showToast('作品已发布到作品室', 'success') }
-    else if (action === 'unpublish') showToast('已撤回发布，草稿仍保留', 'info')
+    if (action === 'draft') showToast(trLive('作品草稿已保存', 'Project draft saved'), 'success')
+    else if (action === 'publish') {
+      playSound('success-seal')
+      showToast(trLive('作品已发布到作品室', 'Project published to Gallery'), 'success')
+    } else if (action === 'unpublish') {
+      showToast(trLive('已撤回发布，草稿仍保留', 'Unpublished—draft kept safely'), 'info')
+    }
   }
 
   function handleProjectDeleted(deletedId: string, pendingCleanupCount: number) {
@@ -1426,7 +1759,7 @@ export default function App() {
         : prev,
     )
     void loadPublic()
-    showToast('已删除作品', 'info')
+    showToast(trLive('已删除作品', 'Project deleted'), 'info')
   }
 
   function handleNoteSaved(saved: AdminNote, pendingCleanupCount: number, action?: SaveActionKind) {
@@ -1440,9 +1773,13 @@ export default function App() {
       return { ...prev, notes, pendingCleanupCount }
     })
     void loadPublic()
-    if (action === 'draft') showToast('手记草稿已保存', 'success')
-    else if (action === 'publish') { playSound('success-seal'); showToast('手记已发布到创作手记', 'success') }
-    else if (action === 'unpublish') showToast('已撤回发布，草稿仍保留', 'info')
+    if (action === 'draft') showToast(trLive('手记草稿已保存', 'Note draft saved'), 'success')
+    else if (action === 'publish') {
+      playSound('success-seal')
+      showToast(trLive('手记已发布到创作手记', 'Note published to Study Notes'), 'success')
+    } else if (action === 'unpublish') {
+      showToast(trLive('已撤回发布，草稿仍保留', 'Unpublished—draft kept safely'), 'info')
+    }
   }
 
   function handleNoteDeleted(deletedId: string, pendingCleanupCount: number) {
@@ -1450,15 +1787,19 @@ export default function App() {
       prev ? { ...prev, notes: prev.notes.filter((n) => n.id !== deletedId), pendingCleanupCount } : prev,
     )
     void loadPublic()
-    showToast('已删除手记', 'info')
+    showToast(trLive('已删除手记', 'Note deleted'), 'info')
   }
 
   function handleProfileSaved(saved: AdminProfile, pendingCleanupCount: number, action?: SaveActionKind) {
     setAdminData((prev) => (prev ? { ...prev, profile: saved, pendingCleanupCount } : prev))
     void loadPublic()
-    if (action === 'draft') showToast('个人介绍草稿已保存', 'success')
-    else if (action === 'publish') { playSound('success-seal'); showToast('“关于我”公开内容已更新', 'success') }
-    else if (action === 'unpublish') showToast('已撤回“关于我”公开展示', 'info')
+    if (action === 'draft') showToast(trLive('个人介绍草稿已保存', 'Profile draft saved'), 'success')
+    else if (action === 'publish') {
+      playSound('success-seal')
+      showToast(trLive('“关于我”公开内容已更新', 'About Me page updated'), 'success')
+    } else if (action === 'unpublish') {
+      showToast(trLive('已撤回“关于我”公开展示', 'Unpublished About Me page'), 'info')
+    }
   }
 
   async function handleReorderProject(index: number, delta: -1 | 1) {
@@ -1487,15 +1828,18 @@ export default function App() {
           : prev,
       )
       await loadPublic()
-      showToast('作品展示顺序已调整', 'success')
+      showToast(trLive('作品展示顺序已调整', 'Project order updated'), 'success')
     } catch (err) {
       if (err instanceof ConflictError) {
         setConflict({
-          title: '作品排序',
+          title: trLive('作品排序', 'Project Order'),
           localCopyText: reordered.map((p, i) => `${i + 1}. ${p.draft.title}`).join('\n'),
           cloudSummaryLines: [
-            `另一台设备刚调整过作品顺序（最新排序版本 v${err.orderVersion ?? '?'}）。`,
-            '请刷新后查看最新排序再重新调整。',
+            trLive(
+              `另一台设备刚调整过作品顺序（最新排序版本 v${err.orderVersion ?? '?'}）。`,
+              `Another session just updated the project order (v${err.orderVersion ?? '?'}).`,
+            ),
+            trLive('请刷新后查看最新排序再重新调整。', 'Refresh to inspect the latest order before reordering.'),
           ],
           onUseCloud: () => {
             setConflict(null)
@@ -1503,7 +1847,11 @@ export default function App() {
           },
         })
       } else {
-        setAdminError(err instanceof Error ? err.message : '调整作品顺序失败，请重试。')
+        setAdminError(
+          err instanceof Error
+            ? err.message
+            : trLive('调整作品顺序失败，请重试。', 'Failed to reorder projects. Please retry.'),
+        )
       }
     } finally {
       setReorderBusy(false)
@@ -1536,15 +1884,18 @@ export default function App() {
           : prev,
       )
       await loadPublic()
-      showToast('手记排序已调整', 'success')
+      showToast(trLive('手记排序已调整', 'Note order updated'), 'success')
     } catch (err) {
       if (err instanceof ConflictError) {
         setConflict({
-          title: '手记排序',
+          title: trLive('手记排序', 'Note Order'),
           localCopyText: reordered.map((n, i) => `${i + 1}. ${n.draft.title}`).join('\n'),
           cloudSummaryLines: [
-            `另一台设备刚调整过手记顺序（最新排序版本 v${err.orderVersion ?? '?'}）。`,
-            '请刷新后查看最新排序再重新调整。',
+            trLive(
+              `另一台设备刚调整过手记顺序（最新排序版本 v${err.orderVersion ?? '?'}）。`,
+              `Another session just updated the note order (v${err.orderVersion ?? '?'}).`,
+            ),
+            trLive('请刷新后查看最新排序再重新调整。', 'Refresh to inspect the latest order before reordering.'),
           ],
           onUseCloud: () => {
             setConflict(null)
@@ -1552,14 +1903,18 @@ export default function App() {
           },
         })
       } else {
-        setAdminError(err instanceof Error ? err.message : '调整手记顺序失败，请重试。')
+        setAdminError(
+          err instanceof Error
+            ? err.message
+            : trLive('调整手记顺序失败，请重试。', 'Failed to reorder notes. Please retry.'),
+        )
       }
     } finally {
       setReorderBusy(false)
     }
   }
 
-  const room = rooms.find((r) => r.id === place)!
+  const room = localizedRooms.find((r) => r.id === place)!
   const inside = place !== 'yard' && place !== 'hall'
   const backPlace: Place = place === 'hall' ? 'yard' : 'hall'
 
@@ -1569,12 +1924,12 @@ export default function App() {
     if (viewingProject.scope === 'admin' && adminData) {
       return adminData.notes
         .filter((n) => n.draft.projectId === pid)
-        .map((n) => ({ id: n.id, title: n.draft.title || '未命名手记', isDraftOnly: !n.isPublished }))
+        .map((n) => ({ id: n.id, title: n.draft.title || tr('未命名手记', 'Untitled Note'), isDraftOnly: !n.isPublished }))
     }
     return publicData.notes
       .filter((n) => n.projectId === pid)
       .map((n) => ({ id: n.id, title: n.title }))
-  }, [adminData, publicData.notes, viewingProject])
+  }, [adminData, publicData.notes, viewingProject, tr])
 
   const viewingNoteLinkedProject: LinkedProjectRef | null = useMemo(() => {
     if (!viewingNote?.note.projectId) return null
@@ -1582,12 +1937,12 @@ export default function App() {
     if (viewingNote.scope === 'admin' && adminData) {
       const match = adminData.projects.find((p) => p.id === pid)
       return match
-        ? { id: match.id, title: match.draft.title || '未命名作品', isDraftOnly: !match.isPublished }
+        ? { id: match.id, title: match.draft.title || tr('未命名作品', 'Untitled Project'), isDraftOnly: !match.isPublished }
         : null
     }
     const pubMatch = publicData.projects.find((p) => p.id === pid)
     return pubMatch ? { id: pubMatch.id, title: pubMatch.title } : null
-  }, [adminData, publicData.projects, viewingNote])
+  }, [adminData, publicData.projects, viewingNote, tr])
 
   const publishedProjects = publicData.projects
   const activeMobileProject = publishedProjects[galleryIndex] ?? null
@@ -1597,16 +1952,18 @@ export default function App() {
       ? adminData?.profile?.draft?.quotes
       : publicData.profile?.quotes
     const cleaned = (ownerQuotes ?? []).map((q) => q.trim()).filter(Boolean)
-    return cleaned.length > 0 ? cleaned : DEFAULT_STUDY_QUOTES
-  }, [isAdmin, adminData?.profile?.draft?.quotes, publicData.profile?.quotes])
+    if (cleaned.length > 0) return cleaned
+    return locale === 'en' ? DEFAULT_STUDY_QUOTES_EN : DEFAULT_STUDY_QUOTES
+  }, [isAdmin, adminData?.profile?.draft?.quotes, publicData.profile?.quotes, locale])
 
   const activeNowNotes = useMemo(() => {
     const ownerNow = isAdmin
       ? adminData?.profile?.draft?.nowNotes
       : publicData.profile?.nowNotes
     const cleaned = (ownerNow ?? []).map((n) => n.trim()).filter(Boolean)
-    return cleaned.length > 0 ? cleaned : DEFAULT_NOW_NOTES
-  }, [isAdmin, adminData?.profile?.draft?.nowNotes, publicData.profile?.nowNotes])
+    if (cleaned.length > 0) return cleaned
+    return locale === 'en' ? DEFAULT_NOW_NOTES_EN : DEFAULT_NOW_NOTES
+  }, [isAdmin, adminData?.profile?.draft?.nowNotes, publicData.profile?.nowNotes, locale])
 
   const handleSelectAtmosphere = useCallback((mode: AtmosphereMode) => {
     userTouchedAtmoRef.current = true
@@ -1630,11 +1987,17 @@ export default function App() {
     setSfxEnabled(next)
     persistSfxEnabled(next)
     if (next) playSound('ui-switch', { force: true })
-    showToast(next ? '已开启交互触感音效' : '已静音交互触感音效', 'info')
-  }, [showToast])
+    showToast(
+      next
+        ? trLive('已开启交互触感音效', 'Tactile sound effects enabled')
+        : trLive('已静音交互触感音效', 'Tactile sound effects muted'),
+      'info',
+    )
+  }, [showToast, trLive])
 
   const handleTapProp = useCallback((msg: string) => {
-    showToast(msg, 'info')
+    const localized = localeRef.current === 'en' ? (PROP_TAP_EN[msg] ?? msg) : msg
+    showToast(localized, 'info')
   }, [showToast])
 
   const handleToggleDeskLamp = useCallback(() => {
@@ -1643,8 +2006,13 @@ export default function App() {
     deskLampOnRef.current = next
     setDeskLampOn(next)
     playSound(next ? 'lamp-on' : 'lamp-off')
-    showToast(next ? '已点亮书房黄铜绿台灯' : '已关上书桌台灯', 'info')
-  }, [showToast])
+    showToast(
+      next
+        ? trLive('已点亮书房黄铜绿台灯', 'Green brass desk lamp turned on')
+        : trLive('已关上书桌台灯', 'Desk lamp turned off'),
+      'info',
+    )
+  }, [showToast, trLive])
 
   const handleDrawStudyQuote = useCallback(() => {
     if (busyRef.current) return
@@ -1654,7 +2022,7 @@ export default function App() {
     const nextIdx = (quoteIdxRef.current + 1) % activeQuotesPool.length
     quoteIdxRef.current = nextIdx
     setQuoteIdx(nextIdx)
-    setStudyQuote(activeQuotesPool[nextIdx] ?? DEFAULT_STUDY_QUOTES[0])
+    setStudyQuote(activeQuotesPool[nextIdx] ?? activeQuotesPool[0])
   }, [activeQuotesPool])
 
   const handleToggleFocus = useCallback((targetFocus: FocusSubPoseId) => {
@@ -1670,7 +2038,10 @@ export default function App() {
   function handleTriggerMailbox() {
     if (busyRef.current) return
     playSound('mailbox')
-    showToast('已打开信箱，带去「关于我」木桌寄语匣盖章留念…', 'info')
+    showToast(
+      trLive('已打开信箱，带去「关于我」木桌寄语匣盖章留念…', 'Mailbox opened—heading to the guestbook table in About Me…'),
+      'info',
+    )
     pendingFocusAfterNavRef.current = 'blank-table'
     void navigate('blank', { skipOpenSound: true })
   }
@@ -1678,19 +2049,23 @@ export default function App() {
   const handleLeaveStamp = useCallback(() => {
     playSound('ink-stamp')
     const moodItem = STAMP_MOODS.find((m) => m.id === selectedStampMood) ?? STAMP_MOODS[0]
+    const isEn = localeRef.current === 'en'
     const entry: GuestStampEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       mood: moodItem.id,
       message: guestNoteInput.trim().slice(0, 48),
-      createdAt: new Date().toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }),
+      createdAt: new Date().toLocaleDateString(isEn ? 'en-US' : 'zh-CN', { month: 'short', day: 'numeric' }),
     }
     const nextStamps = [entry, ...guestStampsRef.current].slice(0, 12)
     guestStampsRef.current = nextStamps
     setGuestStamps(nextStamps)
     try { localStorage.setItem('paper-home:guestbook', JSON.stringify(nextStamps)) } catch {}
     setGuestNoteInput('')
-    setLatestStampReply(moodItem.reply)
-    showToast(`已盖下「${moodItem.id}」访客印章`, 'success')
+    setLatestStampReply(isEn ? moodItem.replyEn : moodItem.reply)
+    showToast(
+      isEn ? `Stamped "${moodItem.labelEn}" in the guestbook` : `已盖下「${moodItem.id}」访客印章`,
+      'success',
+    )
   }, [selectedStampMood, guestNoteInput, showToast])
 
   const activeDeepLinkItemSlug = useMemo(() => {
@@ -1749,13 +2124,16 @@ export default function App() {
       void copyTextToClipboard(url).then((ok) => {
         if (ok) {
           playSound('success-seal')
-          showToast('已复制直达深链，打开即可回到此刻房间与天色', 'success')
+          showToast(
+            trLive('已复制直达深链，打开即可回到此刻房间与天色', 'Deep link copied—open it to return to this exact room & sky'),
+            'success',
+          )
         } else {
-          showToast(`深链地址：${buildDeepLinkHash(opts)}`, 'info')
+          showToast(`${trLive('深链地址：', 'Deep link: ')}${buildDeepLinkHash(opts)}`, 'info')
         }
       })
     },
-    [activeDeepLinkOptions, copyTextToClipboard, showToast],
+    [activeDeepLinkOptions, copyTextToClipboard, showToast, trLive],
   )
 
   const handleOpenPostcard = useCallback(
@@ -1800,36 +2178,34 @@ export default function App() {
   }, [])
 
   const activeAtmoMeta =
-    ATMOSPHERE_OPTIONS.find((o) => o.id === atmospherePreset) ?? ATMOSPHERE_OPTIONS[1]
+    localizedAtmoOptions.find((o) => o.id === atmospherePreset) ?? localizedAtmoOptions[1]
+  const displayHomeName = localizedSiteDefault(homeName, DEFAULT_SITE_SETTINGS.homeName, 'My Cottage', locale)
+  const displayYardHeading = localizedSiteDefault(siteSettings.yardHeading, DEFAULT_SITE_SETTINGS.yardHeading, 'Come sit by the cottage.', locale)
+  const displayYardSubtitle = localizedSiteDefault(
+    siteSettings.yardSubtitle,
+    DEFAULT_SITE_SETTINGS.yardSubtitle,
+    'Push open the door to explore my projects, study notes, and story.',
+    locale,
+  )
 
   return (
+    <I18nContext.Provider value={i18nValue}>
     <div
       className={`home-app place-${place} atmo-${atmospherePreset} weather-${weather} ${reduced ? 'reduced-motion' : ''} ${busy || anyModalOpen ? 'walking-paused' : ''} ${busy ? 'traveling' : ''} ${promoMode ? 'promo-clean' : ''}`}
       ref={root}
       onScroll={onWalkScroll}
-      onKeyDown={(e) => {
-        if (
-          place !== 'hall' ||
-          busy ||
-          anyModalOpen ||
-          (e.target instanceof Element && e.target.closest('button,input,textarea,select,a,dialog'))
-        ) {
-          return
-        }
-        if (['ArrowDown', 'PageDown', ' ', 'ArrowUp', 'PageUp'].includes(e.key)) {
-          e.preventDefault()
-          step(['ArrowUp', 'PageUp'].includes(e.key) ? -1 : 1)
-        }
-      }}
     >
       {place === 'hall' && <div className="walk-track" aria-hidden="true" />}
       <div className="world">
-        <SceneBoundary onFailure={() => setReady(true)}>
+        <SceneBoundary onFailure={() => setReady(true)} locale={locale}>
           {fontReady && pack && !contextLost && (
             <Canvas
               key={canvasKey}
               role="img"
-              aria-label="自然白昼中的住宅与庭院，可进入走廊及作品室、创作手记、关于我三个房间"
+              aria-label={tr(
+                '自然白昼中的住宅与庭院，可进入走廊及作品室、创作手记、关于我三个房间',
+                'Interactive 3D cottage and courtyard with corridor leading to Gallery, Study Notes, and About Me',
+              )}
               shadows="percentage"
               dpr={[1, 1.5]}
               camera={{ ...initialCamera, near: 0.05, far: 200 }}
@@ -1861,7 +2237,10 @@ export default function App() {
               }}
               fallback={
                 <div className="scene-fallback">
-                  小屋三维场景。使用「小屋地图」也可浏览所有房间。
+                  {tr(
+                    '小屋三维场景。使用「小屋地图」也可浏览所有房间。',
+                    '3D cottage scene. Use Cottage Map to browse every room.',
+                  )}
                 </div>
               }
             >
@@ -1874,6 +2253,7 @@ export default function App() {
                 galleryIndex={galleryIndex}
                 galleryCount={galleryProjects.length}
                 progress={progress}
+                hallLook={hallLook}
                 onTransition={(value) => { transition.current = value }}
               />
               <World
@@ -1920,21 +2300,21 @@ export default function App() {
           type="button"
           className="brand"
           onClick={() => void navigate('yard')}
-          aria-label={`${homeName}，返回小院`}
+          aria-label={tr(`${displayHomeName}，返回小院`, `${displayHomeName}, return to Courtyard`)}
           disabled={busy || !ready}
         >
           <Icon name="home" size={28} />
-          <span>{homeName}</span>
+          <span>{displayHomeName}</span>
         </button>
 
         {place !== 'yard' && (
-          <nav className="room-switcher" aria-label="房间快捷切换">
-            {rooms.map((r) => (
+          <nav className="room-switcher" aria-label={tr('房间快捷切换', 'Quick room navigation')}>
+            {localizedRooms.map((r) => (
               <button
                 key={r.id}
                 type="button"
                 className={`room-switcher-btn ${place === r.id ? 'active' : ''}`}
-                aria-label={`前往${r.name}`}
+                aria-label={tr(`前往${r.name}`, `Go to ${r.name}`)}
                 aria-current={place === r.id ? 'page' : undefined}
                 disabled={busy || !ready}
                 onClick={() => void navigate(r.id)}
@@ -1948,15 +2328,19 @@ export default function App() {
 
         <div className="header-actions">
           <div className="atmosphere-anchor" ref={atmoAnchorRef}>
-            <div className="atmosphere-segmented" role="group" aria-label="小屋时光天色">
-              {ATMOSPHERE_OPTIONS.map((opt) => (
+            <div className="atmosphere-segmented" role="group" aria-label={tr('小屋时光天色', 'Cottage sky & time of day')}>
+              {localizedAtmoOptions.map((opt) => (
                 <button
                   key={opt.id}
                   type="button"
                   className={`atmo-option ${atmosphereMode === opt.id ? 'active' : ''}`}
                   aria-pressed={atmosphereMode === opt.id}
-                  aria-label={`天色：${opt.label}`}
-                  title={opt.id === 'auto' ? `跟随当地时间（当前：${activeAtmoMeta.label}）` : opt.label}
+                  aria-label={tr(`天色：${opt.label}`, `Sky: ${opt.label}`)}
+                  title={
+                    opt.id === 'auto'
+                      ? tr(`跟随当地时间（当前：${activeAtmoMeta.label}）`, `Follow local time (currently: ${activeAtmoMeta.label})`)
+                      : opt.label
+                  }
                   onClick={() => handleSelectAtmosphere(opt.id)}
                 >
                   <Icon name={opt.icon} size={13} />
@@ -1967,12 +2351,12 @@ export default function App() {
                 type="button"
                 className={`weather-pill ${weather === 'rain' ? 'active' : ''}`}
                 aria-pressed={weather === 'rain'}
-                aria-label={weather === 'rain' ? '关闭细雨' : '开启细雨'}
-                title="切换庭院细雨与雨声"
+                aria-label={weather === 'rain' ? tr('关闭细雨', 'Turn off rain') : tr('开启细雨', 'Turn on rain')}
+                title={tr('切换庭院细雨与雨声', 'Toggle courtyard drizzle and rain sound')}
                 onClick={handleToggleWeather}
               >
                 <Icon name="rain" size={13} />
-                <span>细雨</span>
+                <span>{tr('细雨', 'Rain')}</span>
               </button>
             </div>
             <button
@@ -1981,22 +2365,25 @@ export default function App() {
               className={`atmo-compact-trigger ${atmoPopoverOpen ? 'open' : ''}`}
               aria-expanded={atmoPopoverOpen}
               aria-haspopup="dialog"
-              aria-label={`天色与天气（当前：${activeAtmoMeta.label}${weather === 'rain' ? '·细雨' : ''}）`}
+              aria-label={tr(
+                `天色与天气（当前：${activeAtmoMeta.label}${weather === 'rain' ? '·细雨' : ''}）`,
+                `Sky & weather (${activeAtmoMeta.label}${weather === 'rain' ? ' · Rain' : ''})`,
+              )}
               onClick={() => setAtmoPopoverOpen((v) => !v)}
             >
               <Icon name={weather === 'rain' ? 'rain' : activeAtmoMeta.icon} size={16} />
-              <span>{activeAtmoMeta.label}{weather === 'rain' ? '·雨' : ''}</span>
+              <span>{activeAtmoMeta.label}{weather === 'rain' ? tr('·雨', ' · Rain') : ''}</span>
             </button>
             {atmoPopoverOpen && (
               <div
                 ref={atmoPopoverRef}
                 className="atmo-popover"
                 role="dialog"
-                aria-label="切换天色与细雨"
+                aria-label={tr('切换天色与细雨', 'Switch sky and rain')}
                 onKeyDown={(e) => handleMenuArrowNavigation(atmoPopoverRef.current, e)}
               >
                 <div className="atmo-popover-grid">
-                  {ATMOSPHERE_OPTIONS.map((opt) => (
+                  {localizedAtmoOptions.map((opt) => (
                     <button
                       key={opt.id}
                       type="button"
@@ -2021,13 +2408,13 @@ export default function App() {
                     }}
                   >
                     <Icon name="rain" size={14} />
-                    <span>{weather === 'rain' ? '细雨中' : '晴朗无雨'}</span>
+                    <span>{weather === 'rain' ? tr('细雨中', 'Raining') : tr('晴朗无雨', 'Clear Sky')}</span>
                   </button>
                 </div>
               </div>
             )}
           </div>
-          <div className="quality-segmented" role="group" aria-label="画面质量">
+          <div className="quality-segmented" role="group" aria-label={tr('画面质量', 'Graphics quality')}>
             <button
               type="button"
               className={`quality-option ${quality === 'high' ? 'active' : ''}`}
@@ -2035,8 +2422,8 @@ export default function App() {
               disabled={busy || !ready}
               onClick={() => handleSelectQuality('high')}
             >
-              <span className="quality-label-full">细致画质</span>
-              <span className="quality-label-short" aria-hidden="true">细致</span>
+              <span className="quality-label-full">{tr('细致画质', 'High Quality')}</span>
+              <span className="quality-label-short" aria-hidden="true">{tr('细致', 'High')}</span>
             </button>
             <button
               type="button"
@@ -2045,20 +2432,31 @@ export default function App() {
               disabled={busy || !ready}
               onClick={() => handleSelectQuality('low')}
             >
-              <span className="quality-label-full">兼容画质</span>
-              <span className="quality-label-short" aria-hidden="true">兼容</span>
+              <span className="quality-label-full">{tr('兼容画质', 'Lite Quality')}</span>
+              <span className="quality-label-short" aria-hidden="true">{tr('兼容', 'Lite')}</span>
             </button>
           </div>
           <button
             type="button"
             className="motion-button"
             onClick={() => setReduced(!reduced)}
-            aria-label={reduced ? '轻柔模式' : '漫游模式'}
+            aria-label={reduced ? tr('轻柔模式', 'Gentle Motion') : tr('漫游模式', 'Smooth Roam')}
             aria-pressed={reduced}
-            title="减少镜头移动"
+            title={tr('减少镜头移动', 'Reduce camera motion')}
           >
             <Icon name="motion" size={18} />
-            <span>{reduced ? '轻柔模式' : '漫游模式'}</span>
+            <span>{reduced ? tr('轻柔模式', 'Gentle') : tr('漫游模式', 'Motion')}</span>
+          </button>
+          <button
+            type="button"
+            className="lang-button"
+            data-sound="ui-switch"
+            onClick={toggleLocale}
+            aria-label={locale === 'en' ? '切换为中文界面' : 'Switch to English interface'}
+            title={locale === 'en' ? '切换为中文界面' : 'Switch to English'}
+          >
+            <Icon name="globe" size={16} />
+            <span>{locale === 'en' ? '中文' : 'EN'}</span>
           </button>
           {isAdmin && (
             <div className="studio-anchor" ref={studioAnchorRef}>
@@ -2068,11 +2466,11 @@ export default function App() {
                 className={`admin-status-pill ${studioMenuOpen ? 'open' : ''}`}
                 aria-expanded={studioMenuOpen}
                 aria-haspopup="menu"
-                aria-label="创作者工作台快捷菜单"
+                aria-label={tr('创作者工作台快捷菜单', 'Creator Studio quick menu')}
                 onClick={() => setStudioMenuOpen((v) => !v)}
               >
                 <span className="admin-live-dot" aria-hidden="true" />
-                <span>编辑中</span>
+                <span>{tr('编辑中', 'Editing')}</span>
                 <Icon name={studioMenuOpen ? 'chevronUp' : 'chevronDown'} size={13} />
               </button>
               {studioMenuOpen && (
@@ -2080,17 +2478,19 @@ export default function App() {
                   ref={studioPopoverRef}
                   className="studio-quick-popover"
                   role="menu"
-                  aria-label="快捷创作入口"
+                  aria-label={tr('快捷创作入口', 'Quick creator actions')}
                   onKeyDown={(e) => handleMenuArrowNavigation(studioPopoverRef.current, e)}
                 >
                   <div className="studio-popover-head">
                     <strong>
-                      {backendHealth.mode === 'local-studio' ? '本地编辑工作室' : '云端主人工作台'}
+                      {backendHealth.mode === 'local-studio'
+                        ? tr('本地编辑工作室', 'Local Editing Studio')
+                        : tr('云端主人工作台', 'Cloud Owner Studio')}
                     </strong>
                     <small>
                       {backendHealth.mode === 'local-studio'
-                        ? '保存即写入 local-data/'
-                        : adminEmail || '已登录'}
+                        ? tr('保存即写入 local-data/', 'Saves directly to local-data/')
+                        : adminEmail || tr('已登录', 'Signed in')}
                     </small>
                   </div>
                   <div className="studio-popover-list">
@@ -2104,7 +2504,7 @@ export default function App() {
                       }}
                     >
                       <Icon name="frame" size={15} />
-                      <span>新建作品</span>
+                      <span>{tr('新建作品', 'New Project')}</span>
                     </button>
                     <button
                       type="button"
@@ -2116,7 +2516,7 @@ export default function App() {
                       }}
                     >
                       <Icon name="book" size={15} />
-                      <span>写新手记</span>
+                      <span>{tr('写新手记', 'New Study Note')}</span>
                     </button>
                     <button
                       type="button"
@@ -2127,7 +2527,7 @@ export default function App() {
                       }}
                     >
                       <Icon name="user" size={15} />
-                      <span>编辑「关于我」</span>
+                      <span>{tr('编辑「关于我」', 'Edit About Me')}</span>
                     </button>
                     <button
                       type="button"
@@ -2141,7 +2541,7 @@ export default function App() {
                       }}
                     >
                       <Icon name="sliders" size={15} />
-                      <span>小屋名称与门牌设置</span>
+                      <span>{tr('小屋名称与门牌设置', 'Cottage Name & Plaque')}</span>
                     </button>
                   </div>
                   <div className="studio-popover-foot">
@@ -2154,10 +2554,10 @@ export default function App() {
                     >
                       <span>
                         {signOutBusy
-                          ? '正在退出…'
+                          ? tr('正在退出…', 'Signing out…')
                           : backendHealth.mode === 'local-studio'
-                            ? '退出编辑（访客预览）'
-                            : '退出管理登录'}
+                            ? tr('退出编辑（访客预览）', 'Exit Editing (Visitor View)')
+                            : tr('退出管理登录', 'Sign Out')}
                       </span>
                     </button>
                   </div>
@@ -2168,7 +2568,11 @@ export default function App() {
           <button
             type="button"
             className={`map-button ${isAdmin ? 'admin-active' : ''}`}
-            aria-label={isAdmin ? '小屋地图（主人已登录）' : '小屋地图'}
+            aria-label={
+              isAdmin
+                ? tr('小屋地图（主人已登录）', 'Cottage Map (Owner signed in)')
+                : tr('小屋地图', 'Cottage Map')
+            }
             onClick={() => {
               playSound('map-unfold')
               setStudioMenuOpen(false)
@@ -2180,7 +2584,7 @@ export default function App() {
             disabled={busy || !ready}
           >
             <Icon name="map" size={18} />
-            <span>小屋地图</span>
+            <span>{tr('小屋地图', 'Cottage Map')}</span>
           </button>
         </div>
       </header>
@@ -2190,10 +2594,10 @@ export default function App() {
           {place === 'yard' ? (
             <>
               <span className="welcome-eyebrow">
-                {activeAtmoMeta.eyebrow}{weather === 'rain' ? ' · 细雨' : ''}
+                {activeAtmoMeta.eyebrow}{weather === 'rain' ? tr(' · 细雨', ' · Rain') : ''}
               </span>
-              <h1 ref={title} tabIndex={-1}>{siteSettings.yardHeading}</h1>
-              <p>{siteSettings.yardSubtitle}</p>
+              <h1 ref={title} tabIndex={-1}>{displayYardHeading}</h1>
+              <p>{displayYardSubtitle}</p>
             </>
           ) : (
             <>
@@ -2201,11 +2605,25 @@ export default function App() {
               <h1 ref={title} tabIndex={-1}>{room.name}</h1>
               <p>
                 {place === 'hall' ? (
-                  <>向上滑动，往家里走。<br />反向滑动可以退回来。</>
+                  locale === 'en' ? (
+                    <>Scroll or press W / ↑ to walk inward, A / D to glance.<br />S / ↓ to step back, Enter to open a nearby door.</>
+                  ) : (
+                    <>滚轮上滑或按 W / ↑ 往家里走，A / D 左右张望。<br />S / ↓ 退回，靠近房门按 Enter 推门。</>
+                  )
                 ) : place === 'study' ? (
-                  <>翻开一篇手记，<br />看看制作时的判断与调整。</>
+                  locale === 'en' ? (
+                    <>Open a study note to see the thinking,<br />experiments, and decisions along the way.</>
+                  ) : (
+                    <>翻开一篇手记，<br />看看制作时的判断与调整。</>
+                  )
                 ) : place === 'gallery' ? (
-                  <>点开墙上的作品纸张，<br />或从目录查看详情与演示。</>
+                  locale === 'en' ? (
+                    <>Click a framed work on the wall,<br />or browse full details & demos in the list.</>
+                  ) : (
+                    <>点开墙上的作品纸张，<br />或从目录查看详情与演示。</>
+                  )
+                ) : locale === 'en' ? (
+                  <>Meet the maker behind the cottage,<br />and what is currently in focus.</>
                 ) : (
                   <>认识小屋的主人，<br />和正在专注的事。</>
                 )}
@@ -2215,7 +2633,7 @@ export default function App() {
         </div>
 
         {ready && !busy && !(isNarrowViewport && directoryOpen) && (place === 'yard' || place === 'study' || place === 'blank') && (
-          <div ref={tactileBarRef} className="tactile-bar" role="group" aria-label="房间互动小物件">
+          <div ref={tactileBarRef} className="tactile-bar" role="group" aria-label={tr('房间互动小物件', 'Interactive room objects')}>
             {place === 'yard' && (
               <>
                 <button
@@ -2225,7 +2643,7 @@ export default function App() {
                   onClick={() => handleToggleFocus('yard-bench')}
                 >
                   <Icon name="bench" size={14} />
-                  <span>{focusId === 'yard-bench' ? '起身看全院' : '坐上木椅'}</span>
+                  <span>{focusId === 'yard-bench' ? tr('起身看全院', 'Stand Up') : tr('坐上木椅', 'Sit on Bench')}</span>
                 </button>
                 <button
                   type="button"
@@ -2233,7 +2651,7 @@ export default function App() {
                   onClick={handleTriggerMailbox}
                 >
                   <Icon name="mail" size={14} />
-                  <span>寄语信箱</span>
+                  <span>{tr('寄语信箱', 'Mailbox')}</span>
                 </button>
               </>
             )}
@@ -2246,7 +2664,7 @@ export default function App() {
                   onClick={handleToggleDeskLamp}
                 >
                   <Icon name="lamp" size={14} />
-                  <span>{deskLampOn ? '台灯：已点亮' : '点亮书桌台灯'}</span>
+                  <span>{deskLampOn ? tr('台灯：已点亮', 'Lamp: On') : tr('点亮书桌台灯', 'Turn On Desk Lamp')}</span>
                 </button>
                 <button
                   type="button"
@@ -2254,7 +2672,7 @@ export default function App() {
                   onClick={handleDrawStudyQuote}
                 >
                   <Icon name="book" size={14} />
-                  <span>抽一张书架灵感签</span>
+                  <span>{tr('抽一张书架灵感签', 'Draw Inspiration Slip')}</span>
                 </button>
               </>
             )}
@@ -2268,8 +2686,8 @@ export default function App() {
                 <Icon name="stamp" size={14} />
                 <span>
                   {focusId === 'blank-table'
-                    ? '收起桌面近况与寄语匣'
-                    : `桌面近况与寄语匣 (${guestStamps.length})`}
+                    ? tr('收起桌面近况与寄语匣', 'Close Table & Guestbook')
+                    : tr(`桌面近况与寄语匣 (${guestStamps.length})`, `Now Notes & Guestbook (${guestStamps.length})`)}
                 </span>
               </button>
             )}
@@ -2277,42 +2695,45 @@ export default function App() {
         )}
 
         {place === 'yard' && focusId === 'yard-bench' && (
-          <div className="tactile-floating-card bench-card" role="region" aria-label="庭院木椅视角">
+          <div className="tactile-floating-card bench-card" role="region" aria-label={tr('庭院木椅视角', 'Courtyard bench view')}>
             <div className="tactile-card-head">
-              <strong>庭院木长椅 · 仰望屋檐</strong>
+              <strong>{tr('庭院木长椅 · 仰望屋檐', 'Wooden Bench · Looking Up')}</strong>
               <button
                 type="button"
                 className="tactile-card-close"
                 data-sound="modal-close"
-                aria-label="起身回到小院全景"
+                aria-label={tr('起身回到小院全景', 'Stand up to courtyard overview')}
                 onClick={() => setFocusId(null)}
               >
                 <Icon name="close" size={14} />
               </button>
             </div>
             <p>
-              坐在老树下的长椅往上看，窗子后面就是真实的走廊、书桌与画架。你可以试着在顶栏切换「落日」「夜灯」或「细雨」，看屋里亮起的暖光。
+              {tr(
+                '坐在老树下的长椅往上看，窗子后面就是真实的走廊、书桌与画架。你可以试着在顶栏切换「落日」「夜灯」或「细雨」，看屋里亮起的暖光。',
+                'Looking up from under the old tree, the real corridor, study desk, and easels sit right behind the windows. Try Sunset, Night, or Rain in the top bar to see the warm indoor glow.',
+              )}
             </p>
           </div>
         )}
 
         {place === 'study' && studyQuote && (
-          <div className="tactile-floating-card quote-card" role="region" aria-label="书架灵感签">
+          <div className="tactile-floating-card quote-card" role="region" aria-label={tr('书架灵感签', 'Shelf inspiration slip')}>
             <div className="tactile-card-head">
-              <strong>书架夹页灵感签</strong>
+              <strong>{tr('书架夹页灵感签', 'Shelf Inspiration Slip')}</strong>
               <div className="tactile-card-actions">
                 <button
                   type="button"
                   className="tactile-mini-btn"
                   onClick={handleDrawStudyQuote}
                 >
-                  换一张
+                  {tr('换一张', 'Draw Another')}
                 </button>
                 <button
                   type="button"
                   className="tactile-card-close"
                   data-sound="modal-close"
-                  aria-label="合上灵感签"
+                  aria-label={tr('合上灵感签', 'Close inspiration slip')}
                   onClick={() => {
                     setStudyQuote(null)
                     if (focusId === 'study-shelf') setFocusId(null)
@@ -2322,26 +2743,26 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <blockquote>「{studyQuote}」</blockquote>
+            <blockquote>{locale === 'en' ? studyQuote : `「${studyQuote}」`}</blockquote>
           </div>
         )}
 
         {place === 'blank' && focusId === 'blank-table' && (
-          <div className="tactile-floating-card guestbox-card" role="region" aria-label="木桌近况便签与访客寄语匣">
+          <div className="tactile-floating-card guestbox-card" role="region" aria-label={tr('木桌近况便签与访客寄语匣', 'Now notes and guest stamp box')}>
             <div className="tactile-card-head">
-              <strong>木桌近况便签 · 访客寄语匣</strong>
+              <strong>{tr('木桌近况便签 · 访客寄语匣', 'Tabletop Now Notes · Guestbook')}</strong>
               <button
                 type="button"
                 className="tactile-card-close"
                 data-sound="modal-close"
-                aria-label="收起桌面寄语匣"
+                aria-label={tr('收起桌面寄语匣', 'Close tabletop guestbook')}
                 onClick={() => setFocusId(null)}
               >
                 <Icon name="close" size={14} />
               </button>
             </div>
 
-            <div className="now-notes-strip" aria-label="主人近况便签">
+            <div className="now-notes-strip" aria-label={tr('主人近况便签', 'Owner now notes')}>
               {activeNowNotes.map((note, idx) => (
                 <div key={idx} className="now-note-chip">
                   <small>NOW · 0{idx + 1}</small>
@@ -2352,10 +2773,10 @@ export default function App() {
 
             <div className="guestbox-section">
               <div className="guestbox-head">
-                <span>选一枚印章，留在木匣里</span>
-                <small>已收集 {guestStamps.length} 枚足迹</small>
+                <span>{tr('选一枚印章，留在木匣里', 'Pick a stamp to leave in the box')}</span>
+                <small>{tr(`已收集 ${guestStamps.length} 枚足迹`, `${guestStamps.length} collected`)}</small>
               </div>
-              <div ref={moodGroupRef} className="guestbox-moods" role="radiogroup" aria-label="选择印章心情">
+              <div ref={moodGroupRef} className="guestbox-moods" role="radiogroup" aria-label={tr('选择印章心情', 'Choose stamp mood')}>
                 {STAMP_MOODS.map((m, idx) => (
                   <button
                     key={m.id}
@@ -2384,7 +2805,7 @@ export default function App() {
                         [nextIdx]?.focus()
                     }}
                   >
-                    {m.id}
+                    {locale === 'en' ? m.labelEn : m.id}
                   </button>
                 ))}
               </div>
@@ -2394,25 +2815,31 @@ export default function App() {
                   maxLength={36}
                   value={guestNoteInput}
                   onChange={(e) => setGuestNoteInput(e.target.value)}
-                  placeholder="附一句简短纸条（可选，最多 36 字）"
-                  aria-label="访客寄语短句"
+                  placeholder={tr('附一句简短纸条（可选，最多 36 字）', 'Add a short note (optional, max 36 chars)')}
+                  aria-label={tr('访客寄语短句', 'Guestbook short note')}
                 />
                 <button type="button" className="stamp-submit-btn" onClick={handleLeaveStamp}>
-                  盖章留念
+                  {tr('盖章留念', 'Leave Stamp')}
                 </button>
               </div>
               {latestStampReply && (
                 <p className="stamp-reply-banner" role="status">{latestStampReply}</p>
               )}
               {guestStamps.length > 0 && (
-                <ul className="guest-stamp-list" aria-label="最近的访客印章">
-                  {guestStamps.slice(0, 4).map((item) => (
-                    <li key={item.id}>
-                      <span className="stamp-badge">{item.mood}</span>
-                      <span className="stamp-text">{item.message || '轻轻路过，盖下一枚印章'}</span>
-                      <time>{item.createdAt.slice(0, 10)}</time>
-                    </li>
-                  ))}
+                <ul className="guest-stamp-list" aria-label={tr('最近的访客印章', 'Recent guest stamps')}>
+                  {guestStamps.slice(0, 4).map((item) => {
+                    const matchedMood = STAMP_MOODS.find((m) => m.id === item.mood)
+                    const badgeLabel = locale === 'en' ? (matchedMood?.labelEn ?? item.mood) : item.mood
+                    return (
+                      <li key={item.id}>
+                        <span className="stamp-badge">{badgeLabel}</span>
+                        <span className="stamp-text">
+                          {item.message || tr('轻轻路过，盖下一枚印章', 'Passed by quietly and left a stamp')}
+                        </span>
+                        <time>{item.createdAt.slice(0, 10)}</time>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </div>
@@ -2423,7 +2850,7 @@ export default function App() {
           <aside
             id="room-directory"
             className={`room-content ${isNarrowViewport ? 'mobile-drawer' : ''}`}
-            aria-label={`${room.name}的内容`}
+            aria-label={tr(`${room.name}的内容`, `${room.name} contents`)}
           >
             <RoomDirectory
               place={place}
@@ -2452,16 +2879,20 @@ export default function App() {
         )}
 
         {place === 'gallery' && !directoryOpen && (
-          <div className="gallery-viewer" role="group" aria-label="逐件浏览作品">
+          <div className="gallery-viewer" role="group" aria-label={tr('逐件浏览作品', 'Browse projects one by one')}>
             {publishedProjects.length === 0 ? (
               <div className="gallery-empty-pill">
-                <span>{cloudLoading ? '正在加载作品…' : '暂无已发布作品'}</span>
+                <span>
+                  {cloudLoading
+                    ? tr('正在加载作品…', 'Loading projects…')
+                    : tr('暂无已发布作品', 'No published projects yet')}
+                </span>
               </div>
             ) : (
               <>
                 <button
                   type="button"
-                  aria-label="上一件作品"
+                  aria-label={tr('上一件作品', 'Previous project')}
                   data-sound="paper-card"
                   disabled={busy || galleryIndex <= 0}
                   onClick={() => setGalleryIndex((i) => Math.max(0, i - 1))}
@@ -2474,7 +2905,7 @@ export default function App() {
                   data-sound="paper-flip"
                   onClick={() => openPublicProject(galleryIndex)}
                   disabled={busy || !activeMobileProject}
-                  aria-label={`展开《${activeMobileProject?.title ?? ''}》`}
+                  aria-label={tr(`展开《${activeMobileProject?.title ?? ''}》`, `Open "${activeMobileProject?.title ?? ''}"`)}
                 >
                   <span aria-live="polite">
                     {activeMobileProject?.title}
@@ -2484,7 +2915,7 @@ export default function App() {
                 </button>
                 <button
                   type="button"
-                  aria-label="下一件作品"
+                  aria-label={tr('下一件作品', 'Next project')}
                   data-sound="paper-card"
                   disabled={busy || galleryIndex >= publishedProjects.length - 1}
                   onClick={() => setGalleryIndex((i) => Math.min(publishedProjects.length - 1, i + 1))}
@@ -2496,7 +2927,7 @@ export default function App() {
           </div>
         )}
 
-        <nav className={`journey-nav ${place === 'yard' ? 'yard-nav' : ''}`} aria-label="房间导航">
+        <nav className={`journey-nav ${place === 'yard' ? 'yard-nav' : ''}`} aria-label={tr('房间导航', 'Room navigation')}>
           {place === 'yard' ? (
             <button
               key="yard-enter"
@@ -2513,14 +2944,14 @@ export default function App() {
               }}
               disabled={busy || !ready}
             >
-              <span>{busy ? '门开了，进来吧…' : '敲敲门，进来坐坐'}</span>
+              <span>{busy ? tr('门开了，进来吧…', 'Door opening, come on in…') : tr('敲敲门，进来坐坐', 'Knock & Step Inside')}</span>
               <Icon name="arrow" />
             </button>
           ) : (
             <>
               <button key="inside-back" type="button" className="back-button" onClick={() => void navigate(backPlace)} disabled={busy || !ready}>
                 <Icon name="back" size={18} />
-                <span>{place === 'hall' ? '回到小院' : '返回走廊'}</span>
+                <span>{place === 'hall' ? tr('回到小院', 'Back to Courtyard') : tr('返回走廊', 'Back to Corridor')}</span>
               </button>
 
               {inside && (
@@ -2532,7 +2963,7 @@ export default function App() {
                       onClick={() => { setEditingProject(null); setProjectEditorOpen(true) }}
                     >
                       <Icon name="plus" size={16} />
-                      <span>添加作品</span>
+                      <span>{tr('添加作品', 'Add Project')}</span>
                     </button>
                   )}
                   {isAdmin && !directoryOpen && place === 'study' && (
@@ -2542,7 +2973,7 @@ export default function App() {
                       onClick={() => { setEditingNote(null); setNoteEditorOpen(true) }}
                     >
                       <Icon name="plus" size={16} />
-                      <span>写手记</span>
+                      <span>{tr('写手记', 'Write Note')}</span>
                     </button>
                   )}
                   {isAdmin && !directoryOpen && place === 'blank' && (
@@ -2552,7 +2983,7 @@ export default function App() {
                       onClick={() => setProfileEditorOpen(true)}
                     >
                       <Icon name="pencil" size={15} />
-                      <span>编辑介绍</span>
+                      <span>{tr('编辑介绍', 'Edit Bio')}</span>
                     </button>
                   )}
                   <button
@@ -2574,15 +3005,15 @@ export default function App() {
                     <span>
                       {place === 'gallery'
                         ? isAdmin
-                          ? '作品管理'
-                          : '作品目录'
+                          ? tr('作品管理', 'Manage Gallery')
+                          : tr('作品目录', 'Projects')
                         : place === 'study'
                           ? isAdmin
-                            ? '手记管理'
-                            : '手记目录'
+                            ? tr('手记管理', 'Manage Notes')
+                            : tr('手记目录', 'Study Notes')
                           : isAdmin
-                            ? '介绍管理'
-                            : '个人介绍'}
+                            ? tr('介绍管理', 'Manage Bio')
+                            : tr('个人介绍', 'About Me')}
                     </span>
                   </button>
                 </div>
@@ -2591,21 +3022,26 @@ export default function App() {
               {place === 'hall' && (
                 <div className="walk-actions">
                   <div className="walk-steps">
-                    <button type="button" onClick={() => step(-1)} disabled={busy || !ready} aria-label="后退一段">
+                    <button type="button" onClick={() => step(-1)} disabled={busy || !ready} aria-label={tr('后退一段', 'Step backward')}>
                       <Icon name="back" size={18} />
                     </button>
-                    <button type="button" onClick={() => step(1)} disabled={busy || !ready || atEnd} aria-label="前进一段">
+                    <button type="button" onClick={() => step(1)} disabled={busy || !ready || atEnd} aria-label={tr('前进一段', 'Step forward')}>
                       <Icon name="arrow" size={18} />
                     </button>
                   </div>
                   {nearby && (
                     <button type="button" className="near-door" onClick={() => void navigate(nearby)} disabled={busy || !ready}>
-                      进入{rooms.find((r) => r.id === nearby)?.name}
+                      <span>{tr(`进入${localizedRooms.find((r) => r.id === nearby)?.name ?? ''}`, `Enter ${localizedRooms.find((r) => r.id === nearby)?.name ?? ''}`)}</span>
+                      <kbd className="kbd-cap" aria-hidden="true">Enter</kbd>
                       <Icon name="arrow" size={19} />
                     </button>
                   )}
                   {!nearby && (
-                    <span className="walk-hint">{atEnd ? '走到家的深处了，可以慢慢往回逛' : '滚动或上滑，继续往里走'}</span>
+                    <span className="walk-hint">
+                      {atEnd
+                        ? tr('走到家的深处了，按 S / ↓ 或反向滑动慢慢往回逛', 'End of the corridor—press S / ↓ or scroll back')
+                        : tr('滚轮滑动，或按 W/S、方向键漫游走廊', 'Scroll, or press W/S & Arrow keys to roam')}
+                    </span>
                   )}
                 </div>
               )}
@@ -2615,25 +3051,28 @@ export default function App() {
 
         {!ready && !loadError && !contextLost && (
           <div className="loading-note" role="status">
-            {preparing || `正在准备小屋与庭院… ${Math.round(loadProgress * 100)}%`}
+            {preparing || tr(`正在准备小屋与庭院… ${Math.round(loadProgress * 100)}%`, `Preparing cottage & courtyard… ${Math.round(loadProgress * 100)}%`)}
           </div>
         )}
         {contextLost && (
           <div className="load-error context-lost-card" role="alertdialog" aria-labelledby="webgl-lost-title">
-            <h2 id="webgl-lost-title">三维画面暂时中断</h2>
+            <h2 id="webgl-lost-title">{tr('三维画面暂时中断', '3D view interrupted')}</h2>
             <p>
-              当前浏览器的图形显存暂时被释放或设备内存偏紧，切换至轻量的「兼容画质」可以更流畅地打开小屋。
+              {tr(
+                '当前浏览器的图形显存暂时被释放或设备内存偏紧，切换至轻量的「兼容画质」可以更流畅地打开小屋。',
+                'Your browser temporarily released WebGL graphics memory. Switching to Lite Quality keeps the cottage running smoothly.',
+              )}
             </p>
             <div className="context-lost-actions">
               <button type="button" onClick={handleRecoverContextLoss}>
-                切换兼容画质并重试
+                {tr('切换兼容画质并重试', 'Switch to Lite Quality & Retry')}
               </button>
               <button
                 type="button"
                 className="context-lost-secondary"
                 onClick={() => setMapOpen(true)}
               >
-                用小屋地图浏览
+                {tr('用小屋地图浏览', 'Browse via Map')}
               </button>
             </div>
           </div>
@@ -2649,7 +3088,7 @@ export default function App() {
                 else setRetry((v) => v + 1)
               }}
             >
-              重新加载
+              {tr('重新加载', 'Reload')}
             </button>
           </div>
         )}
@@ -2660,32 +3099,36 @@ export default function App() {
           <Icon name={place === 'yard' ? (weather === 'rain' ? 'rain' : activeAtmoMeta.icon) : room.icon} size={18} />
           <span>
             {place === 'yard'
-              ? `${activeAtmoMeta.footerText}${weather === 'rain' ? ' · 细雨微凉' : ''}`
-              : `你在${room.name}`}
+              ? `${activeAtmoMeta.footerText}${weather === 'rain' ? tr(' · 细雨微凉', ' · Gentle rain') : ''}`
+              : tr(`你在${room.name}`, `In ${room.name}`)}
           </span>
         </div>
         <div className="footer-right">
           <span className="interaction-hint">
-            {place === 'yard' ? '点一下门，故事就开始了' : place === 'hall' ? '沿走廊走走，遇见一扇喜欢的门' : '在这里，待一会儿也没关系'}
+            {place === 'yard'
+              ? tr('点一下门，故事就开始了', 'Click the front door to begin')
+              : place === 'hall'
+                ? tr('沿走廊走走，遇见一扇喜欢的门', 'Stroll the corridor and pick a door')
+                : tr('在这里，待一会儿也没关系', 'Stay a quiet while here')}
           </span>
           <button
             type="button"
             className="postcard-button"
             data-sound="shutter"
-            aria-label="拍一张纸质明信片"
-            title="生成纸质明信片与此刻深链"
+            aria-label={tr('拍一张纸质明信片', 'Take a paper postcard')}
+            title={tr('生成纸质明信片与此刻深链', 'Create a paper postcard & deep link')}
             disabled={busy || !ready}
             onClick={() => handleOpenPostcard()}
           >
             <Icon name="postcard" size={16} />
-            <span>拍明信片</span>
+            <span>{tr('拍明信片', 'Postcard')}</span>
           </button>
           <button
             type="button"
             className={`sfx-button ${sfxEnabled ? 'active' : ''}`}
-            aria-label={sfxEnabled ? '关闭交互音效' : '开启交互音效'}
+            aria-label={sfxEnabled ? tr('关闭交互音效', 'Mute sound effects') : tr('开启交互音效', 'Enable sound effects')}
             aria-pressed={sfxEnabled}
-            title={sfxEnabled ? '交互触感音效：开启' : '交互触感音效：静音'}
+            title={sfxEnabled ? tr('交互触感音效：开启', 'Tactile sound effects: On') : tr('交互触感音效：静音', 'Tactile sound effects: Muted')}
             onClick={handleToggleSfx}
           >
             <Icon name={sfxEnabled ? 'sfxOn' : 'sfxOff'} size={17} />
@@ -2693,9 +3136,9 @@ export default function App() {
           <button
             type="button"
             className={`ambient-button ${ambient ? 'active' : ''}`}
-            aria-label={ambient ? '关闭环境声' : '开启环境声'}
+            aria-label={ambient ? tr('关闭环境声', 'Turn off ambient sound') : tr('开启环境声', 'Turn on ambient sound')}
             aria-pressed={ambient}
-            title={ambient ? '环境声与雨声：开启' : '环境声与雨声：关闭'}
+            title={ambient ? tr('环境声与雨声：开启', 'Ambient & rain audio: On') : tr('环境声与雨声：关闭', 'Ambient & rain audio: Off')}
             onClick={() => {
               const next = !ambient
               playSound(next ? 'ambient-on' : 'ambient-off')
@@ -2710,14 +3153,16 @@ export default function App() {
         </div>
       </footer>
       <p className="sr-only" role="status" aria-live="polite">
-        {busy ? `正在前往${rooms.find((r) => r.id === destination)?.name || '下一个房间'}` : `已来到${room.name}`}
+        {busy
+          ? tr(`正在前往${localizedRooms.find((r) => r.id === destination)?.name || '下一个房间'}`, `Moving to ${localizedRooms.find((r) => r.id === destination)?.name || 'next room'}`)
+          : tr(`已来到${room.name}`, `Arrived at ${room.name}`)}
       </p>
 
-      <Modal open={mapOpen} close={() => setMapOpen(false)} label="小屋地图" className="map-dialog">
-        <h2>小屋地图</h2>
-        <p className="dialog-intro">想去哪儿，推门就好。</p>
+      <Modal open={mapOpen} close={() => setMapOpen(false)} label={tr('小屋地图', 'Cottage Map')} className="map-dialog">
+        <h2>{tr('小屋地图', 'Cottage Map')}</h2>
+        <p className="dialog-intro">{tr('想去哪儿，推门就好。', 'Pick any room and push the door open.')}</p>
         <div className="floor-plan">
-          {rooms.map((r) => (
+          {localizedRooms.map((r) => (
             <button
               type="button"
               key={r.id}
@@ -2727,7 +3172,7 @@ export default function App() {
             >
               <Icon name={r.icon} size={27} />
               <strong>{r.name}</strong>
-              <span>{place === r.id ? '你在这里' : r.note}</span>
+              <span>{place === r.id ? tr('你在这里', 'You are here') : r.note}</span>
             </button>
           ))}
         </div>
@@ -2738,7 +3183,7 @@ export default function App() {
             e.preventDefault()
             const trimmedName = settingsDraft.homeName.trim().slice(0, 12)
             if (!trimmedName) {
-              setNameMessage('先为小屋写一个名字吧。')
+              setNameMessage(tr('先为小屋写一个名字吧。', 'Give your cottage a name first.'))
               return
             }
             const nextPayload: SiteSettingsPayload = {
@@ -2754,8 +3199,8 @@ export default function App() {
             if (canPersistSiteSettings) {
               const savedHint =
                 backendHealth.mode === 'local-studio'
-                  ? '小屋名称与外观文字已保存到本机 local-data/。'
-                  : '小屋名称与外观文字已保存到云端。'
+                  ? tr('小屋名称与外观文字已保存到本机 local-data/。', 'Cottage name and copy saved to local-data/.')
+                  : tr('小屋名称与外观文字已保存到云端。', 'Cottage name and copy saved to the cloud.')
               void (async () => {
                 setSettingsBusy(true)
                 setNameMessage('')
@@ -2766,13 +3211,18 @@ export default function App() {
                   await refreshCloud()
                   playSound('success-seal')
                   setNameMessage(savedHint)
-                  showToast('小屋名称与外观文字已保存', 'success')
+                  showToast(trLive('小屋名称与外观文字已保存', 'Cottage settings saved'), 'success')
                 } catch (err) {
                   if (err instanceof ConflictError) {
                     await refreshCloud()
-                    setNameMessage('小屋设置在另一窗口已被修改，已为你同步最新内容。')
+                    setNameMessage(
+                      trLive(
+                        '小屋设置在另一窗口已被修改，已为你同步最新内容。',
+                        'Settings were updated in another window—synced latest version.',
+                      ),
+                    )
                   } else {
-                    setNameMessage(err instanceof Error ? err.message : '保存失败，请重试。')
+                    setNameMessage(err instanceof Error ? err.message : trLive('保存失败，请重试。', 'Save failed, please retry.'))
                   }
                 } finally {
                   setSettingsBusy(false)
@@ -2785,17 +3235,22 @@ export default function App() {
             try {
               localStorage.setItem('paper-home:name', trimmedName)
               playSound('success-seal')
-              setNameMessage('小屋的名字记住了。')
-              showToast('小屋的名字已记住', 'success')
+              setNameMessage(tr('小屋的名字记住了。', 'Cottage name remembered.'))
+              showToast(tr('小屋的名字已记住', 'Cottage name remembered'), 'success')
             } catch {
-              setNameMessage('名字已更新；当前浏览器无法保存，下次打开会恢复默认。')
+              setNameMessage(
+                tr(
+                  '名字已更新；当前浏览器无法保存，下次打开会恢复默认。',
+                  'Name updated; browser storage is blocked so it will reset on reload.',
+                ),
+              )
             }
           }}
         >
           <div className="name-form-head">
             <label htmlFor="home-name">
               <Icon name="pencil" size={17} />
-              给小屋起个名字
+              {tr('给小屋起个名字', 'Name Your Cottage')}
             </label>
             <span className="cms-char-count">{settingsDraft.homeName.length} / 12</span>
           </div>
@@ -2808,33 +3263,35 @@ export default function App() {
                 setSettingsDraft((prev) => ({ ...prev, homeName: e.target.value }))
                 setNameMessage('')
               }}
-              placeholder="最多 12 个字"
+              placeholder={tr('最多 12 个字', 'Up to 12 chars')}
               disabled={settingsBusy}
             />
             <button type="submit" disabled={settingsBusy}>
               {settingsBusy
-                ? '保存中…'
+                ? tr('保存中…', 'Saving…')
                 : canPersistSiteSettings
                   ? backendHealth.mode === 'local-studio'
-                    ? '保存本机'
-                    : '保存设置'
-                  : '记住'}
+                    ? tr('保存本机', 'Save Local')
+                    : tr('保存设置', 'Save')
+                  : tr('记住', 'Save')}
             </button>
           </div>
           {canPersistSiteSettings && (
-            <section className="site-extra-settings" aria-label="小屋文字外观设置">
+            <section className="site-extra-settings" aria-label={tr('小屋文字外观设置', 'Cottage plaque & greeting settings')}>
               <button
                 type="button"
                 className="cms-ghost-btn"
                 onClick={() => setSettingsExpanded((v) => !v)}
               >
-                {settingsExpanded ? '收起门牌与迎客语设置' : '自定义门牌与小院迎客语'}
+                {settingsExpanded
+                  ? tr('收起门牌与迎客语设置', 'Hide Plaque & Greeting Settings')
+                  : tr('自定义门牌与小院迎客语', 'Customize Plaque & Courtyard Greeting')}
               </button>
               {settingsExpanded && (
                 <div className="site-extra-fields">
                   <div className="cms-field">
                     <div className="cms-field-head">
-                      <label htmlFor="plaque-title">门厅牌匾主标题</label>
+                      <label htmlFor="plaque-title">{tr('门厅牌匾主标题', 'Porch Plaque Title')}</label>
                       <span className="cms-char-count">{settingsDraft.plaqueTitle.length} / 12</span>
                     </div>
                     <input
@@ -2847,7 +3304,7 @@ export default function App() {
                   </div>
                   <div className="cms-field">
                     <div className="cms-field-head">
-                      <label htmlFor="plaque-subtitle">门厅牌匾副标题</label>
+                      <label htmlFor="plaque-subtitle">{tr('门厅牌匾副标题', 'Porch Plaque Subtitle')}</label>
                       <span className="cms-char-count">{settingsDraft.plaqueSubtitle.length} / 24</span>
                     </div>
                     <input
@@ -2860,7 +3317,7 @@ export default function App() {
                   </div>
                   <div className="cms-field">
                     <div className="cms-field-head">
-                      <label htmlFor="yard-heading">小院欢迎大标题</label>
+                      <label htmlFor="yard-heading">{tr('小院欢迎大标题', 'Courtyard Heading')}</label>
                       <span className="cms-char-count">{settingsDraft.yardHeading.length} / 24</span>
                     </div>
                     <input
@@ -2873,7 +3330,7 @@ export default function App() {
                   </div>
                   <div className="cms-field">
                     <div className="cms-field-head">
-                      <label htmlFor="yard-subtitle">小院欢迎导语</label>
+                      <label htmlFor="yard-subtitle">{tr('小院欢迎导语', 'Courtyard Subtitle')}</label>
                       <span className="cms-char-count">{settingsDraft.yardSubtitle.length} / 80</span>
                     </div>
                     <input
@@ -2887,7 +3344,7 @@ export default function App() {
                   <div className="cms-field-row">
                     <div className="cms-field">
                       <div className="cms-field-head">
-                        <label htmlFor="default-atmosphere">访客默认天色</label>
+                        <label htmlFor="default-atmosphere">{tr('访客默认天色', 'Default Visitor Sky')}</label>
                       </div>
                       <select
                         id="default-atmosphere"
@@ -2899,16 +3356,16 @@ export default function App() {
                           }))
                         }
                       >
-                        <option value="daylight">晴昼（推荐）</option>
-                        <option value="dawn">晨雾</option>
-                        <option value="golden">落日</option>
-                        <option value="night">夜灯</option>
-                        <option value="auto">跟随访客当地时间</option>
+                        <option value="daylight">{tr('晴昼（推荐）', 'Daylight (Recommended)')}</option>
+                        <option value="dawn">{tr('晨雾', 'Dawn')}</option>
+                        <option value="golden">{tr('落日', 'Sunset')}</option>
+                        <option value="night">{tr('夜灯', 'Night')}</option>
+                        <option value="auto">{tr('跟随访客当地时间', 'Follow visitor local time')}</option>
                       </select>
                     </div>
                     <div className="cms-field">
                       <div className="cms-field-head">
-                        <label htmlFor="default-weather">访客默认天气</label>
+                        <label htmlFor="default-weather">{tr('访客默认天气', 'Default Visitor Weather')}</label>
                       </div>
                       <select
                         id="default-weather"
@@ -2920,8 +3377,8 @@ export default function App() {
                           }))
                         }
                       >
-                        <option value="clear">晴朗无雨</option>
-                        <option value="rain">细雨微凉</option>
+                        <option value="clear">{tr('晴朗无雨', 'Clear')}</option>
+                        <option value="rain">{tr('细雨微凉', 'Rain')}</option>
                       </select>
                     </div>
                   </div>
@@ -2933,9 +3390,9 @@ export default function App() {
             {nameMessage ||
               (canPersistSiteSettings
                 ? backendHealth.mode === 'local-studio'
-                  ? '在本地编辑模式下保存后，会写入本机 local-data/ 并应用到所有页面。'
-                  : '在主人登录状态下保存后，会同步到云端并应用给所有访客。'
-                : '名字会保存在这台设备的浏览器里。')}
+                  ? tr('在本地编辑模式下保存后，会写入本机 local-data/ 并应用到所有页面。', 'Saved changes write to local-data/ and apply across all rooms.')
+                  : tr('在主人登录状态下保存后，会同步到云端并应用给所有访客。', 'Saved changes sync to the cloud for all visitors.')
+                : tr('名字会保存在这台设备的浏览器里。', 'Saved in this browser on your device.'))}
           </p>
         </form>
 
@@ -2956,7 +3413,9 @@ export default function App() {
             clearSignedUrlCache('admin')
             await refreshCloud()
             showToast(
-              backendHealth.mode === 'local-studio' ? '已进入本地编辑模式' : '已登录主人管理模式',
+              backendHealth.mode === 'local-studio'
+                ? trLive('已进入本地编辑模式', 'Entered Local Studio editing mode')
+                : trLive('已登录主人管理模式', 'Signed in to Owner mode'),
               'success',
             )
           }}
@@ -2966,26 +3425,34 @@ export default function App() {
             setAdminEmail(null)
             setAdminData(null)
             await loadPublic()
-            showToast('已切换为访客浏览视图', 'info')
+            showToast(trLive('已切换为访客浏览视图', 'Switched to visitor view'), 'info')
           }}
           onRetryCleanup={async () => {
             const res = await cleanupMediaAssetsApi({ sweepOrphans: true })
             setAdminData((prev) => (prev ? { ...prev, pendingCleanupCount: res.remaining } : prev))
             if (res.errors.length || res.remaining !== 0) {
-              throw new Error(`旧素材尚未全部清理，请重试或检查存储。${res.errors.join('；')}`)
+              throw new Error(
+                trLive(
+                  `旧素材尚未全部清理，请重试或检查存储。${res.errors.join('；')}`,
+                  `Some unused media could not be cleaned up yet. ${res.errors.join('; ')}`,
+                ),
+              )
             }
-            showToast('旧素材清理检查完成', 'info')
+            showToast(trLive('旧素材清理检查完成', 'Media cleanup check completed'), 'info')
           }}
           onImportSample={async () => {
             await initLocalSampleApi(false)
             await refreshCloud()
-            showToast('已导入初始示例内容', 'success')
+            showToast(trLive('已导入初始示例内容', 'Starter sample content imported'), 'success')
           }}
           onExportSnapshot={async () => {
             const res = await exportLocalSnapshotApi()
             playSound('success-seal')
             showToast(
-              `公开快照导出完成（作品 ${res.projects} 件 · 手记 ${res.notes} 篇）`,
+              trLive(
+                `公开快照导出完成（作品 ${res.projects} 件 · 手记 ${res.notes} 篇）`,
+                `Public snapshot exported (${res.projects} projects · ${res.notes} notes)`,
+              ),
               'success',
             )
             return res
@@ -3100,7 +3567,7 @@ export default function App() {
                     handleOpenPostcard({
                       room: 'gallery',
                       slug: pub?.slug || viewingProject.project.id,
-                      title: viewingProject.project.title || '作品',
+                      title: viewingProject.project.title || tr('作品', 'Project'),
                     })
                   }
                 : undefined
@@ -3168,7 +3635,7 @@ export default function App() {
                     handleOpenPostcard({
                       room: 'study',
                       slug: pub?.slug || viewingNote.note.id,
-                      title: viewingNote.note.title || '手记',
+                      title: viewingNote.note.title || tr('手记', 'Note'),
                     })
                   }
                 : undefined
@@ -3198,8 +3665,8 @@ export default function App() {
           <PostcardModal
             open={postcardOpen}
             snapshotDataUrl={postcardSnapshot}
-            homeName={homeName}
-            plaqueTitle={siteSettings.plaqueTitle}
+            homeName={displayHomeName}
+            plaqueTitle={localizedSiteDefault(siteSettings.plaqueTitle, DEFAULT_SITE_SETTINGS.plaqueTitle, 'Welcome Home', locale)}
             room={place}
             roomName={room.name}
             atmospherePreset={atmospherePreset}
@@ -3227,5 +3694,6 @@ export default function App() {
       </Suspense>
       <ToastHost toasts={toasts} onDismiss={dismissToast} />
     </div>
+    </I18nContext.Provider>
   )
 }

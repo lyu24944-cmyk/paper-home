@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react'
+import { useI18n } from '../lib/i18n'
 import { Icon } from './Icon'
 import { safeExternalUrl } from '../lib/text'
 
@@ -24,6 +25,7 @@ export function MarkdownToolbar({
   onTogglePreview: () => void
   disabled?: boolean
 }) {
+  const { tr } = useI18n()
   const pendingSelectionRef = useRef<SelectionRange | null>(null)
   const prevPreviewRef = useRef(preview)
 
@@ -121,7 +123,7 @@ export function MarkdownToolbar({
 
   function handleBold() {
     const { start, end, selected } = getSelection()
-    const inner = selected || '加粗文字'
+    const inner = selected || tr('加粗文字', 'bold text')
     const insert = `**${inner}**`
     const next = value.slice(0, start) + insert + value.slice(end)
     applyEdit(next, start + 2, start + 2 + inner.length)
@@ -137,7 +139,7 @@ export function MarkdownToolbar({
       applyEdit(next, start + lead.length, start + lead.length + selected.length)
       return
     }
-    const inner = selected || '代码'
+    const inner = selected || tr('代码', 'code')
     const insert = `\`${inner}\``
     const next = value.slice(0, start) + insert + value.slice(end)
     applyEdit(next, start + 1, start + 1 + inner.length)
@@ -146,14 +148,14 @@ export function MarkdownToolbar({
   function handleLink() {
     const { start, end, selected } = getSelection()
     if (selected && safeExternalUrl(selected)) {
-      const label = '链接文字'
+      const label = tr('链接文字', 'link text')
       const url = selected.trim()
       const insert = `[${label}](${url})`
       const next = value.slice(0, start) + insert + value.slice(end)
       applyEdit(next, start + 1, start + 1 + label.length)
       return
     }
-    const label = selected || '链接文字'
+    const label = selected || tr('链接文字', 'link text')
     const url = 'https://example.com'
     const insert = `[${label}](${url})`
     const next = value.slice(0, start) + insert + value.slice(end)
@@ -168,67 +170,67 @@ export function MarkdownToolbar({
   const toolsDisabled = disabled || preview
 
   return (
-    <div className="markdown-toolbar" role="toolbar" aria-label="正文排版工具栏">
+    <div className="markdown-toolbar" role="toolbar" aria-label={tr('正文排版工具栏', 'Markdown formatting toolbar')}>
       <div className="markdown-tool-group">
         <button
           type="button"
           className="markdown-tool-btn"
           disabled={toolsDisabled}
-          title="插入二级小标题（## ）"
+          title={tr('插入二级小标题（## ）', 'Insert heading (## )')}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => handleLinePrefix('## ', '小标题')}
+          onClick={() => handleLinePrefix('## ', tr('小标题', 'Heading'))}
         >
-          小标题
+          {tr('小标题', 'H2')}
         </button>
         <button
           type="button"
           className="markdown-tool-btn"
           disabled={toolsDisabled}
-          title="加粗选中文字（**文字**）"
+          title={tr('加粗选中文字（**文字**）', 'Bold text (**text**)')}
           onMouseDown={(e) => e.preventDefault()}
           onClick={handleBold}
         >
-          加粗
+          {tr('加粗', 'Bold')}
         </button>
         <button
           type="button"
           className="markdown-tool-btn"
           disabled={toolsDisabled}
-          title="插入无序列表（- ）"
+          title={tr('插入无序列表（- ）', 'Insert bullet list (- )')}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => handleLinePrefix('- ', '列表项')}
+          onClick={() => handleLinePrefix('- ', tr('列表项', 'List item'))}
         >
-          列表
+          {tr('列表', 'List')}
         </button>
         <button
           type="button"
           className="markdown-tool-btn"
           disabled={toolsDisabled}
-          title="插入引用段落（> ）"
+          title={tr('插入引用段落（> ）', 'Insert quote (> )')}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => handleLinePrefix('> ', '引用内容')}
+          onClick={() => handleLinePrefix('> ', tr('引用内容', 'Quote'))}
         >
-          引用
+          {tr('引用', 'Quote')}
         </button>
         <button
           type="button"
           className="markdown-tool-btn"
           disabled={toolsDisabled}
-          title="插入行内代码或代码块"
+          title={tr('插入行内代码或代码块', 'Insert inline code or code block')}
           onMouseDown={(e) => e.preventDefault()}
           onClick={handleCode}
         >
-          代码
+          {tr('代码', 'Code')}
         </button>
         <button
           type="button"
           className="markdown-tool-btn"
           disabled={toolsDisabled}
-          title="插入外部链接（https://）"
+          title={tr('插入外部链接（https://）', 'Insert external link (https://)')}
           onMouseDown={(e) => e.preventDefault()}
           onClick={handleLink}
         >
-          链接
+          {tr('链接', 'Link')}
         </button>
       </div>
 
@@ -240,7 +242,7 @@ export function MarkdownToolbar({
         onClick={onTogglePreview}
       >
         <Icon name={preview ? 'pencil' : 'eye'} size={13} />
-        <span>{preview ? '返回编辑' : '排版预览'}</span>
+        <span>{preview ? tr('返回编辑', 'Edit') : tr('排版预览', 'Preview')}</span>
       </button>
     </div>
   )

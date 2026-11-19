@@ -20,6 +20,7 @@
     "check:local": "node scripts/local-verify.mjs",
     "check:phase1": "node scripts/phase1-verify.mjs",
     "check:phase2": "node scripts/phase2-verify.mjs",
+    "check:phase3": "node scripts/phase3-verify.mjs",
     "check:sound": "node scripts/sound-verify.mjs",
     "qa:report": "node scripts/polish-report.mjs",
     "dev": "vite --host 127.0.0.1 --port 4318 --strictPort",

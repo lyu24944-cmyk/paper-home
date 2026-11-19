@@ -14,9 +14,9 @@ export type CameraHandle = {
   setPromoPose?: (from: PromoCameraWaypoint | null, to: PromoCameraWaypoint, tNorm: number, ease?: string) => void
   clearPromoOverride?: () => void
 }
-export const CameraController = forwardRef<CameraHandle,{place:Place;busy:boolean;reduced:boolean;galleryIndex:number;galleryCount:number;focusId?:FocusSubPoseId|null;progress:React.MutableRefObject<number>;onTransition:(state:TransitionState|null)=>void}>(({place,busy,reduced,galleryIndex,galleryCount,focusId=null,progress,onTransition},ref)=>{
+export const CameraController = forwardRef<CameraHandle,{place:Place;busy:boolean;reduced:boolean;galleryIndex:number;galleryCount:number;focusId?:FocusSubPoseId|null;progress:React.MutableRefObject<number>;hallLook?:React.MutableRefObject<number>;onTransition:(state:TransitionState|null)=>void}>(({place,busy,reduced,galleryIndex,galleryCount,focusId=null,progress,hallLook,onTransition},ref)=>{
   const {camera:baseCamera,size}=useThree(),camera=baseCamera as PerspectiveCamera
-  const active=useRef(false),promoOverride=useRef(false),focusTween=useRef<gsap.core.Tween|null>(null),smooth=useRef(progress.current),tween=useRef<gsap.core.Tween|null>(null),finishSegment=useRef<(()=>void)|null>(null),reducedRef=useRef(reduced)
+  const active=useRef(false),promoOverride=useRef(false),focusTween=useRef<gsap.core.Tween|null>(null),smooth=useRef(progress.current),smoothLook=useRef(0),tween=useRef<gsap.core.Tween|null>(null),finishSegment=useRef<(()=>void)|null>(null),reducedRef=useRef(reduced)
   const dimensions=useRef(size),galleryRef=useRef({index:galleryIndex,count:galleryCount}),prevFocus=useRef<FocusSubPoseId|null>(null),placeRef=useRef(place),onTransitionRef=useRef(onTransition)
   const focusTarget=useRef<FocusSubPoseId|null>(focusId)
   dimensions.current=size;reducedRef.current=reduced;galleryRef.current={index:galleryIndex,count:galleryCount};placeRef.current=place;onTransitionRef.current=onTransition
@@ -99,7 +99,7 @@ export const CameraController = forwardRef<CameraHandle,{place:Place;busy:boolea
           })
         }
         // Resize, reduced motion and background recovery share one deterministic endpoint.
-        apply(stablePose(target,progress.current,aspect(),galleryRef.current.index,galleryRef.current.count));smooth.current=progress.current
+        apply(stablePose(target,progress.current,aspect(),galleryRef.current.index,galleryRef.current.count));smooth.current=progress.current;smoothLook.current=0
         onTransitionRef.current({from,to:target,phase:'complete',progress:1});commit()
       }finally{active.current=false;onTransitionRef.current(null)}
     },
@@ -110,7 +110,7 @@ export const CameraController = forwardRef<CameraHandle,{place:Place;busy:boolea
       focusTween.current?.kill();focusTween.current=null
       prevFocus.current=null
       apply(stablePose(target,progress.current,aspect(),galleryRef.current.index,galleryRef.current.count))
-      smooth.current=progress.current
+      smooth.current=progress.current;smoothLook.current=0
       onTransitionRef.current(null)
     },
     glidePromo:async(from,to,durationSec,ease='power1.inOut')=>{
@@ -178,8 +178,11 @@ export const CameraController = forwardRef<CameraHandle,{place:Place;busy:boolea
   useFrame((_,dt)=>{
     if(promoOverride.current)return
     if(!active.current&&!busy&&place==='hall'){
-      smooth.current=reduced?progress.current:smooth.current+(progress.current-smooth.current)*(1-Math.exp(-Math.min(dt,.1)*9))
-      apply(hallPose(smooth.current,aspect()))
+      const alpha=reduced?1:1-Math.exp(-Math.min(dt,.1)*9)
+      smooth.current=reduced?progress.current:smooth.current+(progress.current-smooth.current)*alpha
+      const targetLook=hallLook?hallLook.current:0
+      smoothLook.current=reduced?targetLook:smoothLook.current+(targetLook-smoothLook.current)*alpha
+      apply(hallPose(smooth.current,aspect(),smoothLook.current))
     }
     if(!active.current&&!busy&&place==='gallery'&&aspect()<=.8){
       const target=galleryPose(galleryIndex,galleryCount),alpha=reduced?1:1-Math.exp(-Math.min(dt,.1)*12)

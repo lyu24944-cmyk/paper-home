@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useI18n } from '../lib/i18n'
 import {
   createResumableVideoUpload,
   processAndUploadImage,
@@ -27,6 +28,7 @@ export function ImageListPicker({
   onAssetUploaded: (asset: MediaAsset) => void
   onUploadStateChange?: (busy: boolean) => void
 }) {
+  const { tr, locale } = useI18n()
   const inputRef = useRef<HTMLInputElement>(null)
   const mountedRef = useRef(true)
   const latestAssetIdsRef = useRef(assetIds)
@@ -60,7 +62,11 @@ export function ImageListPicker({
     setUploading(true)
     onUploadStateChange?.(true)
     setError('')
-    setStatus(`正在压缩并上传 ${files.length} 张图片…`)
+    setStatus(
+      locale === 'en'
+        ? `Compressing & uploading ${files.length} image(s)…`
+        : `正在压缩并上传 ${files.length} 张图片…`,
+    )
 
     const added: string[] = []
     const errors: string[] = []
@@ -73,7 +79,7 @@ export function ImageListPicker({
         onAssetUploaded(asset)
         added.push(asset.id)
       } catch (err) {
-        errors.push(`${file.name}：${err instanceof Error ? err.message : '上传失败'}`)
+        errors.push(`${file.name}: ${err instanceof Error ? err.message : tr('上传失败', 'Upload failed')}`)
       }
     }
 
@@ -82,13 +88,17 @@ export function ImageListPicker({
     if (added.length > 0) {
       const current = latestAssetIdsRef.current
       onChange(multiple ? [...current, ...added] : [added[added.length - 1]])
-      setStatus(`已上传 ${added.length} 张图片（已自动生成展示图与缩略图）。`)
+      setStatus(
+        locale === 'en'
+          ? `Uploaded ${added.length} image(s) (display & thumbnail ready).`
+          : `已上传 ${added.length} 张图片（已自动生成展示图与缩略图）。`,
+      )
     } else {
       setStatus('')
     }
 
     if (errors.length > 0) {
-      setError(errors.join('；'))
+      setError(errors.join(locale === 'en' ? '; ' : '；'))
     }
 
     if (inputRef.current) inputRef.current.value = ''
@@ -111,7 +121,15 @@ export function ImageListPicker({
           onClick={() => inputRef.current?.click()}
         >
           <Icon name="plus" size={15} />
-          <span>{uploading ? '上传中…' : multiple ? '添加图片' : assetIds.length ? '替换图片' : '选择图片'}</span>
+          <span>
+            {uploading
+              ? tr('上传中…', 'Uploading…')
+              : multiple
+                ? tr('添加图片', 'Add Images')
+                : assetIds.length
+                  ? tr('替换图片', 'Replace Image')
+                  : tr('选择图片', 'Choose Image')}
+          </span>
         </button>
         <input
           ref={inputRef}
@@ -130,12 +148,12 @@ export function ImageListPicker({
         <div className="picked-image-grid">
           {assetIds.map((id, idx) => (
             <div key={id} className="picked-image-card">
-              <SignedImage assetId={id} scope="admin" variant="thumb" alt={`已选图片 ${idx + 1}`} />
+              <SignedImage assetId={id} scope="admin" variant="thumb" alt={tr(`已选图片 ${idx + 1}`, `Selected image ${idx + 1}`)} />
               <div className="picked-image-actions">
                 {multiple && idx > 0 && (
                   <button
                     type="button"
-                    aria-label="前移图片"
+                    aria-label={tr('前移图片', 'Move image earlier')}
                     disabled={disabled || uploading}
                     onClick={() => {
                       const next = [...assetIds]
@@ -148,11 +166,11 @@ export function ImageListPicker({
                 )}
                 <button
                   type="button"
-                  aria-label="移除图片"
+                  aria-label={tr('移除图片', 'Remove image')}
                   disabled={disabled || uploading}
                   onClick={() => onChange(assetIds.filter((x) => x !== id))}
                 >
-                  移除
+                  {tr('移除', 'Remove')}
                 </button>
               </div>
             </div>
@@ -178,6 +196,7 @@ export function VideoUploadPicker({
   onAssetUploaded: (asset: MediaAsset) => void
   onUploadStateChange?: (busy: boolean) => void
 }) {
+  const { tr, locale } = useI18n()
   const generation = useRef(0)
   const validationAbort = useRef<AbortController | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -219,7 +238,7 @@ export function VideoUploadPicker({
     setPhase('checking')
     setProgress(0)
     setError('')
-    setStatus('正在检查视频格式、大小与可播放性…')
+    setStatus(tr('正在检查视频格式、大小与可播放性…', 'Checking video format, size & playability…'))
     busyRef.current = true
     onUploadStateChange?.(true)
 
@@ -230,7 +249,9 @@ export function VideoUploadPicker({
           setPhase('uploading')
           setProgress(pct)
           setStatus(
-            `可恢复上传中 ${pct}%（${(uploaded / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB）`,
+            locale === 'en'
+              ? `Resumable upload ${pct}% (${(uploaded / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB)`
+              : `可恢复上传中 ${pct}%（${(uploaded / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB）`,
           )
         },
         onSuccess: (asset) => {
@@ -240,7 +261,7 @@ export function VideoUploadPicker({
           setPendingFile(null)
           setPhase('idle')
           setProgress(100)
-          setStatus('视频上传并校验完成。')
+          setStatus(tr('视频上传并校验完成。', 'Video uploaded & verified.'))
           setError('')
           onAssetUploaded(asset)
           onChange(asset.id)
@@ -262,7 +283,7 @@ export function VideoUploadPicker({
       }
       controllerRef.current = controller
       setPhase('uploading')
-      setStatus('开始上传视频…')
+      setStatus(tr('开始上传视频…', 'Starting video upload…'))
       controller.start()
     } catch (err) {
       if (!valid()) return
@@ -270,7 +291,7 @@ export function VideoUploadPicker({
       busyRef.current = false
       setPhase('error')
       setStatus('')
-      setError(err instanceof Error ? err.message : '视频校验失败。')
+      setError(err instanceof Error ? err.message : tr('视频校验失败。', 'Video validation failed.'))
       onUploadStateChange?.(false)
     }
   }
@@ -285,7 +306,7 @@ export function VideoUploadPicker({
     setPhase('idle')
     setProgress(0)
     setError('')
-    setStatus('已取消本次视频上传（其余文字内容已保留）。')
+    setStatus(tr('已取消本次视频上传（其余文字内容已保留）。', 'Video upload cancelled (your text edits are kept).'))
     onUploadStateChange?.(false)
     if (inputRef.current) inputRef.current.value = ''
     await controller?.cancel()
@@ -296,8 +317,8 @@ export function VideoUploadPicker({
     <div className="media-picker-block">
       <div className="media-picker-head">
         <div>
-          <strong>演示视频（可选）</strong>
-          <small>支持 MP4 / WebM，单个上限 50 MB；仅在点击播放后加载</small>
+          <strong>{tr('演示视频（可选）', 'Demo Video (Optional)')}</strong>
+          <small>{tr('支持 MP4 / WebM，单个上限 50 MB；仅在点击播放后加载', 'MP4 / WebM up to 50 MB; loaded only when clicked')}</small>
         </div>
         <button
           type="button"
@@ -306,7 +327,7 @@ export function VideoUploadPicker({
           onClick={() => inputRef.current?.click()}
         >
           <Icon name="play" size={15} />
-          <span>{videoAssetId ? '更换视频' : '选择视频'}</span>
+          <span>{videoAssetId ? tr('更换视频', 'Replace Video') : tr('选择视频', 'Choose Video')}</span>
         </button>
         <input
           ref={inputRef}
@@ -329,7 +350,7 @@ export function VideoUploadPicker({
           <div className="video-upload-bar-row">
             <span role="status">{status}</span>
             <button type="button" className="cms-ghost-btn" onClick={() => void handleCancel()}>
-              取消上传
+              {tr('取消上传', 'Cancel Upload')}
             </button>
           </div>
         </div>
@@ -341,10 +362,10 @@ export function VideoUploadPicker({
           {pendingFile && (
             <div className="video-upload-bar-row">
               <button type="button" className="cms-ghost-btn" onClick={() => void beginUpload(pendingFile)}>
-                重试上传（同一浏览器断点续传）
+                {tr('重试上传（同一浏览器断点续传）', 'Retry Upload (resumable)')}
               </button>
               <button type="button" className="cms-ghost-btn" onClick={() => void handleCancel()}>
-                放弃该视频
+                {tr('放弃该视频', 'Discard Video')}
               </button>
             </div>
           )}
@@ -358,10 +379,10 @@ export function VideoUploadPicker({
       {videoAssetId && (
         <div className="picked-video-chip">
           <span>
-            已关联视频：
-            {assetInfo?.originalFilename || '演示视频'}
+            {tr('已关联视频：', 'Attached video: ')}
+            {assetInfo?.originalFilename || tr('演示视频', 'Demo Video')}
             {assetInfo?.byteSize ? ` · ${(assetInfo.byteSize / 1048576).toFixed(1)} MB` : ''}
-            {assetInfo?.durationSec ? ` · ${Math.round(assetInfo.durationSec)} 秒` : ''}
+            {assetInfo?.durationSec ? (locale === 'en' ? ` · ${Math.round(assetInfo.durationSec)}s` : ` · ${Math.round(assetInfo.durationSec)} 秒`) : ''}
           </span>
           <button
             type="button"
@@ -369,7 +390,7 @@ export function VideoUploadPicker({
             disabled={phase === 'uploading'}
             onClick={() => onChange(null)}
           >
-            移除视频
+            {tr('移除视频', 'Remove Video')}
           </button>
         </div>
       )}

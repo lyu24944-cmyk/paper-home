@@ -1,4 +1,5 @@
 import { create as createQrCode } from 'qrcode'
+import type { Locale } from './i18n'
 import type { AtmospherePreset, Place, WeatherMode } from '../types/content'
 
 export interface PostcardInput {
@@ -15,6 +16,7 @@ export interface PostcardInput {
   deepLinkHash: string
   includeQr: boolean
   date?: Date
+  locale?: Locale
 }
 
 export interface RenderedPostcard {
@@ -29,6 +31,7 @@ const CARD_H = 1560
 
 interface AtmoTheme {
   atmoLabel: string
+  atmoLabelEn: string
   stampColor: string
   stampSecondary: string
   accentWash: string
@@ -39,6 +42,7 @@ interface AtmoTheme {
 const ATMO_THEMES: Record<AtmospherePreset, AtmoTheme> = {
   dawn: {
     atmoLabel: '晨雾微凉',
+    atmoLabelEn: 'Misty Dawn',
     stampColor: '#4a6b7c',
     stampSecondary: '#6a8b9c',
     accentWash: 'rgba(207, 220, 224, 0.24)',
@@ -47,6 +51,7 @@ const ATMO_THEMES: Record<AtmospherePreset, AtmoTheme> = {
   },
   daylight: {
     atmoLabel: '晴日暖风',
+    atmoLabelEn: 'Warm Daylight',
     stampColor: '#365840',
     stampSecondary: '#587c62',
     accentWash: 'rgba(235, 241, 232, 0.28)',
@@ -55,6 +60,7 @@ const ATMO_THEMES: Record<AtmospherePreset, AtmoTheme> = {
   },
   golden: {
     atmoLabel: '夕照晚霞',
+    atmoLabelEn: 'Golden Sunset',
     stampColor: '#a65a2a',
     stampSecondary: '#c77a42',
     accentWash: 'rgba(255, 220, 178, 0.22)',
@@ -63,6 +69,7 @@ const ATMO_THEMES: Record<AtmospherePreset, AtmoTheme> = {
   },
   night: {
     atmoLabel: '夜灯长明',
+    atmoLabelEn: 'Night Glow',
     stampColor: '#2d445c',
     stampSecondary: '#d1984d',
     accentWash: 'rgba(204, 218, 234, 0.2)',
@@ -78,19 +85,58 @@ export const POSTCARD_PRESET_QUOTES: string[] = [
   '每一扇门背后，都留着一点慢慢打磨的痕迹。',
 ]
 
+export const POSTCARD_PRESET_QUOTES_EN: string[] = [
+  'Push open the courtyard gate and linger awhile among paper and light.',
+  'Each finished piece lives in its own room while the breeze passes the window.',
+  'Whenever the green desk lamp is lit, you are welcome to step inside.',
+  'Behind every door lies a trace of patient craft.',
+]
+
 export function defaultPostcardMessage({
   room,
   atmospherePreset,
   weather,
   itemLabel,
   nowNote,
+  locale = 'zh',
 }: {
   room: Place
   atmospherePreset: AtmospherePreset
   weather: WeatherMode
   itemLabel?: string | null
   nowNote?: string | null
+  locale?: Locale
 }): string {
+  if (locale === 'en') {
+    if (itemLabel && itemLabel.trim()) {
+      return `Flipping through "${itemLabel.trim()}" inside the cottage, saving this quiet moment.`
+    }
+    if (weather === 'rain' && room !== 'yard') {
+      return 'Gentle rain outside the panes—listening to the quiet drizzle indoors.'
+    }
+    if (weather === 'rain' && room === 'yard') {
+      return 'Soft rain in the courtyard; just past the front door waits a warm corridor.'
+    }
+    if (atmospherePreset === 'night') {
+      return 'As night settles in, the green brass desk lamp glows warmly for visitors.'
+    }
+    if (atmospherePreset === 'golden') {
+      return 'Sunset stretches the old tree shadows while warm amber light grazes the glass.'
+    }
+    if (atmospherePreset === 'dawn') {
+      return 'Cool morning mist lingers over the porch steps and wooden plaque.'
+    }
+    if (room === 'blank' && nowNote) {
+      return nowNote
+    }
+    if (room === 'study') {
+      return 'Opening the study notes to revisit the choices and experiments along the way.'
+    }
+    if (room === 'gallery') {
+      return 'Framed works along the gallery wall, catching the afternoon light.'
+    }
+    return 'Push open the door and wander through works, notes, and quiet corners.'
+  }
   if (itemLabel && itemLabel.trim()) {
     return `在小屋里翻看《${itemLabel.trim()}》，记下这一刻的微光。`
   }
@@ -142,6 +188,7 @@ function wrapMixedText(
   text: string,
   maxWidth: number,
   maxLines: number,
+  fallbackQuote: string,
 ): string[] {
   const paragraphs = text
     .replace(/\r\n/g, '\n')
@@ -158,23 +205,29 @@ function wrapMixedText(
       const ch = chars[i]
       const candidate = current + ch
       if (ctx.measureText(candidate).width > maxWidth && current.length > 0) {
-        lines.push(current)
+        const lastSpace = current.lastIndexOf(' ')
+        if (lastSpace > 0 && /[A-Za-z0-9]/.test(ch)) {
+          lines.push(current.slice(0, lastSpace).trimEnd())
+          current = (current.slice(lastSpace + 1) + ch).trimStart()
+        } else {
+          lines.push(current.trimEnd())
+          current = ch === ' ' ? '' : ch
+        }
         if (lines.length >= maxLines) {
           truncated = true
           break
         }
-        current = ch
       } else {
         current = candidate
       }
     }
     if (truncated) break
-    if (current) {
+    if (current.trim()) {
       if (lines.length >= maxLines) {
         truncated = true
         break
       }
-      lines.push(current)
+      lines.push(current.trim())
       if (lines.length >= maxLines && pIdx < paragraphs.length - 1) {
         truncated = true
         break
@@ -190,7 +243,7 @@ function wrapMixedText(
     lines[maxLines - 1] = `${last}…`
   }
 
-  return lines.length > 0 ? lines : [POSTCARD_PRESET_QUOTES[0]]
+  return lines.length > 0 ? lines : [fallbackQuote]
 }
 
 function drawRoundedRectPath(
@@ -291,6 +344,7 @@ function drawPostageAndPostmark(
   weather: WeatherMode,
   roomName: string,
   dateStr: string,
+  locale: Locale,
 ) {
   // Perforated miniature house stamp at top-right over photo edge
   const sx = 982
@@ -386,14 +440,22 @@ function drawPostageAndPostmark(
   ctx.stroke()
   ctx.setLineDash([])
 
-  const weatherBadge = weather === 'rain' ? `${theme.atmoLabel.slice(0, 2)}细雨` : theme.atmoLabel
+  const atmoLabel = locale === 'en' ? theme.atmoLabelEn : theme.atmoLabel
+  const weatherBadge =
+    locale === 'en'
+      ? weather === 'rain'
+        ? `${atmoLabel} · Rain`
+        : atmoLabel
+      : weather === 'rain'
+        ? `${theme.atmoLabel.slice(0, 2)}细雨`
+        : theme.atmoLabel
   ctx.fillStyle = theme.stampColor
   ctx.textAlign = 'center'
-  ctx.font = '600 15px "KaiTi", "STKaiti", serif'
+  ctx.font = locale === 'en' ? '600 13px Georgia, serif' : '600 15px "KaiTi", "STKaiti", serif'
   ctx.fillText(weatherBadge, 0, -20)
   ctx.font = '600 15px ui-monospace, SFMono-Regular, Menlo, sans-serif'
   ctx.fillText(dateStr, 0, 5)
-  ctx.font = '600 15px "KaiTi", "STKaiti", serif'
+  ctx.font = locale === 'en' ? '600 14px Georgia, serif' : '600 15px "KaiTi", "STKaiti", serif'
   ctx.fillText(roomName, 0, 30)
   ctx.restore()
 }
@@ -438,15 +500,17 @@ function drawQrCode(
 }
 
 export async function renderPostcardCanvas(input: PostcardInput): Promise<RenderedPostcard> {
+  const locale = input.locale ?? 'zh'
   const canvas = document.createElement('canvas')
   canvas.width = CARD_W
   canvas.height = CARD_H
   const ctx = canvas.getContext('2d')
   if (!ctx) {
-    throw new Error('无法创建明信片画布上下文')
+    throw new Error(locale === 'en' ? 'Unable to create postcard canvas context' : '无法创建明信片画布上下文')
   }
 
   const theme = ATMO_THEMES[input.atmospherePreset]
+  const atmoLabel = locale === 'en' ? theme.atmoLabelEn : theme.atmoLabel
   const dateStr = formatPostmarkDate(input.date ?? new Date())
 
   // Wait briefly for handwriting font when supported
@@ -516,12 +580,12 @@ export async function renderPostcardCanvas(input: PostcardInput): Promise<Render
   ctx.fillRect(photoX, photoY + photoH - 130, photoW, 130)
 
   // Bottom-right photo caption
-  const weatherWord = input.weather === 'rain' ? ' · 细雨' : ''
+  const weatherWord = input.weather === 'rain' ? (locale === 'en' ? ' · Rain' : ' · 细雨') : ''
   ctx.fillStyle = 'rgba(252, 250, 244, 0.92)'
   ctx.font = '500 18px ui-monospace, SFMono-Regular, Menlo, sans-serif'
   ctx.textAlign = 'right'
   ctx.fillText(
-    `${input.roomName} · ${theme.atmoLabel}${weatherWord}`,
+    `${input.roomName} · ${atmoLabel}${weatherWord}`,
     photoX + photoW - 22,
     photoY + photoH - 20,
   )
@@ -532,7 +596,7 @@ export async function renderPostcardCanvas(input: PostcardInput): Promise<Render
   ctx.strokeRect(photoX, photoY, photoW, photoH)
 
   // Overlay stamp & postmark on top-right
-  drawPostageAndPostmark(ctx, theme, input.weather, input.roomName, dateStr)
+  drawPostageAndPostmark(ctx, theme, input.weather, input.roomName, dateStr, locale)
 
   // Editorial text & greeting section
   const textX = 86
@@ -540,10 +604,12 @@ export async function renderPostcardCanvas(input: PostcardInput): Promise<Render
 
   // Room + optional item pill label
   const tagText = input.itemLabel?.trim()
-    ? `${input.roomName} · 《${input.itemLabel.trim()}》`
-    : `${input.roomName} · ${theme.atmoLabel}${input.weather === 'rain' ? ' · 细雨' : ''}`
+    ? locale === 'en'
+      ? `${input.roomName} · "${input.itemLabel.trim()}"`
+      : `${input.roomName} · 《${input.itemLabel.trim()}》`
+    : `${input.roomName} · ${atmoLabel}${weatherWord}`
 
-  ctx.font = '500 21px "KaiTi", "STKaiti", serif'
+  ctx.font = locale === 'en' ? '500 20px Georgia, serif' : '500 21px "KaiTi", "STKaiti", serif'
   const pillWidth = Math.min(matW - 40, ctx.measureText(tagText).width + 40)
   ctx.fillStyle = 'rgba(54, 88, 64, 0.09)'
   ctx.beginPath()
@@ -557,8 +623,9 @@ export async function renderPostcardCanvas(input: PostcardInput): Promise<Render
 
   // Main greeting copy
   ctx.fillStyle = '#29362e'
-  ctx.font = '44px "HomeHand", "KaiTi", "STKaiti", Georgia, serif'
-  const bodyLines = wrapMixedText(ctx, input.message, matW - 56, 4)
+  ctx.font = locale === 'en' ? '38px Georgia, "HomeHand", serif' : '44px "HomeHand", "KaiTi", "STKaiti", Georgia, serif'
+  const fallbackQuote = locale === 'en' ? POSTCARD_PRESET_QUOTES_EN[0] : POSTCARD_PRESET_QUOTES[0]
+  const bodyLines = wrapMixedText(ctx, input.message, matW - 56, 4, fallbackQuote)
   for (const line of bodyLines) {
     ctx.fillText(line, textX, cursorY)
     cursorY += 64
@@ -608,9 +675,9 @@ export async function renderPostcardCanvas(input: PostcardInput): Promise<Render
     const drewQr = drawQrCode(ctx, input.deepLinkUrl, qrX, qrY, qrSize)
     if (drewQr) {
       ctx.fillStyle = '#536154'
-      ctx.font = '500 14px "KaiTi", "STKaiti", serif'
+      ctx.font = locale === 'en' ? '500 13px Georgia, serif' : '500 14px "KaiTi", "STKaiti", serif'
       ctx.textAlign = 'center'
-      ctx.fillText('扫码直达此刻房间', qrX + qrSize / 2, qrY + qrSize + 22)
+      ctx.fillText(locale === 'en' ? 'Scan to revisit this room' : '扫码直达此刻房间', qrX + qrSize / 2, qrY + qrSize + 22)
     }
   }
 

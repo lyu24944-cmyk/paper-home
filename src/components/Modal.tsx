@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import { useI18n } from '../lib/i18n'
 import { playSound } from '../lib/sound'
 import { Icon } from './Icon'
 
@@ -15,6 +16,7 @@ export function Modal({
   children: ReactNode
   className?: string
 }) {
+  const { tr } = useI18n()
   const dialog = useRef<HTMLDialogElement>(null)
   const closingProgrammaticallyRef = useRef(false)
 
@@ -58,7 +60,7 @@ export function Modal({
         className="icon-button dialog-close"
         data-sound="modal-close"
         onClick={close}
-        aria-label="关闭"
+        aria-label={tr('关闭', 'Close')}
         type="button"
       >
         <Icon name="close" />

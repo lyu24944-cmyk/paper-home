@@ -43,6 +43,7 @@ export function Icon({ name, size = 22 }: { name: string; size?: number }) {
     sfxOff: <><path d="M12 4a5 5 0 0 0-5 5v3l-1.5 2.5h13L17 12V9a5 5 0 0 0-5-5z" /><path d="m4 4 16 16" /></>,
     postcard: <><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.8l1.2-1.8h5L15.7 6h1.8A2.5 2.5 0 0 1 20 8.5v9A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5z" /><circle cx="12" cy="12.5" r="3.2" /></>,
     download: <><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 19h14" /></>,
+    globe: <><circle cx="12" cy="12" r="9" /><path d="M3.5 9h17M3.5 15h17M12 3a13 13 0 0 0 0 18M12 3a13 13 0 0 1 0 18" /></>,
   }
   return (
     <svg

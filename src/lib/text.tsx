@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { Locale } from './i18n'
 
 export function safeExternalUrl(raw: string): string | null {
   const trimmed = raw.trim()
@@ -284,10 +285,18 @@ export function renderParagraphs(text: string): ReactNode[] {
   return nodes
 }
 
-export function buildStatusLabel(item: {
-  isPublished: boolean
-  hasUnpublishedChanges: boolean
-}): string {
+export function buildStatusLabel(
+  item: {
+    isPublished: boolean
+    hasUnpublishedChanges: boolean
+  },
+  locale: Locale = 'zh',
+): string {
+  if (locale === 'en') {
+    if (!item.isPublished) return 'Draft'
+    if (item.hasUnpublishedChanges) return 'Published (unsaved edits)'
+    return 'Published'
+  }
   if (!item.isPublished) return '草稿'
   if (item.hasUnpublishedChanges) return '已发布（有未发布改动）'
   return '已发布'

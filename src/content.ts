@@ -1,3 +1,4 @@
+import type { Locale } from './lib/i18n'
 import type { Place, RoomMeta } from './types/content'
 
 export type { Place }
@@ -11,6 +12,26 @@ export const rooms: RoomMeta[] = [
   { id: 'blank', name: '关于我', note: '认识小屋的主人', icon: 'spark' },
 ]
 
-export function roomName(place: Place): string {
+const roomsEn: Record<Place, { name: string; note: string }> = {
+  yard: { name: 'Courtyard', note: 'Where the story begins' },
+  hall: { name: 'Corridor', note: 'Push open a door you like' },
+  study: { name: 'Study Notes', note: 'Process, trials & decisions' },
+  gallery: { name: 'Gallery', note: 'Finished works & outcomes' },
+  blank: { name: 'About Me', note: 'Meet the cottage keeper' },
+}
+
+export function getLocalizedRoom(place: Place, locale: Locale = 'zh'): RoomMeta {
+  const base = rooms.find((r) => r.id === place) ?? rooms[0]
+  if (locale !== 'en') return base
+  const en = roomsEn[base.id]
+  return { ...base, name: en.name, note: en.note }
+}
+
+export function getLocalizedRooms(locale: Locale = 'zh'): RoomMeta[] {
+  return locale === 'en' ? rooms.map((r) => ({ ...r, ...roomsEn[r.id] })) : rooms
+}
+
+export function roomName(place: Place, locale: Locale = 'zh'): string {
+  if (locale === 'en') return roomsEn[place]?.name ?? 'My Cottage'
   return rooms.find((r) => r.id === place)?.name ?? '我的小屋'
 }

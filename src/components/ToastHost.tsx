@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useI18n } from '../lib/i18n'
 import { Icon } from './Icon'
 
 export interface ToastItem {
@@ -14,6 +15,7 @@ export function ToastHost({
   toasts: ToastItem[]
   onDismiss: (id: number) => void
 }) {
+  const { tr } = useI18n()
   const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -55,7 +57,7 @@ export function ToastHost({
             className="toast-dismiss"
             data-sound="ui-tap"
             onClick={() => onDismiss(toast.id)}
-            aria-label="关闭提示"
+            aria-label={tr('关闭提示', 'Dismiss notification')}
           >
             <Icon name="close" size={13} />
           </button>

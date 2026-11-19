@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { useI18n } from '../lib/i18n'
 import {
   cleanupMediaAssetsApi,
   deleteProjectApi,
@@ -44,6 +45,7 @@ export function ProjectEditorModal({
   onConflict: (conflict: ConflictContext) => void
   onClose: () => void
 }) {
+  const { locale, tr } = useI18n()
   const alive = useRef(true)
   useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
   const uid = useId()
@@ -136,9 +138,14 @@ export function ProjectEditorModal({
   }
 
   function validateForSave(draft: ProjectPayload): string | null {
-    if (uploadBusy) return '尚有图片或视频正在上传中，请等待完成或先取消上传后再保存。'
+    if (uploadBusy) {
+      return tr(
+        '尚有图片或视频正在上传中，请等待完成或先取消上传后再保存。',
+        'Images or video are still uploading—wait for completion or cancel them before saving.',
+      )
+    }
     if (draft.demoUrl && !safeExternalUrl(draft.demoUrl)) {
-      return '访问链接格式无效，请以 http:// 或 https:// 开头。'
+      return tr('访问链接格式无效，请以 http:// 或 https:// 开头。', 'Demo URL must start with http:// or https://.')
     }
     return null
   }
@@ -147,19 +154,21 @@ export function ProjectEditorModal({
     const baseErr = validateForSave(draft)
     if (baseErr) return baseErr
     const missing: string[] = []
-    if (!draft.title) missing.push('作品标题')
-    if (!draft.summary) missing.push('作品简介')
-    if (!draft.body) missing.push('作品正文')
-    if (!draft.coverAssetId) missing.push('封面图')
+    if (!draft.title) missing.push(tr('作品标题', 'Title'))
+    if (!draft.summary) missing.push(tr('作品简介', 'Summary'))
+    if (!draft.body) missing.push(tr('作品正文', 'Body'))
+    if (!draft.coverAssetId) missing.push(tr('封面图', 'Cover Image'))
     if (missing.length > 0) {
-      return `发布前请补全必填信息：${missing.join('、')}。`
+      return locale === 'en'
+        ? `Before publishing, please complete: ${missing.join(', ')}.`
+        : `发布前请补全必填信息：${missing.join('、')}。`
     }
     const referenced = [draft.coverAssetId, ...draft.galleryAssetIds, draft.videoAssetId].filter(
       (id): id is string => Boolean(id),
     )
     const unready = referenced.filter((id) => assets[id] && assets[id].status !== 'ready')
     if (unready.length > 0) {
-      return '部分素材尚未上传就绪，请等待上传完成后再发布。'
+      return tr('部分素材尚未上传就绪，请等待上传完成后再发布。', 'Some media files are still processing—please wait before publishing.')
     }
     return null
   }
@@ -172,26 +181,26 @@ export function ProjectEditorModal({
     }
     const localDraft = buildDraftPayload()
     onConflict({
-      title: localDraft.title || current?.draft.title || '作品编辑',
+      title: localDraft.title || current?.draft.title || tr('作品编辑', 'Project Editor'),
       localCopyText: [
-        `标题：${title}`,
-        `简介：${summary}`,
-        `链接：${demoUrl}`,
+        `${tr('标题：', 'Title: ')}${title}`,
+        `${tr('简介：', 'Summary: ')}${summary}`,
+        `${tr('链接：', 'Link: ')}${demoUrl}`,
         '',
         body,
       ].join('\n'),
       cloudSummaryLines: [
-        `云端标题：${latest.draft.title || '（空）'}`,
-        `云端状态：${buildStatusLabel(latest)} · 版本 v${latest.version}`,
-        `云端简介：${latest.draft.summary || '（空）'}`,
-        `正文摘要：${latest.draft.body.slice(0, 140) || '（空）'}`,
+        `${tr('云端标题：', 'Latest title: ')}${latest.draft.title || tr('（空）', '(empty)')}`,
+        `${tr('云端状态：', 'Status: ')}${buildStatusLabel(latest, locale)} · v${latest.version}`,
+        `${tr('云端简介：', 'Summary: ')}${latest.draft.summary || tr('（空）', '(empty)')}`,
+        `${tr('正文摘要：', 'Excerpt: ')}${latest.draft.body.slice(0, 140) || tr('（空）', '(empty)')}`,
       ],
       onUseCloud: () => {
         if (!alive.current) return
         syncFromProject(latest)
         onSaved(latest, 0)
         setSaveError('')
-        setSaveStatus('已载入云端最新版本。')
+        setSaveStatus(tr('已载入云端最新版本。', 'Loaded latest version.'))
       },
     })
   }
@@ -223,8 +232,8 @@ export function ProjectEditorModal({
       if (saved) {
         setSaveStatus(
           isCloudConfigured
-            ? '草稿已保存到云端（访客仍只看到已发布版本）。'
-            : '草稿已保存到本机（访客仍只看到已发布版本）。',
+            ? tr('草稿已保存到云端（访客仍只看到已发布版本）。', 'Draft saved to cloud (visitors still see the published version).')
+            : tr('草稿已保存到本机（访客仍只看到已发布版本）。', 'Draft saved locally (visitors still see the published version).'),
         )
       }
     } catch (err) {
@@ -232,7 +241,7 @@ export function ProjectEditorModal({
       if (err instanceof ConflictError) {
         raiseProjectConflict(err as ConflictError<AdminProject>)
       } else {
-        setSaveError(err instanceof Error ? err.message : '保存草稿失败，你的输入已保留。')
+        setSaveError(err instanceof Error ? err.message : tr('保存草稿失败，你的输入已保留。', 'Failed to save draft; your edits are preserved.'))
       }
     } finally {
       setSaving(false)
@@ -260,7 +269,9 @@ export function ProjectEditorModal({
         setCurrent(pubRes.item)
         onSaved(pubRes.item, pubRes.pendingCleanupCount, 'publish')
         setSaveStatus(
-          wasPublished ? '已发布更新，访客目录与三维展示已同步。' : '作品已发布到作品室。',
+          wasPublished
+            ? tr('已发布更新，访客目录与三维展示已同步。', 'Published update—directory & 3D gallery synced.')
+            : tr('作品已发布到作品室。', 'Project published to Gallery.'),
         )
       }
     } catch (err) {
@@ -268,7 +279,7 @@ export function ProjectEditorModal({
       if (err instanceof ConflictError) {
         raiseProjectConflict(err as ConflictError<AdminProject>)
       } else {
-        setSaveError(err instanceof Error ? err.message : '发布失败，草稿输入已保留。')
+        setSaveError(err instanceof Error ? err.message : tr('发布失败，草稿输入已保留。', 'Publish failed; draft edits are preserved.'))
       }
     } finally {
       setSaving(false)
@@ -286,14 +297,19 @@ export function ProjectEditorModal({
       if (res.item) {
         setCurrent(res.item)
         onSaved(res.item, res.pendingCleanupCount, 'unpublish')
-        setSaveStatus('已撤回发布，访客不再看到此作品；草稿内容仍已保留。')
+        setSaveStatus(
+          tr(
+            '已撤回发布，访客不再看到此作品；草稿内容仍已保留。',
+            'Unpublished from public view; your draft is kept safely.',
+          ),
+        )
       }
     } catch (err) {
       if (!alive.current) return
       if (err instanceof ConflictError) {
         raiseProjectConflict(err as ConflictError<AdminProject>)
       } else {
-        setSaveError(err instanceof Error ? err.message : '撤回发布失败，请重试。')
+        setSaveError(err instanceof Error ? err.message : tr('撤回发布失败，请重试。', 'Failed to unpublish, please retry.'))
       }
     } finally {
       setSaving(false)
@@ -316,7 +332,7 @@ export function ProjectEditorModal({
         setConfirmDeleteOpen(false)
         raiseProjectConflict(err as ConflictError<AdminProject>)
       } else {
-        setDeleteError(err instanceof Error ? err.message : '删除失败，请重试。')
+        setDeleteError(err instanceof Error ? err.message : tr('删除失败，请重试。', 'Delete failed, please retry.'))
       }
     } finally {
       setSaving(false)
@@ -334,56 +350,62 @@ export function ProjectEditorModal({
       <Modal
         open={open}
         close={handleClose}
-        label={current ? '编辑作品' : '添加作品'}
+        label={current ? tr('编辑作品', 'Edit Project') : tr('添加作品', 'Add Project')}
         className="cms-editor-dialog"
       >
         <div className="detail-meta-row">
-          <span className="detail-kind-tag">作品室管理</span>
+          <span className="detail-kind-tag">{tr('作品室管理', 'Gallery Studio')}</span>
           <span className={`status-badge ${current?.isPublished ? 'live' : 'draft'}`}>
-            {current ? `${buildStatusLabel(current)} · v${current.version}` : '新建草稿'}
+            {current ? `${buildStatusLabel(current, locale)} · v${current.version}` : tr('新建草稿', 'New Draft')}
           </span>
         </div>
 
-        <h2>{current ? '编辑作品' : '添加新作品'}</h2>
+        <h2>{current ? tr('编辑作品', 'Edit Project') : tr('添加新作品', 'Add New Project')}</h2>
         <p className="dialog-intro">
           {current?.isPublished
-            ? '保存草稿仅更新修改草稿，访客继续查看已发布版本；点击“发布更新”后对外生效。'
-            : '新建作品默认为草稿，预览确认后再点击发布。'}
+            ? tr(
+                '保存草稿仅更新修改草稿，访客继续查看已发布版本；点击“发布更新”后对外生效。',
+                'Saving a draft updates only your working copy; click "Publish Update" to go live.',
+              )
+            : tr(
+                '新建作品默认为草稿，预览确认后再点击发布。',
+                'New projects start as drafts—preview and publish when ready.',
+              )}
         </p>
 
         <div className="cms-editor-columns">
           <div className="cms-editor-main cms-form-grid">
             <div className="cms-field">
               <div className="cms-field-head">
-                <label htmlFor={`${uid}-title`}>作品标题（发布必填）</label>
-                <span className="cms-char-count">{title.length} 字</span>
+                <label htmlFor={`${uid}-title`}>{tr('作品标题（发布必填）', 'Title (required to publish)')}</label>
+                <span className="cms-char-count">{title.length} {tr('字', 'chars')}</span>
               </div>
               <input
                 id={`${uid}-title`}
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="例如：我的小屋 · 交互式个人网站"
+                placeholder={tr('例如：我的小屋 · 交互式个人网站', 'e.g. Paper Home · Interactive 3D Cottage')}
               />
             </div>
 
             <div className="cms-field">
               <div className="cms-field-head">
-                <label htmlFor={`${uid}-summary`}>作品简介（发布必填）</label>
-                <span className="cms-char-count">{summary.length} 字</span>
+                <label htmlFor={`${uid}-summary`}>{tr('作品简介（发布必填）', 'Summary (required to publish)')}</label>
+                <span className="cms-char-count">{summary.length} {tr('字', 'chars')}</span>
               </div>
               <textarea
                 id={`${uid}-summary`}
                 rows={2}
                 value={summary}
                 onChange={(e) => setSummary(e.target.value)}
-                placeholder="一句话概括作品定位、特点与完成效果"
+                placeholder={tr('一句话概括作品定位、特点与完成效果', 'A concise one-line summary of the project')}
               />
             </div>
 
             <div className="cms-field">
               <div className="cms-field-head">
-                <label htmlFor={`${uid}-url`}>访问链接（可选）</label>
+                <label htmlFor={`${uid}-url`}>{tr('访问链接（可选）', 'Demo / Project URL (optional)')}</label>
               </div>
               <input
                 id={`${uid}-url`}
@@ -396,8 +418,8 @@ export function ProjectEditorModal({
 
             <div className="cms-field">
               <div className="cms-field-head">
-                <label htmlFor={`${uid}-body`}>作品正文（发布必填，支持分段纯文本）</label>
-                <span className="cms-char-count">{body.replace(/\s+/g, '').length} 字</span>
+                <label htmlFor={`${uid}-body`}>{tr('作品正文（发布必填，支持分段纯文本）', 'Body (required to publish, Markdown supported)')}</label>
+                <span className="cms-char-count">{body.replace(/\s+/g, '').length} {tr('字', 'chars')}</span>
               </div>
               <MarkdownToolbar
                 textareaRef={bodyRef}
@@ -412,7 +434,7 @@ export function ProjectEditorModal({
                   {body.trim() ? (
                     renderParagraphs(body)
                   ) : (
-                    <p className="cms-char-count">暂无正文内容，点击「返回编辑」开始输入。</p>
+                    <p className="cms-char-count">{tr('暂无正文内容，点击「返回编辑」开始输入。', 'Nothing written yet—click Edit to start typing.')}</p>
                   )}
                 </div>
               ) : (
@@ -422,7 +444,7 @@ export function ProjectEditorModal({
                   rows={8}
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
-                  placeholder="介绍完成效果、空间设计与交互亮点…"
+                  placeholder={tr('介绍完成效果、空间设计与交互亮点…', 'Describe the outcome, craft details, and interactions…')}
                 />
               )}
             </div>
@@ -430,8 +452,8 @@ export function ProjectEditorModal({
 
           <div className="cms-editor-media cms-form-grid">
             <ImageListPicker
-              label="作品封面图（发布必填）"
-              hint="用于三维画框展示与作品封面；JPEG / PNG / WebP，单张上限 10 MB"
+              label={tr('作品封面图（发布必填）', 'Cover Image (required to publish)')}
+              hint={tr('用于三维画框展示与作品封面；JPEG / PNG / WebP，单张上限 10 MB', 'Shown in the 3D gallery frames & list; JPEG / PNG / WebP up to 10 MB')}
               assetIds={coverAssetId ? [coverAssetId] : []}
               multiple={false}
               disabled={saving}
@@ -444,8 +466,8 @@ export function ProjectEditorModal({
             />
 
             <ImageListPicker
-              label="详情展示截图（可选）"
-              hint="展示庭院、厅堂、房间与手机端截图；自动压缩并生成展示图与缩略图"
+              label={tr('详情展示截图（可选）', 'Gallery Screenshots (optional)')}
+              hint={tr('展示庭院、厅堂、房间与手机端截图；自动压缩并生成展示图与缩略图', 'Additional views & screenshots; auto-resized for display and thumbnails')}
               assetIds={galleryAssetIds}
               multiple={true}
               disabled={saving}
@@ -473,12 +495,12 @@ export function ProjectEditorModal({
 
         {saveStatus && (
           <p className="cms-status-banner" role="status">
-            保存状态：{saveStatus}
+            {tr('保存状态：', 'Status: ')}{saveStatus}
           </p>
         )}
         {saveError && (
           <p className="cms-error-banner" role="alert">
-            保存状态：{saveError}
+            {tr('保存状态：', 'Status: ')}{saveError}
           </p>
         )}
 
@@ -497,7 +519,7 @@ export function ProjectEditorModal({
               }
             >
               <Icon name="eye" size={15} />
-              <span>预览当前草稿</span>
+              <span>{tr('预览当前草稿', 'Preview Draft')}</span>
             </button>
 
             {current?.isPublished && (
@@ -507,7 +529,7 @@ export function ProjectEditorModal({
                 disabled={saving || uploadBusy}
                 onClick={() => void handleUnpublish()}
               >
-                撤回发布
+                {tr('撤回发布', 'Unpublish')}
               </button>
             )}
 
@@ -522,7 +544,7 @@ export function ProjectEditorModal({
                 }}
               >
                 <Icon name="trash" size={15} />
-                <span>删除</span>
+                <span>{tr('删除', 'Delete')}</span>
               </button>
             )}
           </div>
@@ -534,7 +556,7 @@ export function ProjectEditorModal({
               disabled={saving || uploadBusy}
               onClick={() => void handleSaveDraft()}
             >
-              {saving ? '保存中…' : '保存草稿'}
+              {saving ? tr('保存中…', 'Saving…') : tr('保存草稿', 'Save Draft')}
             </button>
             <button
               type="button"
@@ -542,7 +564,7 @@ export function ProjectEditorModal({
               disabled={saving || uploadBusy}
               onClick={() => void handlePublish()}
             >
-              {saving ? '处理中…' : current?.isPublished ? '发布更新' : '发布作品'}
+              {saving ? tr('处理中…', 'Publishing…') : current?.isPublished ? tr('发布更新', 'Publish Update') : tr('发布作品', 'Publish Project')}
             </button>
           </div>
         </div>
@@ -550,8 +572,11 @@ export function ProjectEditorModal({
 
       <ConfirmDialog
         open={confirmDeleteOpen}
-        title="确认删除这件作品？"
-        message={`将删除作品「${current?.draft.title || '未命名作品'}」的草稿与公开记录；不再被其他内容引用的图片和视频也会一并清理，操作不可恢复。`}
+        title={tr('确认删除这件作品？', 'Delete this project?')}
+        message={tr(
+          `将删除作品「${current?.draft.title || '未命名作品'}」的草稿与公开记录；不再被其他内容引用的图片和视频也会一并清理，操作不可恢复。`,
+          `This permanently deletes "${current?.draft.title || 'Untitled Project'}" (draft and published). Unused images/videos will also be queued for cleanup.`,
+        )}
         busy={saving}
         error={deleteError}
         onConfirm={() => void handleConfirmDelete()}

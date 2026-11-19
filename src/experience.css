@@ -54,6 +54,7 @@ a:focus-visible {
 .brand,
 .quality-segmented,
 .motion-button,
+.lang-button,
 .admin-status-pill,
 .map-button,
 .room-switcher,
@@ -157,6 +158,7 @@ a:focus-visible {
 }
 
 .motion-button,
+.lang-button,
 .map-button,
 .admin-status-pill {
   height: 40px;
@@ -170,7 +172,13 @@ a:focus-visible {
   transition: background 0.2s var(--ease-editorial), border-color 0.2s var(--ease-editorial), transform 0.2s var(--ease-editorial);
 }
 
+.lang-button {
+  padding: 0 12px;
+  gap: 6px;
+}
+
 .motion-button:hover:not(:disabled),
+.lang-button:hover:not(:disabled),
 .map-button:hover:not(:disabled),
 .admin-status-pill:hover:not(:disabled) {
   background: var(--paper-surface-hover);
@@ -586,6 +594,25 @@ a:focus-visible {
 .near-door:hover:not(:disabled) {
   background: var(--green-hover);
   transform: translateY(-1px);
+}
+
+.near-door .kbd-cap {
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: #fffefa;
+  line-height: 1.25;
+}
+
+@media (max-width: 650px), (hover: none) {
+  .near-door .kbd-cap {
+    display: none;
+  }
 }
 
 .walk-hint {
@@ -2664,6 +2691,16 @@ a:focus-visible {
   .motion-button svg {
     width: 16px;
     height: 16px;
+  }
+  .lang-button {
+    height: 36px;
+    padding: 0 9px;
+    gap: 4px;
+    font-size: 11px;
+  }
+  .lang-button svg {
+    width: 14px;
+    height: 14px;
   }
   .admin-status-pill {
     height: 36px;

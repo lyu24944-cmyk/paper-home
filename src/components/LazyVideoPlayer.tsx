@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useI18n } from '../lib/i18n'
 import { isUrlNearExpiry, refreshSignedUrl } from '../lib/media'
 import { Icon } from './Icon'
 
@@ -6,13 +7,15 @@ export function LazyVideoPlayer({
   assetId,
   scope = 'public',
   active = true,
-  label = '演示视频',
+  label,
 }: {
   assetId: string | null | undefined
   scope?: 'public' | 'admin'
   active?: boolean
   label?: string
 }) {
+  const { tr } = useI18n()
+  const resolvedLabel = label ?? tr('演示视频', 'Demo Video')
   const [requested, setRequested] = useState(false)
   const [loading, setLoading] = useState(false)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
@@ -65,7 +68,7 @@ export function LazyVideoPlayer({
     if (!mountedRef.current || reqSeqRef.current !== seq) return
     setLoading(false)
     if (!entry?.displayUrl) {
-      setError('演示视频暂不可用或已撤回。')
+      setError(tr('演示视频暂不可用或已撤回。', 'Video is unavailable or has been unpublished.'))
       return
     }
     setVideoUrl(entry.displayUrl)
@@ -83,7 +86,7 @@ export function LazyVideoPlayer({
       <div className="video-lazy-box">
         <div className="video-lazy-info">
           <Icon name="play" size={18} />
-          <span>{label}（点击后加载，不提前消耗流量）</span>
+          <span>{resolvedLabel}{tr('（点击后加载，不提前消耗流量）', ' (loads on demand when clicked)')}</span>
         </div>
         <button
           type="button"
@@ -93,7 +96,7 @@ export function LazyVideoPlayer({
           onClick={() => void onPlayRequest()}
         >
           <Icon name="play" size={16} />
-          <span>{loading ? '正在获取播放链接…' : '加载并播放演示视频'}</span>
+          <span>{loading ? tr('正在获取播放链接…', 'Preparing video stream…') : tr('加载并播放演示视频', 'Load & Play Video')}</span>
         </button>
         {error && <p className="cms-error-inline" role="alert">{error}</p>}
       </div>
@@ -110,13 +113,13 @@ export function LazyVideoPlayer({
         preload="metadata"
         className="detail-video"
         onError={() => {
-          setError('视频链接已过期或不可播放，请重新点击加载。')
+          setError(tr('视频链接已过期或不可播放，请重新点击加载。', 'Video link expired or unplayable—please reload it.'))
           stopPlayback()
         }}
       />
       <div className="video-player-actions">
         <button type="button" className="cms-ghost-btn" data-sound="modal-close" onClick={stopPlayback}>
-          收起并停止播放
+          {tr('收起并停止播放', 'Close & Stop Video')}
         </button>
       </div>
     </div>
